@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Professional {
+  id                String              @id @default(cuid())
+  name              String
+  role              String              @default("Fisioterapeuta")
+  defaultPercentage Float               @default(0.5) // Default 50% for clinic/professional
+  serviceRules      ServicePercentage[]
+  sessions          Session[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+model Session {
+  id              String       @id @default(cuid())
+  professionalId  String
+  professional    Professional @relation(fields: [professionalId], references: [id])
+  patientName     String
+  date            DateTime
+  status          String       // "Realizado", "Falta Paciente", "Desmarque Paciente", "Desmarque Profissional"
+  serviceType     String       // e.g., "Sessão de Fisioterapia", "Pilates"
+  value           Float        // Total value generated
+  clinicPercentage Float       // Percentage kept by the clinic (e.g., 0.3 for 30%)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  type        String   // "Income", "Expense"
+  description String
+  amount      Float
+  date        DateTime
+  category    String   // e.g., "Repasse", "Aluguel", "Luz", "Recebimento Paciente"
+  bank        String   // e.g., "Banco do Brasil", "Banco Inter"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ServicePercentage {
+  id             String       @id @default(cuid())
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  serviceCode    String       // Code or Name of the service, or "DEFAULT"
+  percentage     Float        // Specific percentage for this service
+  startDate      DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model ImportLog {
+  id            String   @id @default(cuid())
+  fileName      String
+  fileType      String   // "SEUFISIO" | "BANCO_BB" | "BANCO_INTER" | "PERFIL_PACIENTE"
+  month         Int
+  year          Int
+  totalRecords  Int
+  status        String   @default("COMPLETED") // COMPLETED, ERROR
+  summary       String?  // JSON string with detailed stats
+  rawText       String?  // The full extracted text from the PDF
+  filePath      String?  // Path to the saved PDF file
+  createdAt     DateTime @default(now())
+}
+
+model Patient {
+  id           String   @id @default(cuid())
+  registration String?  // Matrícula
+  name         String
+  gender       String?
+  age          Int?
+  phone        String?
+  profession   String?
+  origin       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+
