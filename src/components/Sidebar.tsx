@@ -36,8 +36,9 @@ export function Sidebar() {
             onChange={(e) => setYear(parseInt(e.target.value))}
             style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-primary)', fontSize: '0.9rem', cursor: 'pointer' }}
           >
-            <option value={2026}>2026</option>
-            <option value={2025}>2025</option>
+            {Array.from({ length: 2036 - 2019 + 1 }, (_, i) => 2036 - i).map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
           </select>
         </div>
       </div>

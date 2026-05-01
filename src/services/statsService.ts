@@ -130,42 +130,80 @@ export class StatsService {
   static async getDashboardData(month: number, year: number, professionalId: string | null = null) {
     const startOfTarget = new Date(year, month, 1);
     const endOfTarget = new Date(year, month + 1, 0, 23, 59, 59);
-    const filter: any = { date: { gte: startOfTarget, lte: endOfTarget } };
-    if (professionalId) filter.professionalId = professionalId;
+    
+    const profFilter = professionalId ? { professionalId } : {};
 
-    const currentSessions = await prisma.session.findMany({ where: filter });
+    // 1. Current Month
+    const currentSessions = await prisma.session.findMany({ 
+      where: { ...profFilter, date: { gte: startOfTarget, lte: endOfTarget } } 
+    });
     const current = this.getSeparatedStats(currentSessions);
 
+    // 2. Comparisons (Prev Month and Same Month Last Year)
     const prevMonthDate = new Date(year, month - 1, 1);
     const pmSessions = await prisma.session.findMany({ 
-      where: { ...filter, date: { gte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1), lte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0, 23, 59, 59) } } 
+      where: { ...profFilter, date: { gte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1), lte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0, 23, 59, 59) } } 
     });
     const lastMonth = this.getSeparatedStats(pmSessions);
 
     const pySessions = await prisma.session.findMany({ 
-      where: { ...filter, date: { gte: new Date(year - 1, month, 1), lte: new Date(year - 1, month + 1, 0, 23, 59, 59) } } 
+      where: { ...profFilter, date: { gte: new Date(year - 1, month, 1), lte: new Date(year - 1, month + 1, 0, 23, 59, 59) } } 
     });
     const lastYear = this.getSeparatedStats(pySessions);
 
-    const startOfYear = new Date(year, 0, 1);
-    const endOfYear = new Date(year, 11, 31, 23, 59, 59);
-    const yearSessions = await prisma.session.findMany({ where: { ...filter, date: { gte: startOfYear, lte: endOfYear } } });
-    const yearData = Array.from({ length: 12 }, (_, m) => {
-      const mSessions = yearSessions.filter(s => s.date.getMonth() === m);
-      return { month: m, ...this.getSeparatedStats(mSessions) };
+    // 3. FETCH ALL AVAILABLE YEARS
+    const sessionYears = await prisma.session.groupBy({
+      by: ['date'],
+      _count: true,
     });
+    const availableYears = Array.from(new Set(sessionYears.map(s => s.date.getFullYear()))).sort((a, b) => b - a);
 
-    const pySessionsTotal = await prisma.session.findMany({ where: { ...filter, date: { gte: new Date(year - 1, 0, 1), lte: new Date(year - 1, 11, 31, 23, 59, 59) } } });
-    const lastYearData = Array.from({ length: 12 }, (_, m) => {
-      const mSessions = pySessionsTotal.filter(s => s.date.getMonth() === m);
-      return { month: m, ...this.getSeparatedStats(mSessions) };
-    });
+    const history = await Promise.all(availableYears.map(async (y) => {
+      const yearSessions = await prisma.session.findMany({ 
+        where: { 
+          ...profFilter, 
+          date: { gte: new Date(y, 0, 1), lte: new Date(y, 11, 31, 23, 59, 59) } 
+        } 
+      });
+
+      const data = Array.from({ length: 12 }, (_, m) => {
+        const mSessions = yearSessions.filter(s => s.date.getMonth() === m);
+        return { month: m, ...this.getSeparatedStats(mSessions) };
+      });
+
+      return { year: y, data };
+    }));
+
+    // 4. Calculate YTD (Year To Date)
+    const calculateYTD = (historyData: any[], targetMonth: number) => {
+      const ytdData = historyData.filter(h => h.month <= targetMonth);
+      const result: any = {};
+      ytdData.forEach(monthObj => {
+        Object.keys(monthObj).forEach(key => {
+          if (key === 'month') return;
+          if (!result[key]) result[key] = { grossValue: 0 };
+          result[key].grossValue += monthObj[key].grossValue || 0;
+        });
+      });
+      return result;
+    };
+
+    const currentYearData = history.find(h => h.year === year)?.data || [];
+    const lastYearHistory = history.find(h => h.year === year - 1)?.data || [];
+    
+    const ytdCurrent = calculateYTD(currentYearData, month);
+    const ytdPrevious = calculateYTD(lastYearHistory, month);
 
     return {
-      current,
-      comparisons: { lastMonth, lastYear },
-      yearData,
-      history: [{ year, data: yearData }, { year: year - 1, data: lastYearData }],
+      current: current || this.getSeparatedStats([]),
+      comparisons: { 
+        lastMonth: lastMonth || this.getSeparatedStats([]), 
+        lastYear: lastYear || this.getSeparatedStats([]),
+        ytdCurrent,
+        ytdPrevious
+      },
+      yearData: currentYearData.length > 0 ? currentYearData : Array.from({ length: 12 }, (_, m) => ({ month: m, ...this.getSeparatedStats([]) })),
+      history,
       professionals: await prisma.professional.findMany({ 
         select: { id: true, name: true },
         orderBy: { name: 'asc' } 

@@ -21,8 +21,10 @@ export async function POST(request: Request) {
   try {
     const data = await request.formData();
     const file: File | null = data.get("file") as unknown as File;
-    const month = parseInt(data.get("month") as string) || new Date().getMonth();
-    const year = parseInt(data.get("year") as string) || new Date().getFullYear();
+    const monthRaw = data.get("month");
+    const yearRaw = data.get("year");
+    const month = monthRaw !== null ? parseInt(monthRaw as string) : new Date().getMonth();
+    const year = yearRaw !== null ? parseInt(yearRaw as string) : new Date().getFullYear();
 
     if (!file) {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });

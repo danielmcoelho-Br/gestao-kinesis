@@ -11,6 +11,23 @@
   --sidebar-width: 260px;
 }
 
+.metric-card {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Design Premium: Card expande para largura total ao ser clicado */
+.metric-card.expanded {
+  grid-column: 1 / -1 !important;
+  z-index: 10;
+}
+
+.metric-card.expanded .chart-container-inner {
+  height: 350px !important;
+}
+
+@media (max-width: 768px) {
+}
+
 [data-theme="dark"] {
   --primary: #818cf8;
   --primary-hover: #6366f1;
@@ -246,7 +263,8 @@ body {
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
-[data-theme="dark"] .glass {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+/* Print Styles */
+
+.hidden-on-screen.visible {
+  display: block;
 }
