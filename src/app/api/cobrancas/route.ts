@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "../../../lib/prisma";
 
 export async function GET(request: Request) {
   try {
@@ -7,20 +7,10 @@ export async function GET(request: Request) {
     const month = searchParams.get("month") ? parseInt(searchParams.get("month")!) : new Date().getMonth();
     const year = searchParams.get("year") ? parseInt(searchParams.get("year")!) : new Date().getFullYear();
 
-    const startOfMonth = new Date(year, month, 1);
-    const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
-
-    const sessions = await prisma.session.findMany({
-      where: {
-        date: {
-          gte: startOfMonth,
-          lte: endOfMonth
-        }
-      },
-      orderBy: {
-        date: 'asc'
-      }
-    });
+    const sessions: any[] = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "BillingSession" WHERE month = $1 AND year = $2 ORDER BY date ASC`,
+      month, year
+    );
 
     // Agrupar por paciente
     const groups: Record<string, any> = {};
@@ -29,6 +19,7 @@ export async function GET(request: Request) {
       if (!groups[s.patientName]) {
         groups[s.patientName] = {
           patientName: s.patientName,
+          phone: s.phone || null,
           totalValue: 0,
           sessionCount: 0,
           dates: []
@@ -36,9 +27,10 @@ export async function GET(request: Request) {
       }
       groups[s.patientName].totalValue += s.value;
       groups[s.patientName].sessionCount += 1;
-      // Formatar data para DD/MM
-      const day = s.date.getDate().toString().padStart(2, '0');
-      const mo = (s.date.getMonth() + 1).toString().padStart(2, '0');
+      
+      const dateObj = new Date(s.date);
+      const day = dateObj.getDate().toString().padStart(2, '0');
+      const mo = (dateObj.getMonth() + 1).toString().padStart(2, '0');
       groups[s.patientName].dates.push(`${day}/${mo}`);
     });
 

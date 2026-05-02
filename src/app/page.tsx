@@ -26,7 +26,10 @@ export default function Dashboard() {
     
     try {
       const res = await fetch(`/api/stats?month=${month}&year=${year}${profParam}`);
-      if (!res.ok) throw new Error("Falha ao carregar dados");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Falha ao carregar dados do servidor");
+      }
       const data = await res.json();
       setStats(data);
     } catch (e: any) {

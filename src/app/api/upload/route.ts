@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "../../../lib/prisma";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -245,6 +245,124 @@ export async function POST(request: Request) {
         }
       });
       return NextResponse.json({ success: true, message: "Extrato Banco Inter recebido!" });
+    }
+    else if (fileTypeSent === "COBRANCAS") {
+      let importedCount = 0;
+      
+      // Limpar cobranças anteriores usando SQL Puro (evita erro de cache do Prisma)
+      try {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM "BillingSession" WHERE month = $1 AND year = $2`,
+          month, year
+        );
+      } catch (e) {
+        console.error("Erro ao limpar cobranças antigas via SQL:", e);
+      }
+
+      if (isExcel) {
+        console.log("Processando Excel de Cobranças via SQL Puro...", excelData.length, "linhas");
+        for (const row of excelData) {
+          const findKey = (keys: string[]) => {
+            const keysLower = keys.map(k => k.toLowerCase().trim());
+            const found = Object.keys(row).find(k => {
+              const cleanedK = k.toLowerCase().trim();
+              return keysLower.some(target => cleanedK === target || cleanedK.includes(target));
+            });
+            return found ? row[found] : "";
+          };
+
+          const name = findKey(["cliente", "paciente", "nome", "paciante"]);
+          const valor = findKey(["valor", "preço", "total", "valor total", "bruto"]);
+          const pago = String(findKey(["pago", "pagamento", "liquidado", "acerto"]) || "").toLowerCase().trim();
+          const servico = String(findKey(["serviço", "procedimento", "tipo", "atendimento", "descrição"]) || "").toLowerCase();
+          const dataAtendimento = findKey(["data", "dia", "atendimento", "data atendimento"]);
+          const telefone = findKey(["telefone do cliente", "telefone", "celular", "contato"]);
+          const obs = String(findKey(["obs", "observação", "notas"]) || "").toUpperCase();
+
+          if (!name || !dataAtendimento) continue;
+
+          // NOVAS REGRAS DE NEGÓCIO:
+          // 1. Ignorar se for PACOTE FIXO
+          if (obs.includes("PACOTE FIXO")) continue;
+          
+          // 2. Ignorar se já estiver pago (Filtro Super Sensível)
+          const isPaid = 
+            pago.includes("sim") || 
+            pago === "s" || 
+            pago.includes("pago") || 
+            pago.includes("ok") || 
+            pago === "p" || 
+            pago === "confirmado" || 
+            pago === "x" ||
+            pago === "v"; // Algumas planilhas usam 'v' de visto
+          
+          if (isPaid) continue;
+          
+          // 3. Deve ter valor preenchido e maior que zero
+          const valNum = typeof valor === "number" ? valor : parseFloat(String(valor).replace(/[^\d,.-]/g, '').replace(',', '.'));
+          if (!valNum || valNum <= 0) continue;
+
+          let sessionDate: Date;
+          try {
+            if (dataAtendimento instanceof Date) {
+              sessionDate = dataAtendimento;
+            } else {
+              const dateStr = String(dataAtendimento);
+              if (dateStr.includes('/')) {
+                const dateParts = dateStr.split(' ')[0].split('/');
+                if (dateParts[0].length === 4) { // YYYY/MM/DD
+                  sessionDate = new Date(`${dateParts.join('-')}T12:00:00`);
+                } else { // DD/MM/YYYY
+                  sessionDate = new Date(`${dateParts.reverse().join('-')}T12:00:00`);
+                }
+              } else {
+                sessionDate = new Date(dateStr);
+              }
+            }
+          } catch (e) { continue; }
+
+          if (isNaN(sessionDate.getTime())) continue;
+
+          // INSERÇÃO VIA SQL PURO
+          try {
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO "BillingSession" (id, "patientName", phone, date, "serviceType", value, "isPaid", month, year, "importLogId", "createdAt") 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+              Math.random().toString(36).substring(7), // ID aleatório simples
+              String(name),
+              telefone ? String(telefone) : null,
+              sessionDate,
+              String(servico),
+              valNum,
+              false,
+              month,
+              year,
+              "MANUAL",
+              new Date()
+            );
+            importedCount++;
+          } catch (err) {
+            console.error("Erro ao inserir via SQL:", err);
+          }
+        }
+      }
+
+      console.log("Importação concluída. Registros:", importedCount);
+
+      const log = await prisma.importLog.create({
+        data: {
+          fileName: file.name,
+          fileType: "COBRANCAS",
+          month,
+          year,
+          totalRecords: importedCount,
+          summary: JSON.stringify({ total: importedCount }),
+          rawText: text,
+          filePath: fileName
+        }
+      });
+
+      return NextResponse.json({ success: true, importedCount, message: `${importedCount} atendimentos para cobrança importados!` });
     }
     else if (fileTypeSent === "PERFIL_PACIENTE") {
       let importedCount = 0;

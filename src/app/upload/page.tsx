@@ -9,6 +9,7 @@ const months = [
 
 const fileTypes = [
   { id: "SEUFISIO", label: "Estatística de Atendimento (SEUFISIO)", icon: "📊" },
+  { id: "COBRANCAS", label: "Relatório de Cobrança Mensal (Excel)", icon: "💰" },
   { id: "BANCO_BB", label: "Extrato Banco do Brasil", icon: "🏛️" },
   { id: "BANCO_INTER", label: "Extrato Banco Inter", icon: "🏦" },
   { id: "PERFIL_PACIENTE", label: "Perfil do Paciente", icon: "👤" },
@@ -32,6 +33,7 @@ export default function UploadPage() {
   }, []);
 
   const handleUpload = async (type: string, file: File) => {
+    console.log("Iniciando upload:", type, file.name);
     setLoading(true);
     const formData = new FormData();
     formData.append("file", file);
@@ -44,14 +46,18 @@ export default function UploadPage() {
         method: "POST",
         body: formData,
       });
+      
+      const result = await response.json();
+      
       if (response.ok) {
+        alert(`Sucesso! ${result.message || "Arquivo processado."}`);
         fetchLogs();
       } else {
-        const err = await response.json();
-        alert(`Erro: ${err.error}`);
+        alert(`Erro no Servidor: ${result.error || "Erro desconhecido"}`);
       }
-    } catch (error) {
-      alert("Erro na comunicação com o servidor.");
+    } catch (error: any) {
+      console.error("Erro no fetch:", error);
+      alert(`Erro de Conexão: Não foi possível contatar o servidor. (${error.message})`);
     } finally {
       setLoading(false);
     }
