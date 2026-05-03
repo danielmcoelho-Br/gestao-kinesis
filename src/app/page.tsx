@@ -11,6 +11,7 @@ import {
 import { MetricChart } from "@/components/MetricChart";
 import { ReportHeader } from "@/components/ReportHeader";
 import { DashboardResponse } from "@/types";
+import { StatsService } from "@/services/statsService";
 
 const monthsNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -72,18 +73,9 @@ export default function Dashboard() {
       prev: comparisons.ytdPrevious?.[type] || { grossValue: 0, statusSummary: { finalizado: 0 } } 
     };
 
-    // Cálculos Manuais de Acumulado
-    let accSessionsCurrent = 0;
-    let accSessionsPrev = 0;
-    const currentYearHistory = history.find((h) => h.year === startYear);
-    const prevYearHistory = history.find((h) => h.year === (startYear - 1));
-
-    if (currentYearHistory) {
-      for (let i = 0; i <= endMonth; i++) accSessionsCurrent += currentYearHistory.data[i][type]?.statusSummary?.finalizado || 0;
-    }
-    if (prevYearHistory) {
-      for (let i = 0; i <= endMonth; i++) accSessionsPrev += prevYearHistory.data[i][type]?.statusSummary?.finalizado || 0;
-    }
+    // Cálculos Manuais de Acumulado via Service
+    const accSessionsCurrent = StatsService.calculateAccumulatedSessions(history, startYear, endMonth, type);
+    const accSessionsPrev = StatsService.calculateAccumulatedSessions(history, startYear - 1, endMonth, type);
 
     return { 
       data: current[type], 
@@ -160,10 +152,9 @@ export default function Dashboard() {
             <div className="card">
               <h3 style={{ marginBottom: '16px', fontSize: '1.1rem' }}>Assiduidade e Status</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
-                <StatusBox label="Finalizadas" count={data.statusSummary.finalizado} color="var(--success)" />
-                <StatusBox label="Faltas (Pac.)" count={data.statusSummary.faltas} color="var(--danger)" />
-                <StatusBox label="Ausência Prof." count={data.statusSummary.ausenciaProf} color="#f59e0b" noBorder />
-                <StatusBox label="Justificadas" count={data.statusSummary.ausenciaJust} color="#8b5cf6" noBorder />
+                {StatsService.getAttendanceStatusSummary(data).map((status, i) => (
+                  <StatusBox key={i} label={status.label} count={status.count} color={status.color} />
+                ))}
               </div>
             </div>
             

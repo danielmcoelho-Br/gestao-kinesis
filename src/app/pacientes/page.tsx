@@ -26,6 +26,7 @@ import {
   MarkerF 
 } from '@react-google-maps/api';
 import { PatientProfileResponse, Patient } from "@/types";
+import { StatsService } from "@/services/statsService";
 
 const months = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -97,11 +98,7 @@ export default function PacientesPage() {
   const statsData = useMemo(() => {
     if (!data) return null;
     const { stats } = data;
-    const ageData = stats.stratifiedAgeData.map((d) => ({
-      name: d.label,
-      value: d.men + d.women,
-      pct: stats.withProfile > 0 ? (((d.men + d.women) / stats.withProfile) * 100).toFixed(1) : 0
-    })).reverse();
+    const ageData = StatsService.formatAgeChartData(stats.stratifiedAgeData, stats.withProfile);
     
     return { ageData, stats };
   }, [data]);
