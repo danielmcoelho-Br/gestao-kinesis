@@ -105,7 +105,7 @@ export default function Dashboard() {
   const { data, title, color, type, compLastMonth, compLastYear, ytd, accSessionsCurrent, accSessionsPrev, history, professionals } = displayContext;
 
   return (
-    <div style={{ paddingBottom: '60px' }}>
+    <div className="dashboard-container" style={{ paddingBottom: '60px' }}>
       <ReportHeader title={`Dashboard - ${title}`} />
       
       {/* Navegação de Abas */}

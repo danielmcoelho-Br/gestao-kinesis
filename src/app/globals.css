@@ -293,7 +293,7 @@ body {
     size: A4 portrait;
   }
 
-  .sidebar, .tab-buttons-container, button.btn, .prof-selector-container, nav, .sidebar-logo, .no-print {
+  .sidebar, .tab-buttons-container, button.btn, .prof-selector-container, nav, .sidebar-logo, .no-print, .report-body .no-print {
     display: none !important;
     height: 0 !important;
     margin: 0 !important;
@@ -322,8 +322,8 @@ body {
     break-inside: avoid;
   }
 
-  /* REORDENAÇÃO EXCLUSIVA PARA EXPORTAÇÃO */
-  .report-body {
+  /* REORDENAÇÃO EXCLUSIVA PARA EXPORTAÇÃO DO DASHBOARD */
+  .dashboard-container .report-body {
     display: flex !important;
     flex-direction: column !important;
   }
@@ -371,7 +371,8 @@ body {
     padding: 12px !important;
   }
 
-  .metrics-grid {
+  /* Dashboard specific metrics order */
+  .dashboard-container .metrics-grid {
     order: 2 !important;
     display: grid !important;
     grid-template-columns: 1fr !important;
@@ -445,4 +446,84 @@ body {
     font-size: 8pt !important;
   }
 
+  /* Patient Profile Print - Compact Metrics + Top 10 Lists */
+  .report-body .metrics-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 15px !important;
+    margin-bottom: 12px !important;
+    align-items: start !important;
+  }
+
+  .metric-card {
+    background: white !important;
+    padding: 8px 12px !important;
+    gap: 2px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    align-self: start !important;
+    border: 1px solid #eee !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.02) !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .metric-card div[style*="font-size: 2rem"] {
+    font-size: 1.2rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .metric-card div[style*="font-size: 0.8rem"] {
+    font-size: 0.65rem !important;
+  }
+
+  .metric-card svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .card {
+    background: white !important;
+    padding: 16px !important;
+    border-radius: 12px !important;
+    border: 1px solid #eee !important;
+    margin-bottom: 16px !important;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force 2 columns like on screen */
+  .report-body div[style*="grid-template-columns: repeat(auto-fit, minmax(400px, 1fr))"] {
+    grid-template-columns: 1fr 1fr !important;
+    display: grid !important;
+    gap: 20px !important;
+  }
+
+  /* List adjustments: Top 10 only and no scrollbars */
+  div[style*="max-height: 400px"] {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+
+  /* Hide items beyond the 10th in print */
+  div[style*="display: flex; flex-direction: column; gap: 8px"] > div:nth-child(n+11) {
+    display: none !important;
+  }
+
+  .map-container-print {
+    height: 500px !important;
+    display: block !important;
+  }
+
+  /* Final override for hidden elements */
+  .no-print, .report-body .no-print {
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
 }
