@@ -118,6 +118,7 @@ export function MetricChart({ history, dataKey, type, isCurrency, isDecimal, isA
                   dot={{ r: 4, fill: yearColor, strokeWidth: 1, stroke: '#fff' }} 
                   activeDot={{ r: 6 }} 
                   connectNulls={false}
+                  isAnimationActive={false}
                 >
                   <LabelList 
                     dataKey={`year_${y}`} 

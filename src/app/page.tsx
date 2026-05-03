@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { usePeriod } from "@/context/PeriodContext";
-import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3 } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3, Download } from 'lucide-react';
 import { 
   MetricCard, 
   StatusBox, 
   TemporalComparisonGrid 
 } from "@/components/DashboardComponents";
 import { MetricChart } from "@/components/MetricChart";
+import { ReportHeader } from "@/components/ReportHeader";
 
 const monthsNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -105,14 +106,16 @@ export default function Dashboard() {
 
   return (
     <div style={{ paddingBottom: '60px' }}>
+      <ReportHeader title={`Dashboard - ${title}`} />
+      
       {/* Navegação de Abas */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '40px' }}>
+      <nav className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '40px' }}>
         <div className="tab-buttons-container" style={{ display: 'flex', gap: '12px', padding: '4px', background: 'rgba(0,0,0,0.02)', borderRadius: '16px', width: 'fit-content' }}>
           <TabButton active={activeTab === 'geral'} onClick={() => setActiveTab('geral')} icon={<Home size={20} />} label="Visão Geral" isPrimary />
           <TabButton active={activeTab === 'fisioterapia'} onClick={() => setActiveTab('fisioterapia')} icon={<Activity size={20} />} label="Fisioterapia" isPrimary />
           <TabButton active={activeTab === 'pilates'} onClick={() => setActiveTab('pilates')} icon={<Target size={20} />} label="Pilates" isPrimary />
         </div>
-        <div style={{ display: 'flex', gap: '8px', padding: '4px', overflowX: 'auto', whiteSpace: 'nowrap', scrollbarWidth: 'none' }}>
+        <div className="prof-selector-container" style={{ display: 'flex', gap: '8px', padding: '4px', overflowX: 'auto', whiteSpace: 'nowrap', scrollbarWidth: 'none' }}>
           <span style={{ alignSelf: 'center', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-secondary)', marginRight: '8px' }}>Equipe:</span>
           {professionals.map((p: any) => (
             <TabButton key={p.id} active={activeTab === p.id} onClick={() => setActiveTab(p.id)} icon={<Users size={16} />} label={p.name.trim().split(' ')[0]} />
@@ -120,16 +123,25 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      <header style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing: '-1px', margin: 0 }}>
-          {title} <span style={{ color, opacity: 0.6 }}>/ {monthsNames[startMonth]} {startYear} { (startMonth !== endMonth || startYear !== endYear) && `até ${monthsNames[endMonth]} ${endYear}` }</span>
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>KinesisLab - Clinical & Financial Intelligence</p>
+      <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing: '-1px', margin: 0 }}>
+            {title} <span style={{ color, opacity: 0.6 }}>/ {monthsNames[startMonth]} {startYear} { (startMonth !== endMonth || startYear !== endYear) && `até ${monthsNames[endMonth]} ${endYear}` }</span>
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>KinesisLab - Clinical & Financial Intelligence</p>
+        </div>
+        <button 
+          onClick={() => window.print()} 
+          className="btn no-print" 
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--primary)', color: 'white', borderRadius: '12px', padding: '12px 20px' }}
+        >
+          <Download size={20} /> Exportar Relatório
+        </button>
       </header>
 
-      {/* Grid de Métricas Principais */}
-      <section className="fade-in">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+      <div className="report-body" style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Grid de Métricas Principais (No Dashboard aparece PRIMEIRO) */}
+        <section className="metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' }}>
           <DashboardMetricCard title="Sessões Finalizadas" value={data.statusSummary.finalizado} icon={<Calendar />} color={color} history={history} dataKey="statusSummary.finalizado" type={type} />
           <DashboardMetricCard title="Qtd. Pacientes" value={data.uniquePatientsCount} icon={<Users />} color="#6366f1" history={history} dataKey="uniquePatientsCount" type={type} />
           <DashboardMetricCard title="Arrecadação Bruta" value={data.grossValue} icon={<DollarSign />} color="#10b981" isCurrency history={history} dataKey="grossValue" type={type} />
@@ -138,57 +150,56 @@ export default function Dashboard() {
           <DashboardMetricCard title="Ticket Médio" value={data.ticketAverage || 0} icon={<Activity />} color="#f59e0b" isCurrency history={history} dataKey="ticketAverage" type={type} />
           <DashboardMetricCard title="Média Sessões / Pac." value={Number((data.avgSessionsPerPatient || 0).toFixed(1))} icon={<Activity />} color="#06b6d4" history={history} dataKey="avgSessionsPerPatient" type={type} isDecimal />
           <DashboardMetricCard title="Atendimentos no Ano" value={accSessionsCurrent} icon={<BarChart3 />} color="#ec4899" history={history} dataKey="statusSummary.finalizado" type={type} isAccumulated />
-        </div>
+        </section>
 
-        {/* Detalhes e Comparativos */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', marginBottom: '32px' }}>
-          <div className="card">
-            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem' }}>Assiduidade e Status</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
-              <StatusBox label="Finalizadas" count={data.statusSummary.finalizado} color="var(--success)" />
-              <StatusBox label="Faltas (Pac.)" count={data.statusSummary.faltas} color="var(--danger)" />
-              <StatusBox label="Ausência Prof." count={data.statusSummary.ausenciaProf} color="#f59e0b" noBorder />
-              <StatusBox label="Justificadas" count={data.statusSummary.ausenciaJust} color="#8b5cf6" noBorder />
+        {/* CONTAINER DE RESUMO (No Dashboard aparece DEPOIS das métricas) */}
+        <div className="summary-row" style={{ display: 'contents' }}>
+          {/* Seção de Análise Clínica e Assiduidade (Agora com 1 coluna para 100% de largura na tela) */}
+          <section className="analysis-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', marginBottom: '40px' }}>
+            <div className="card">
+              <h3 style={{ marginBottom: '16px', fontSize: '1.1rem' }}>Assiduidade e Status</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                <StatusBox label="Finalizadas" count={data.statusSummary.finalizado} color="var(--success)" />
+                <StatusBox label="Faltas (Pac.)" count={data.statusSummary.faltas} color="var(--danger)" />
+                <StatusBox label="Ausência Prof." count={data.statusSummary.ausenciaProf} color="#f59e0b" noBorder />
+                <StatusBox label="Justificadas" count={data.statusSummary.ausenciaJust} color="#8b5cf6" noBorder />
+              </div>
             </div>
-          </div>
-          
-          <div className="card">
+            
+            {data.stratification?.length > 0 && (
+              <div className="card stratification-section">
+                <h3 style={{ marginBottom: '20px' }}>Detalhamento de Serviços</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Categoria</th>
+                        <th style={{ textAlign: 'center' }}>Qtd.</th>
+                        <th style={{ textAlign: 'right' }}>Bruto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.stratification.slice(0, 5).map((item: any, idx: number) => (
+                        <tr key={idx}>
+                          <td style={{ fontWeight: '600' }}>{item.name}</td>
+                          <td style={{ textAlign: 'center' }}>{item.count}</td>
+                          <td style={{ textAlign: 'right' }}>R$ {item.grossValue.toLocaleString('pt-BR')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Seção de Comparativo Temporal */}
+          <section className="card comparison-section" style={{ marginBottom: '40px' }}>
             <h3 style={{ marginBottom: '24px', fontSize: '1.1rem' }}>Comparativo Temporal</h3>
             <TemporalComparisonGrid data={data} compLastMonth={compLastMonth} compLastYear={compLastYear} ytd={ytd} accSessionsCurrent={accSessionsCurrent} accSessionsPrev={accSessionsPrev} />
-          </div>
+          </section>
         </div>
-
-        {/* Tabela de Serviços */}
-        {data.stratification?.length > 0 && (
-          <div className="card">
-            <h3 style={{ marginBottom: '20px' }}>Detalhamento de Serviços ({data.statusSummary.finalizado} sessões finalizadas)</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Categoria</th>
-                    <th style={{ textAlign: 'center' }}>Qtd.</th>
-                    <th style={{ textAlign: 'right' }}>Bruto</th>
-                    <th style={{ textAlign: 'right' }}>Porcentagem da Clínica</th>
-                    <th style={{ textAlign: 'right' }}>Repasse</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.stratification.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: '600' }}>{item.name}</td>
-                      <td style={{ textAlign: 'center' }}>{item.count}</td>
-                      <td style={{ textAlign: 'right' }}>R$ {item.grossValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                      <td style={{ textAlign: 'right', color, fontWeight: '500' }}>R$ {item.clinicProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                      <td style={{ textAlign: 'right' }}>R$ {item.profValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
+      </div>
     </div>
   );
 }

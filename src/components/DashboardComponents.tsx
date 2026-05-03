@@ -36,15 +36,18 @@ export function MetricCard({ title, value, icon, color, isCurrency, children }: 
         </div>
       </div>
 
-      {isExpanded && children && (
+      {children && (
         <div 
-          className="fade-in chart-container-inner" 
-          style={{ 
-            marginTop: '24px', 
-            paddingTop: '24px', 
-            borderTop: '1px solid var(--border-color)', 
-            height: '350px' 
-          }} 
+          className={`chart-container-inner ${isExpanded ? 'is-expanded' : 'is-collapsed'}`} 
+          style={!isExpanded ? {
+            position: 'absolute',
+            top: '-9999px',
+            left: '-9999px',
+            width: '800px', // Give it a base width to render
+            height: '350px',
+            pointerEvents: 'none',
+            visibility: 'hidden'
+          } : {}}
           onClick={(e) => e.stopPropagation()}
         >
           {children}
