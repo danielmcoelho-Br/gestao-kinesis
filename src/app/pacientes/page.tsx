@@ -25,6 +25,7 @@ import {
   HeatmapLayer,
   MarkerF 
 } from '@react-google-maps/api';
+import { PatientProfileResponse, Patient } from "@/types";
 
 const months = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -35,7 +36,7 @@ const libraries: ("visualization" | "places" | "drawing" | "geometry")[] = ["vis
 
 export default function PacientesPage() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<PatientProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [geocoding, setGeocoding] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -86,7 +87,7 @@ export default function PacientesPage() {
 
   const filteredPatients = useMemo(() => {
     if (!data?.patients) return [];
-    return data.patients.filter((p: any) => 
+    return data.patients.filter((p: Patient) => 
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.profession?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.provenance?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -96,10 +97,10 @@ export default function PacientesPage() {
   const statsData = useMemo(() => {
     if (!data) return null;
     const { stats } = data;
-    const ageData = stats.stratifiedAgeData.map((d: any) => ({
+    const ageData = stats.stratifiedAgeData.map((d) => ({
       name: d.label,
-      value: d.total,
-      pct: stats.withProfile > 0 ? ((d.total / stats.withProfile) * 100).toFixed(1) : 0
+      value: d.men + d.women,
+      pct: stats.withProfile > 0 ? (((d.men + d.women) / stats.withProfile) * 100).toFixed(1) : 0
     })).reverse();
     
     return { ageData, stats };
@@ -107,7 +108,7 @@ export default function PacientesPage() {
 
   const heatmapPoints = useMemo(() => {
     if (isLoaded && data?.stats?.heatmapData) {
-      return data.stats.heatmapData.map((p: any) => new google.maps.LatLng(p.lat, p.lng));
+      return data.stats.heatmapData.map((p) => new google.maps.LatLng(p.lat, p.lng));
     }
     return [];
   }, [isLoaded, data]);
@@ -253,10 +254,10 @@ export default function PacientesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stats.stratifiedAgeData.map((row: any, i: number) => {
+                    {stats.stratifiedAgeData.map((row, i) => {
                       const totalInRange = row.men + row.women;
                       const pct = stats.withProfile > 0 ? ((totalInRange / stats.withProfile) * 100).toFixed(1) : 0;
-                      const maxCount = Math.max(...stats.stratifiedAgeData.map((d: any) => Math.max(d.men, d.women)));
+                      const maxCount = Math.max(...stats.stratifiedAgeData.map((d) => Math.max(d.men, d.women)));
                       
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.02)' }}>
@@ -333,7 +334,7 @@ export default function PacientesPage() {
                   <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}><Briefcase size={20} color="#10b981" /> Profissões dos Pacientes Atendidos</h3>
                   <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {professionData.map((item: any, i: number) => (
+                      {professionData.map((item, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(0,0,0,0.02)', borderRadius: '10px' }}>
                           <span style={{ fontWeight: '600' }}>{item[0]}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -350,7 +351,7 @@ export default function PacientesPage() {
                   <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}><Navigation size={20} color="#f59e0b" /> Procedência / Bairros</h3>
                   <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {provenanceData.map((item: any, i: number) => (
+                      {provenanceData.map((item, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(0,0,0,0.02)', borderRadius: '10px' }}>
                           <span style={{ fontWeight: '600' }}>{item[0]}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -395,7 +396,7 @@ export default function PacientesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPatients.map((p: any, i: number) => (
+                  {filteredPatients.map((p: Patient, i: number) => (
                     <tr key={i}>
                       <td style={{ fontWeight: '700' }}>{p.name}</td>
                       <td>{p.gender || 'N/I'}</td>

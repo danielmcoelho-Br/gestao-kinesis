@@ -10,12 +10,13 @@ import {
 } from "@/components/DashboardComponents";
 import { MetricChart } from "@/components/MetricChart";
 import { ReportHeader } from "@/components/ReportHeader";
+import { DashboardResponse } from "@/types";
 
 const monthsNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export default function Dashboard() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardResponse | null>(null);
   const [activeTab, setActiveTab] = useState<string>('geral');
   const [loading, setLoading] = useState(true);
 
@@ -59,7 +60,7 @@ export default function Dashboard() {
     if (activeTab === 'fisioterapia') { title = "Fisioterapia"; color = "#3b82f6"; }
     else if (activeTab === 'pilates') { title = "Pilates"; color = "#10b981"; }
     else if (!['geral', 'fisioterapia', 'pilates'].includes(activeTab)) {
-      const prof = professionals.find((p: any) => p.id === activeTab);
+      const prof = professionals.find((p) => p.id === activeTab);
       title = prof ? prof.name.trim().split(' ')[0] : "Profissional";
       color = "#8b5cf6";
     }
@@ -74,8 +75,8 @@ export default function Dashboard() {
     // Cálculos Manuais de Acumulado
     let accSessionsCurrent = 0;
     let accSessionsPrev = 0;
-    const currentYearHistory = history.find((h: any) => h.year === startYear);
-    const prevYearHistory = history.find((h: any) => h.year === (startYear - 1));
+    const currentYearHistory = history.find((h) => h.year === startYear);
+    const prevYearHistory = history.find((h) => h.year === (startYear - 1));
 
     if (currentYearHistory) {
       for (let i = 0; i <= endMonth; i++) accSessionsCurrent += currentYearHistory.data[i][type]?.statusSummary?.finalizado || 0;
