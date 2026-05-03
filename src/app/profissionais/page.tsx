@@ -20,7 +20,7 @@ interface Professional {
 const monthsNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 export default function ProfissionaisPage() {
-  const { month, year } = usePeriod();
+  const { startMonth, startYear, endMonth, endYear } = usePeriod();
   const [profissionais, setProfissionais] = useState<Professional[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -152,10 +152,10 @@ export default function ProfissionaisPage() {
             disabled={loading}
             style={{ background: 'var(--primary)', color: 'white' }}
           >
-            {loading ? "Processando..." : `Recalcular ${monthsNames[month]}/${year}`}
+            {loading ? "Processando..." : `Recalcular ${monthsNames[startMonth]}/${startYear}`}
           </button>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '8px', maxWidth: '300px' }}>
-            Use este botão para aplicar as novas porcentagens retroativamente aos atendimentos do mês selecionado.
+            Use este botão para aplicar as novas porcentagens retroativamente aos atendimentos de {monthsNames[startMonth]}.
           </p>
         </div>
       </header>

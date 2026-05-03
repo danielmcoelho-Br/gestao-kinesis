@@ -10,35 +10,30 @@ const months = [
 import { usePeriod } from "@/context/PeriodContext";
 
 export default function FinanceiroPage() {
-  const { month, year, setMonth, setYear } = usePeriod();
+  const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!initialized) return;
     setLoading(true);
-    fetch(`/api/financeiro?month=${month}&year=${year}`)
+    fetch(`/api/financeiro?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}`)
       .then(res => res.json())
       .then(data => {
-        setTransactions(data);
+        setTransactions(Array.isArray(data) ? data : []);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
-  }, [month, year]);
+      .catch(() => {
+        setTransactions([]);
+        setLoading(false);
+      });
+  }, [startMonth, startYear, endMonth, endYear, initialized]);
 
   return (
     <div>
       <header className="header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Fluxo de Caixa (Banco)</h1>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="card" style={{ padding: '8px' }}>
-              {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="card" style={{ padding: '8px' }}>
-              <option value={2026}>2026</option>
-              <option value={2025}>2025</option>
-            </select>
-          </div>
         </div>
       </header>
 

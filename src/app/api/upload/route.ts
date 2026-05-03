@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
+import { prisma } from "@/lib/prisma";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -370,22 +370,42 @@ export async function POST(request: Request) {
         for (const row of excelData) {
           const findKey = (keys: string[]) => {
             const keysLower = keys.map(k => k.toLowerCase().trim());
-            const found = Object.keys(row).find(k => keysLower.includes(k.toLowerCase().trim()));
+            const found = Object.keys(row).find(k => {
+              const cleanK = k.toLowerCase().trim();
+              return keysLower.some(target => cleanK === target || cleanK.includes(target));
+            });
             return found ? row[found] : "";
           };
 
           const name = findKey(["Cliente", "Paciente", "Nome Cliente", "Nome"]);
           if (!name) continue;
 
-          await prisma.patient.create({
-            data: {
+          await prisma.patient.upsert({
+            where: { name: String(name) },
+            update: {
+              registration: String(findKey(["Matrícula", "ID", "Código"]) || ""),
+              gender: String(findKey(["Gênero", "Sexo", "Sexo/Gênero"]) || ""),
+              age: parseInt(String(findKey(["Idade", "Idade Atual"]) || "0")) || null,
+              phone: String(findKey(["Telefone", "Celular", "Contato"]) || ""),
+              profession: String(findKey(["Profissão", "Trabalho", "Ocupação"]) || ""),
+              origin: String(findKey(["Origem", "Indicação"]) || ""),
+              provenance: String(findKey(["Procedência", "Cidade", "Bairro"]) || ""),
+              address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
+              latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
+              longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
+            },
+            create: {
               registration: String(findKey(["Matrícula", "ID", "Código"]) || ""),
               name: String(name),
-              gender: String(findKey(["Gênero", "Sexo"]) || ""),
-              age: parseInt(String(findKey(["Idade"]) || "0")),
-              phone: String(findKey(["Telefone", "Celular"]) || ""),
-              profession: String(findKey(["Profissão", "Cargo"]) || ""),
-              origin: String(findKey(["Origem / procedência", "Origem", "Indicação"]) || "")
+              gender: String(findKey(["Gênero", "Sexo", "Sexo/Gênero"]) || ""),
+              age: parseInt(String(findKey(["Idade", "Idade Atual"]) || "0")) || null,
+              phone: String(findKey(["Telefone", "Celular", "Contato"]) || ""),
+              profession: String(findKey(["Profissão", "Trabalho", "Ocupação"]) || ""),
+              origin: String(findKey(["Origem", "Indicação"]) || ""),
+              provenance: String(findKey(["Procedência", "Cidade", "Bairro"]) || ""),
+              address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
+              latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
+              longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
             }
           });
           importedCount++;
@@ -404,7 +424,7 @@ export async function POST(request: Request) {
           filePath: fileName
         }
       });
-      return NextResponse.json({ success: true, importedCount, message: `${importedCount} perfis de pacientes importados!` });
+      return NextResponse.json({ success: true, importedCount, message: `${importedCount} perfis de pacientes atualizados!` });
     }
 
     return NextResponse.json({ error: "Tipo de arquivo não suportado ou conteúdo não reconhecido." }, { status: 400 });

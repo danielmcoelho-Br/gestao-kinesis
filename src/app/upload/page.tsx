@@ -18,7 +18,7 @@ const fileTypes = [
 import { usePeriod } from "@/context/PeriodContext";
 
 export default function UploadPage() {
-  const { month: selectedMonth, year: selectedYear, setMonth: setSelectedMonth, setYear: setSelectedYear } = usePeriod();
+  const { startMonth: selectedMonth, startYear: selectedYear, setStartMonth: setSelectedMonth, setStartYear: setSelectedYear } = usePeriod();
   const [importLogs, setImportLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewingRaw, setViewingRaw] = useState<any>(null);

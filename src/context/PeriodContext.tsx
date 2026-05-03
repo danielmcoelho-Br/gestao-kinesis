@@ -3,37 +3,65 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface PeriodContextType {
-  month: number;
-  year: number;
-  setMonth: (m: number) => void;
-  setYear: (y: number) => void;
+  startMonth: number;
+  startYear: number;
+  endMonth: number;
+  endYear: number;
+  initialized: boolean;
+  setStartMonth: (m: number) => void;
+  setStartYear: (y: number) => void;
+  setEndMonth: (m: number) => void;
+  setEndYear: (y: number) => void;
 }
 
 const PeriodContext = createContext<PeriodContextType | undefined>(undefined);
 
 export function PeriodProvider({ children }: { children: React.ReactNode }) {
-  const [month, setMonthState] = useState<number>(new Date().getMonth());
-  const [year, setYearState] = useState<number>(new Date().getFullYear());
+  const [startMonth, setStartMonthState] = useState<number>(new Date().getMonth());
+  const [startYear, setStartYearState] = useState<number>(new Date().getFullYear());
+  const [endMonth, setEndMonthState] = useState<number>(new Date().getMonth());
+  const [endYear, setEndYearState] = useState<number>(new Date().getFullYear());
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    const savedMonth = localStorage.getItem('kinesis_month');
-    const savedYear = localStorage.getItem('kinesis_year');
-    if (savedMonth) setMonthState(parseInt(savedMonth));
-    if (savedYear) setYearState(parseInt(savedYear));
+    const sM = localStorage.getItem('kinesis_start_month');
+    const sY = localStorage.getItem('kinesis_start_year');
+    const eM = localStorage.getItem('kinesis_end_month');
+    const eY = localStorage.getItem('kinesis_end_year');
+    
+    if (sM) setStartMonthState(parseInt(sM));
+    if (sY) setStartYearState(parseInt(sY));
+    if (eM) setEndMonthState(parseInt(eM));
+    if (eY) setEndYearState(parseInt(eY));
+    
+    setInitialized(true);
   }, []);
 
-  const setMonth = (m: number) => {
-    setMonthState(m);
-    localStorage.setItem('kinesis_month', m.toString());
+  const setStartMonth = (m: number) => {
+    setStartMonthState(m);
+    localStorage.setItem('kinesis_start_month', m.toString());
   };
 
-  const setYear = (y: number) => {
-    setYearState(y);
-    localStorage.setItem('kinesis_year', y.toString());
+  const setStartYear = (y: number) => {
+    setStartYearState(y);
+    localStorage.setItem('kinesis_start_year', y.toString());
+  };
+
+  const setEndMonth = (m: number) => {
+    setEndMonthState(m);
+    localStorage.setItem('kinesis_end_month', m.toString());
+  };
+
+  const setEndYear = (y: number) => {
+    setEndYearState(y);
+    localStorage.setItem('kinesis_end_year', y.toString());
   };
 
   return (
-    <PeriodContext.Provider value={{ month, year, setMonth, setYear }}>
+    <PeriodContext.Provider value={{ 
+      startMonth, startYear, endMonth, endYear, initialized, 
+      setStartMonth, setStartYear, setEndMonth, setEndYear 
+    }}>
       {children}
     </PeriodContext.Provider>
   );

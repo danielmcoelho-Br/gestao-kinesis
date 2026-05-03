@@ -74,12 +74,16 @@ model ImportLog {
 model Patient {
   id           String   @id @default(cuid())
   registration String?
-  name         String
+  name         String   @unique
   gender       String?
   age          Int?
   phone        String?
   profession   String?
   origin       String?
+  provenance   String?
+  address      String?
+  latitude     Float?
+  longitude    Float?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

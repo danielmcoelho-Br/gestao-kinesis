@@ -13,19 +13,21 @@ import { MetricChart } from "@/components/MetricChart";
 const monthsNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export default function Dashboard() {
-  const { month, year } = usePeriod();
+  const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
   const [stats, setStats] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('geral');
   const [loading, setLoading] = useState(true);
 
   // Busca de dados otimizada
   const fetchStats = async () => {
+    if (!initialized) return;
     setLoading(true);
     const isProf = !['geral', 'fisioterapia', 'pilates'].includes(activeTab);
     const profParam = isProf ? `&profId=${activeTab}` : "";
     
     try {
-      const res = await fetch(`/api/stats?month=${month}&year=${year}${profParam}`);
+      const url = `/api/stats?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}${profParam}`;
+      const res = await fetch(url);
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || "Falha ao carregar dados do servidor");
@@ -40,8 +42,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchStats();
-  }, [month, year, activeTab]);
+    if (initialized) {
+      fetchStats();
+    }
+  }, [startMonth, startYear, endMonth, endYear, activeTab, initialized]);
 
   // Cálculo de dados para exibição (Memoizado para performance)
   const displayContext = useMemo(() => {
@@ -69,14 +73,14 @@ export default function Dashboard() {
     // Cálculos Manuais de Acumulado
     let accSessionsCurrent = 0;
     let accSessionsPrev = 0;
-    const currentYearHistory = history.find((h: any) => h.year === year);
-    const prevYearHistory = history.find((h: any) => h.year === (year - 1));
+    const currentYearHistory = history.find((h: any) => h.year === startYear);
+    const prevYearHistory = history.find((h: any) => h.year === (startYear - 1));
 
     if (currentYearHistory) {
-      for (let i = 0; i <= month; i++) accSessionsCurrent += currentYearHistory.data[i][type]?.statusSummary?.finalizado || 0;
+      for (let i = 0; i <= endMonth; i++) accSessionsCurrent += currentYearHistory.data[i][type]?.statusSummary?.finalizado || 0;
     }
     if (prevYearHistory) {
-      for (let i = 0; i <= month; i++) accSessionsPrev += prevYearHistory.data[i][type]?.statusSummary?.finalizado || 0;
+      for (let i = 0; i <= endMonth; i++) accSessionsPrev += prevYearHistory.data[i][type]?.statusSummary?.finalizado || 0;
     }
 
     return { 
@@ -86,7 +90,7 @@ export default function Dashboard() {
       ytd: ytdData, accSessionsCurrent, accSessionsPrev,
       history, professionals
     };
-  }, [stats, activeTab, month, year]);
+  }, [stats, activeTab, startMonth, startYear, endMonth, endYear]);
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column', gap: '20px' }}>
@@ -118,7 +122,7 @@ export default function Dashboard() {
 
       <header style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing: '-1px', margin: 0 }}>
-          {title} <span style={{ color, opacity: 0.6 }}>/ {monthsNames[month]} {year}</span>
+          {title} <span style={{ color, opacity: 0.6 }}>/ {monthsNames[startMonth]} {startYear} { (startMonth !== endMonth || startYear !== endYear) && `até ${monthsNames[endMonth]} ${endYear}` }</span>
         </h1>
         <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>KinesisLab - Clinical & Financial Intelligence</p>
       </header>

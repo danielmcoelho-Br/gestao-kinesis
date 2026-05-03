@@ -10,42 +10,30 @@ const months = [
 import { usePeriod } from "@/context/PeriodContext";
 
 export default function ProducaoPage() {
-  const { month, year, setMonth, setYear } = usePeriod();
+  const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!initialized) return;
     setLoading(true);
-    fetch(`/api/stats?month=${month}&year=${year}`)
+    fetch(`/api/producao?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}`)
       .then(res => res.json())
-      .then(data => {
-        // We'll add an endpoint for detailed production later if needed, 
-        // for now let's fetch sessions from a separate api if available or stats
-        // Actually, let's create a dedicated detailed production API
-        fetch(`/api/producao?month=${month}&year=${year}`)
-          .then(res => res.json())
-          .then(items => {
-            setSessions(items);
-            setLoading(false);
-          });
+      .then(items => {
+        setSessions(Array.isArray(items) ? items : []);
+        setLoading(false);
       })
-      .catch(() => setLoading(false));
-  }, [month, year]);
+      .catch(() => {
+        setSessions([]);
+        setLoading(false);
+      });
+  }, [startMonth, startYear, endMonth, endYear, initialized]);
 
   return (
     <div>
       <header className="header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Produção Detalhada</h1>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="card" style={{ padding: '8px' }}>
-              {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="card" style={{ padding: '8px' }}>
-              <option value={2026}>2026</option>
-              <option value={2025}>2025</option>
-            </select>
-          </div>
         </div>
       </header>
 

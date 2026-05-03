@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
+    "@react-google-maps/api": "^2.20.8",
     "lucide-react": "^1.14.0",
     "next": "15.1.7",
     "pdf-parse": "^1.1.1",

@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export interface SessionMetrics {
   count: number;
@@ -70,12 +70,12 @@ export class StatsService {
         const clinicPart = s.value * s.clinicPercentage;
         totalClinic += clinicPart;
 
-        if (s.patientName) uniquePatients.add(s.patientName.trim().toLowerCase());
-
         if (isFinalizado) {
           statusSummary.finalizado++;
           finalizedGross += s.value;
           
+          if (s.patientName) uniquePatients.add(s.patientName.trim().toLowerCase());
+
           if (!stratMap[category]) {
             stratMap[category] = { name: category, count: 0, grossValue: 0, clinicProfit: 0, profValue: 0 };
           }
@@ -127,27 +127,33 @@ export class StatsService {
     };
   }
 
-  static async getDashboardData(month: number, year: number, professionalId: string | null = null) {
-    const startOfTarget = new Date(year, month, 1);
-    const endOfTarget = new Date(year, month + 1, 0, 23, 59, 59);
+  static async getDashboardData(
+    startMonth: number, 
+    startYear: number, 
+    endMonth: number = startMonth, 
+    endYear: number = startYear, 
+    professionalId: string | null = null
+  ) {
+    const startDate = new Date(startYear, startMonth, 1);
+    const endDate = new Date(endYear, endMonth + 1, 0, 23, 59, 59);
     
     const profFilter = professionalId ? { professionalId } : {};
 
-    // 1. Current Month
+    // 1. Current Period (Range)
     const currentSessions = await prisma.session.findMany({ 
-      where: { ...profFilter, date: { gte: startOfTarget, lte: endOfTarget } } 
+      where: { ...profFilter, date: { gte: startDate, lte: endDate } } 
     });
     const current = this.getSeparatedStats(currentSessions);
 
-    // 2. Comparisons (Prev Month and Same Month Last Year)
-    const prevMonthDate = new Date(year, month - 1, 1);
+    // 2. Comparisons (Prev Month and Same Month Last Year - BASED ON START OF RANGE)
+    const prevMonthDate = new Date(startYear, startMonth - 1, 1);
     const pmSessions = await prisma.session.findMany({ 
       where: { ...profFilter, date: { gte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1), lte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0, 23, 59, 59) } } 
     });
     const lastMonth = this.getSeparatedStats(pmSessions);
 
     const pySessions = await prisma.session.findMany({ 
-      where: { ...profFilter, date: { gte: new Date(year - 1, month, 1), lte: new Date(year - 1, month + 1, 0, 23, 59, 59) } } 
+      where: { ...profFilter, date: { gte: new Date(startYear - 1, startMonth, 1), lte: new Date(startYear - 1, startMonth + 1, 0, 23, 59, 59) } } 
     });
     const lastYear = this.getSeparatedStats(pySessions);
 
@@ -188,11 +194,11 @@ export class StatsService {
       return result;
     };
 
-    const currentYearData = history.find(h => h.year === year)?.data || [];
-    const lastYearHistory = history.find(h => h.year === year - 1)?.data || [];
+    const currentYearData = history.find(h => h.year === startYear)?.data || [];
+    const lastYearHistory = history.find(h => h.year === startYear - 1)?.data || [];
     
-    const ytdCurrent = calculateYTD(currentYearData, month);
-    const ytdPrevious = calculateYTD(lastYearHistory, month);
+    const ytdCurrent = calculateYTD(currentYearData, endMonth);
+    const ytdPrevious = calculateYTD(lastYearHistory, endMonth);
 
     return {
       current: current || this.getSeparatedStats([]),
