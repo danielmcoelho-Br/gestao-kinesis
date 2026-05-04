@@ -1,8 +1,14 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePeriod } from "@/context/PeriodContext";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { 
+  Check, Filter, LogOut, Settings, User as UserIcon, 
+  Shield, Loader2, LayoutDashboard, Users, 
+  CreditCard, BarChart3, UploadCloud
+} from "lucide-react";
 
 const months = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -12,77 +18,146 @@ const months = [
 export function Sidebar() {
   const { 
     startMonth, startYear, endMonth, endYear, 
-    setStartMonth, setStartYear, setEndMonth, setEndYear 
+    updatePeriod 
   } = usePeriod();
+  
+  const [lStartMonth, setLStartMonth] = useState(startMonth);
+  const [lStartYear, setLStartYear] = useState(startYear);
+  const [lEndMonth, setLEndMonth] = useState(endMonth);
+  const [lEndYear, setLEndYear] = useState(endYear);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
   const pathname = usePathname();
 
+  useEffect(() => {
+    setLoading(true);
+    fetch("/api/profile")
+      .then(res => res.json())
+      .then(data => {
+        if (data.id) setUser(data);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
   const isActive = (path: string) => pathname === path;
+  const isAdmin = user?.role === 'ADMIN';
+  const hasChanges = lStartMonth !== startMonth || lStartYear !== startYear || lEndMonth !== endMonth || lEndYear !== endYear;
+
+  const handleApply = () => {
+    updatePeriod(lStartMonth, lStartYear, lEndMonth, lEndYear);
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  };
+
+  const menuItems = [
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/pacientes", label: "Pacientes", icon: Users },
+    { href: "/cobrancas", label: "Cobranças", icon: CreditCard },
+    { href: "/upload", label: "Importar Dados", icon: UploadCloud },
+  ];
 
   return (
-    <aside className="sidebar">
-      <div className="logo">
-        <h2 style={{ fontSize: '1.4rem', color: 'var(--primary)' }}>Gestão Kinesis</h2>
+    <aside className="sidebar-modern">
+      <div className="logo-container">
+        <div className="logo-icon">K</div>
+        <h2 className="logo-text">Gestão Kinesis</h2>
       </div>
 
-      <div style={{ padding: '0 20px 20px 20px', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
-        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>Análise por Período</p>
+      {loading ? (
+        <div className="loading-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: '#94a3b8' }}>
+          <Loader2 className="animate-spin" size={24} />
+          <span style={{ fontSize: '0.75rem' }}>Carregando...</span>
+        </div>
+      ) : (
+        <div className="sidebar-content">
+          <div className="period-card">
+            <p className="section-title">Período</p>
+            
+            <div className="selector-group">
+              <label>INÍCIO</label>
+              <div className="select-row">
+                <select value={lStartMonth} onChange={(e) => setLStartMonth(parseInt(e.target.value))}>
+                  {months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
+                </select>
+                <select value={lStartYear} onChange={(e) => setLStartYear(parseInt(e.target.value))}>
+                  {Array.from({ length: 5 }, (_, i) => 2026 - i).map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="selector-group">
+              <label>FIM</label>
+              <div className="select-row">
+                <select value={lEndMonth} onChange={(e) => setLEndMonth(parseInt(e.target.value))}>
+                  {months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
+                </select>
+                <select value={lEndYear} onChange={(e) => setLEndYear(parseInt(e.target.value))}>
+                  {Array.from({ length: 5 }, (_, i) => 2026 - i).map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button onClick={handleApply} disabled={!hasChanges} className={`filter-btn ${hasChanges ? 'active' : ''}`}>
+              {hasChanges ? <Filter size={14} /> : <Check size={14} />}
+              {hasChanges ? "Filtrar" : "Validado"}
+            </button>
+          </div>
+
+          <nav className="main-nav">
+            <p className="nav-label">Menu Principal</p>
+            {menuItems.map((item) => (
+              <Link key={item.href} href={item.href} className={`nav-item ${isActive(item.href) ? 'active' : ''}`}>
+                <item.icon size={18} />
+                <span>{item.label}</span>
+              </Link>
+            ))}
+
+            {isAdmin && (
+              <Link href="/financeiro" className={`nav-item ${isActive("/financeiro") ? 'active' : ''}`}>
+                <CreditCard size={18} />
+                <span>Financeiro Clínica</span>
+              </Link>
+            )}
+
+            {isAdmin && (
+              <>
+                <p className="nav-label">Administração</p>
+                <Link href="/admin" className={`nav-item admin-item ${isActive("/admin") ? 'active' : ''}`}>
+                  <Shield size={18} />
+                  <span>Painel de Controle</span>
+                  <div className="badge">Config</div>
+                </Link>
+              </>
+            )}
+          </nav>
+        </div>
+      )}
+
+      <div className="sidebar-footer">
+        <div className="user-profile">
+          <div className="avatar">
+            <UserIcon size={18} />
+          </div>
+          <div className="user-info">
+            <p className="user-name">{user?.name || 'Usuário'}</p>
+            <p className="user-role">{user?.role?.toLowerCase() || '...'}</p>
+          </div>
+        </div>
         
-        {/* Início */}
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>INÍCIO</label>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <select 
-              value={startMonth} 
-              onChange={(e) => setStartMonth(parseInt(e.target.value))}
-              style={{ flex: 2, padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer' }}
-            >
-              {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <select 
-              value={startYear} 
-              onChange={(e) => setStartYear(parseInt(e.target.value))}
-              style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer' }}
-            >
-              {Array.from({ length: 10 }, (_, i) => 2026 - i).map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Fim */}
-        <div>
-          <label style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>FIM (INCLUSO)</label>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <select 
-              value={endMonth} 
-              onChange={(e) => setEndMonth(parseInt(e.target.value))}
-              style={{ flex: 2, padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer' }}
-            >
-              {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <select 
-              value={endYear} 
-              onChange={(e) => setEndYear(parseInt(e.target.value))}
-              style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer' }}
-            >
-              {Array.from({ length: 10 }, (_, i) => 2026 - i).map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
+        <div className="footer-actions">
+          <Link href="/perfil" className="footer-btn" title="Meu Perfil">
+            <Settings size={18} />
+          </Link>
+          <button onClick={handleLogout} className="footer-btn logout" title="Sair">
+            <LogOut size={18} />
+          </button>
         </div>
       </div>
-
-      <nav className="nav-menu">
-        <Link href="/" className={isActive("/") ? "active" : ""}>Dashboard</Link>
-        <Link href="/pacientes" className={isActive("/pacientes") ? "active" : ""}>Perfil Pacientes</Link>
-        <Link href="/financeiro" className={isActive("/financeiro") ? "active" : ""}>Financeiro Clínica</Link>
-        <Link href="/cobrancas" className={isActive("/cobrancas") ? "active" : ""}>Cobranças</Link>
-        <Link href="/producao" className={isActive("/producao") ? "active" : ""}>Produção</Link>
-        <Link href="/upload" className={isActive("/upload") ? "active" : ""}>Importar Dados</Link>
-        <Link href="/profissionais" className={isActive("/profissionais") ? "active" : ""}>Profissionais (regras)</Link>
-      </nav>
     </aside>
   );
 }

@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/client"
 }
 
 datasource db {
@@ -29,6 +28,7 @@ model Session {
   serviceType      String
   value            Float
   clinicPercentage Float
+  ownerId          String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
   professional     Professional @relation(fields: [professionalId], references: [id])
@@ -42,6 +42,7 @@ model Transaction {
   date        DateTime
   category    String
   bank        String
+  ownerId     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -84,6 +85,7 @@ model Patient {
   address      String?
   latitude     Float?
   longitude    Float?
+  ownerId      String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -98,6 +100,22 @@ model BillingSession {
   month       Int
   year        Int
   importLogId String
+  ownerId     String?
   createdAt   DateTime @default(now())
   phone       String?
+}
+
+enum UserRole {
+  ADMIN
+  SECRETARIA
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(SECRETARIA)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

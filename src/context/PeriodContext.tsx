@@ -12,6 +12,7 @@ interface PeriodContextType {
   setStartYear: (y: number) => void;
   setEndMonth: (m: number) => void;
   setEndYear: (y: number) => void;
+  updatePeriod: (startM: number, startY: number, endM: number, endY: number) => void;
 }
 
 const PeriodContext = createContext<PeriodContextType | undefined>(undefined);
@@ -57,10 +58,22 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('kinesis_end_year', y.toString());
   };
 
+  const updatePeriod = (startM: number, startY: number, endM: number, endY: number) => {
+    setStartMonthState(startM);
+    setStartYearState(startY);
+    setEndMonthState(endM);
+    setEndYearState(endY);
+    localStorage.setItem('kinesis_start_month', startM.toString());
+    localStorage.setItem('kinesis_start_year', startY.toString());
+    localStorage.setItem('kinesis_end_month', endM.toString());
+    localStorage.setItem('kinesis_end_year', endY.toString());
+  };
+
   return (
     <PeriodContext.Provider value={{ 
       startMonth, startYear, endMonth, endYear, initialized, 
-      setStartMonth, setStartYear, setEndMonth, setEndYear 
+      setStartMonth, setStartYear, setEndMonth, setEndYear,
+      updatePeriod 
     }}>
       {children}
     </PeriodContext.Provider>

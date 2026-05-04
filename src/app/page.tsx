@@ -11,7 +11,7 @@ import {
 import { MetricChart } from "@/components/MetricChart";
 import { ReportHeader } from "@/components/ReportHeader";
 import { DashboardResponse } from "@/types";
-import { StatsService } from "@/services/statsService";
+import { ClientStatsService } from "@/services/clientStatsService";
 
 const monthsNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -74,8 +74,8 @@ export default function Dashboard() {
     };
 
     // Cálculos Manuais de Acumulado via Service
-    const accSessionsCurrent = StatsService.calculateAccumulatedSessions(history, startYear, endMonth, type);
-    const accSessionsPrev = StatsService.calculateAccumulatedSessions(history, startYear - 1, endMonth, type);
+    const accSessionsCurrent = ClientStatsService.calculateAccumulatedSessions(history, startYear, endMonth, type);
+    const accSessionsPrev = ClientStatsService.calculateAccumulatedSessions(history, startYear - 1, endMonth, type);
 
     return { 
       data: current[type], 
@@ -152,7 +152,7 @@ export default function Dashboard() {
             <div className="card">
               <h3 style={{ marginBottom: '16px', fontSize: '1.1rem' }}>Assiduidade e Status</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
-                {StatsService.getAttendanceStatusSummary(data).map((status, i) => (
+                {ClientStatsService.getAttendanceStatusSummary(data).map((status, i) => (
                   <StatusBox key={i} label={status.label} count={status.count} color={status.color} />
                 ))}
               </div>
