@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 
 // Polyfill essential missing globals for headless pdf parsing libraries in Next.js environment
 if (typeof (global as any).DOMMatrix === "undefined") (global as any).DOMMatrix = class DOMMatrix {};
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(bytes);
 
     // Salvar o arquivo no disco
-    const uploadDir = path.join(process.cwd(), "uploads");
+    const uploadDir = path.join(os.tmpdir(), "uploads");
     await fs.mkdir(uploadDir, { recursive: true });
     const fileName = `${Date.now()}-${safeFileName}`;
     const filePath = path.join(uploadDir, fileName);

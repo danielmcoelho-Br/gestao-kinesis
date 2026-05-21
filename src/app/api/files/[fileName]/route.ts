@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 
 export async function GET(
   request: Request,
@@ -11,7 +12,7 @@ export async function GET(
     
     // Sanitiza o nome do arquivo impedindo caracteres de navegação no path (ex: ../..)
     const safeFileName = path.basename(fileName);
-    const uploadDir = path.join(process.cwd(), "uploads");
+    const uploadDir = path.join(os.tmpdir(), "uploads");
     const filePath = path.join(uploadDir, safeFileName);
 
     // Garante que o arquivo solicitado está dentro do diretório permitido de uploads
