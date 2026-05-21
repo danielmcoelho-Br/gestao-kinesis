@@ -10,12 +10,12 @@ const KEY = new TextEncoder().encode(process.env.JWT_SECRET);
 
 async function verifyToken(token: string) {
   try {
-    await jwtVerify(token, KEY, {
+    const { payload } = await jwtVerify(token, KEY, {
       algorithms: ["HS256"],
     });
-    return true;
+    return payload;
   } catch (error) {
-    return false;
+    return null;
   }
 }
 
@@ -50,16 +50,15 @@ export async function middleware(request: NextRequest) {
   // 2. GET SESSION COOKIE
   const sessionCookie = request.cookies.get("session")?.value;
 
-  // 3. VERIFY SENSITIVE PATHS
-  // If trying to access any app route or management API
+  // 3. VERIFY SENSITIVE PATHS AND ROLE-BASED ACCESS CONTROL
   const isApiRoute = pathname.startsWith("/api/");
   
-  let isAuthenticated = false;
+  let sessionPayload: any = null;
   if (sessionCookie) {
-    isAuthenticated = await verifyToken(sessionCookie);
+    sessionPayload = await verifyToken(sessionCookie);
   }
 
-  if (!isAuthenticated) {
+  if (!sessionPayload) {
     // Case A: User hit an API endpoint -> Return JSON 401 Unauthorized
     if (isApiRoute) {
       return NextResponse.json(
@@ -75,7 +74,44 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Token is valid, allow request to proceed!
+  // Enforce role-based access for SECRETARIA
+  const role = String(sessionPayload.role || "").toUpperCase();
+  if (role === "SECRETARIA") {
+    // Restricted UI routes in Gestão
+    const isRestrictedPath = 
+      pathname === "/gestao" || pathname.startsWith("/gestao/") ||
+      pathname === "/pacientes" || pathname.startsWith("/pacientes/") ||
+      pathname === "/profissionais" || pathname.startsWith("/profissionais/") ||
+      pathname === "/financeiro" || pathname.startsWith("/financeiro/") ||
+      pathname === "/admin" || pathname.startsWith("/admin/");
+
+    if (isRestrictedPath) {
+      if (isApiRoute) {
+        return NextResponse.json(
+          { error: "Acesso proibido para esta função." },
+          { status: 403 }
+        );
+      }
+      return NextResponse.redirect(new URL("/cobrancas", request.url));
+    }
+
+    // Restricted API routes
+    const isRestrictedApi =
+      pathname.startsWith("/api/stats") ||
+      pathname.startsWith("/api/patients/stats") ||
+      pathname.startsWith("/api/admin/") ||
+      pathname.startsWith("/api/profissionais") ||
+      pathname.startsWith("/api/financeiro");
+
+    if (isRestrictedApi && isApiRoute) {
+      return NextResponse.json(
+        { error: "Acesso proibido para esta função." },
+        { status: 403 }
+      );
+    }
+  }
+
+  // Token is valid and role has access, allow request to proceed!
   return NextResponse.next();
 }
 
