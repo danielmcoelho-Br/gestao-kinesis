@@ -505,25 +505,55 @@ export async function POST(request: Request) {
 
           const name = findKey(["cliente", "paciente", "nome", "paciante"]);
           const valor = findKey(["valor", "preço", "total", "valor total", "bruto"]);
-          const pago = String(findKey(["pago", "pagamento", "liquidado", "acerto"]) || "").toLowerCase().trim();
           const servico = String(findKey(["serviço", "procedimento", "tipo", "atendimento", "descrição"]) || "").toLowerCase();
           const dataAtendimento = findKey(["data", "dia", "atendimento", "data atendimento"]);
           const telefone = findKey(["telefone do cliente", "telefone", "celular", "contato"]);
           const obs = String(findKey(["obs", "observação", "notas"]) || "").toUpperCase();
+          const statusRaw = findKey(["status", "situação", "status atendimento", "situação atendimento"]);
 
           if (!name || !dataAtendimento) continue;
 
           if (obs.includes("PACOTE FIXO")) continue;
+
+          // Ignorar atendimentos não faturáveis (faltas, cancelamentos, ausências)
+          if (statusRaw !== undefined && statusRaw !== null && statusRaw !== "") {
+            const statusStr = String(statusRaw).toLowerCase().trim();
+            if (
+              statusStr.includes("não compareceu") ||
+              statusStr.includes("falta") ||
+              statusStr.includes("ausência") ||
+              statusStr.includes("cancelado") ||
+              statusStr.includes("desmarcado")
+            ) {
+              continue;
+            }
+          }
           
-          const isPaid = 
-            pago.includes("sim") || 
-            pago === "s" || 
-            pago.includes("pago") || 
-            pago.includes("ok") || 
-            pago === "p" || 
-            pago.includes("confirmado") || 
-            pago === "x" ||
-            pago === "v"; 
+          // Verificar de forma robusta se a sessão já está paga
+          const pagoRaw = findKey(["pago", "pagamento", "liquidado", "acerto"]);
+          let isPaid = false;
+          if (pagoRaw !== undefined && pagoRaw !== null && pagoRaw !== "") {
+            if (typeof pagoRaw === "boolean") {
+              isPaid = pagoRaw;
+            } else {
+              const pagoStr = String(pagoRaw).toLowerCase().trim();
+              isPaid = 
+                pagoStr === "true" ||
+                pagoStr === "1" ||
+                pagoStr === "sim" ||
+                pagoStr === "s" ||
+                pagoStr === "yes" ||
+                pagoStr === "y" ||
+                pagoStr === "pg" ||
+                pagoStr === "pgto" ||
+                pagoStr.includes("pago") ||
+                pagoStr.includes("ok") ||
+                pagoStr === "p" ||
+                pagoStr.includes("confirmado") ||
+                pagoStr === "x" ||
+                pagoStr === "v";
+            }
+          }
           
           if (isPaid) continue;
           
