@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { StatsService } from "@/services/statsService";
+import { StatsService } from "@/gestao/services/statsService";
 
 export async function GET(request: Request) {
   try {

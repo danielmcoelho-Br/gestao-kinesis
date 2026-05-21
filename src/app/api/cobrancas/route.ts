@@ -7,10 +7,15 @@ export async function GET(request: Request) {
     const month = searchParams.get("month") ? parseInt(searchParams.get("month")!) : new Date().getMonth();
     const year = searchParams.get("year") ? parseInt(searchParams.get("year")!) : new Date().getFullYear();
 
-    const sessions: any[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "BillingSession" WHERE month = $1 AND year = $2 ORDER BY date ASC`,
-      month, year
-    );
+    const sessions = await prisma.billingSession.findMany({
+      where: {
+        month: month,
+        year: year
+      },
+      orderBy: {
+        date: 'asc'
+      }
+    });
 
     // Agrupar por paciente
     const groups: Record<string, any> = {};

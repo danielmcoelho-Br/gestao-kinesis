@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { comparePassword } from "@/lib/password";
-import { createSession } from "@/lib/auth";
+import { comparePassword } from "@/gestao/lib/password";
+import { createSession } from "@/gestao/lib/auth";
 
 export async function POST(request: Request) {
   try {

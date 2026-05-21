@@ -15,8 +15,8 @@ export async function GET(request: Request) {
     const sessions = await prisma.session.findMany({
       where: {
         date: {
-          gte: startOfMonth,
-          lte: endOfMonth
+          gte: startDate,
+          lte: endDate
         }
       },
       include: {

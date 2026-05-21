@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/password";
-import { getSession } from "@/lib/auth";
+import { hashPassword } from "@/gestao/lib/password";
+import { getSession } from "@/gestao/lib/auth";
 
 // Middleware internal check
 async function checkAdmin() {

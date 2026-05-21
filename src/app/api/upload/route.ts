@@ -3,7 +3,11 @@ import { prisma } from "@/lib/prisma";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const pdfParse = require("pdf-parse");
+// Polyfill essential missing globals for headless pdf parsing libraries in Next.js environment
+if (typeof (global as any).DOMMatrix === "undefined") (global as any).DOMMatrix = class DOMMatrix {};
+if (typeof (global as any).Path2D === "undefined") (global as any).Path2D = class Path2D {};
+if (typeof (global as any).ImageData === "undefined") (global as any).ImageData = class ImageData {};
+
 const XLSX = require("xlsx");
 
 const statusList = [
@@ -25,10 +29,14 @@ export async function POST(request: Request) {
     const yearRaw = data.get("year");
     const month = monthRaw !== null ? parseInt(monthRaw as string) : new Date().getMonth();
     const year = yearRaw !== null ? parseInt(yearRaw as string) : new Date().getFullYear();
+    const autoSegmentRaw = data.get("autoSegment");
+    const isAutoSegment = autoSegmentRaw === "true" || year <= 2024;
 
     if (!file) {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
     }
+
+    const safeFileName = path.basename(file.name);
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
@@ -36,14 +44,14 @@ export async function POST(request: Request) {
     // Salvar o arquivo no disco
     const uploadDir = path.join(process.cwd(), "uploads");
     await fs.mkdir(uploadDir, { recursive: true });
-    const fileName = `${Date.now()}-${file.name}`;
+    const fileName = `${Date.now()}-${safeFileName}`;
     const filePath = path.join(uploadDir, fileName);
     await fs.writeFile(filePath, buffer);
 
     // Extrair dados (PDF ou Excel)
     let text = "";
     let excelData: any[] = [];
-    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv");
+    const isExcel = safeFileName.endsWith(".xlsx") || safeFileName.endsWith(".xls") || safeFileName.endsWith(".csv");
 
     if (isExcel) {
       const workbook = XLSX.read(buffer, { type: "buffer" });
@@ -114,78 +122,197 @@ export async function POST(request: Request) {
       if (results.length === 0) {
         return NextResponse.json({ error: "Nenhum dado válido encontrado. Verifique se as colunas (Data, Profissional, Cliente) estão presentes no arquivo." }, { status: 400 });
       }
-      
-      let importedCount = 0;
-      const stats = {
-        total: results.length,
-        finalizado: 0,
-        falta: 0,
-        ausenciaProfissional: 0,
-        ausenciaJustificada: 0
-      };
 
+      // Pre-parse dates for all items
+      const parsedItems: any[] = [];
       for (const item of results) {
-        const prof = professionals.find(p => item.professional.includes(p.name) || p.name.includes(item.professional));
-        if (prof) {
-          const specificRule = prof.serviceRules.find(r => item.tipo.includes(r.serviceCode));
-          const percentage = specificRule ? specificRule.percentage : prof.defaultPercentage;
-
-          let sessionDate: Date;
-          if (item.data instanceof Date) {
-            sessionDate = item.data;
+        let sessionDate: Date;
+        if (item.data instanceof Date) {
+          sessionDate = item.data;
+        } else {
+          // Tentar converter string (DD/MM/YYYY HH:mm ou YYYY-MM-DD)
+          const dateStr = String(item.data);
+          if (dateStr.includes('/')) {
+            const parts = dateStr.split(' ');
+            const dateParts = parts[0].split('/');
+            const timePart = parts[1] || '12:00';
+            sessionDate = new Date(`${dateParts.reverse().join('-')}T${timePart}`);
           } else {
-            // Tentar converter string (DD/MM/YYYY HH:mm ou YYYY-MM-DD)
-            const dateStr = String(item.data);
-            if (dateStr.includes('/')) {
-              const parts = dateStr.split(' ');
-              const dateParts = parts[0].split('/');
-              const timePart = parts[1] || '12:00';
-              sessionDate = new Date(`${dateParts.reverse().join('-')}T${timePart}`);
-            } else {
-              sessionDate = new Date(dateStr);
+            sessionDate = new Date(dateStr);
+          }
+        }
+
+        if (isNaN(sessionDate.getTime())) {
+          console.warn("Data inválida para a linha:", item);
+          continue;
+        }
+        parsedItems.push({ ...item, sessionDate });
+      }
+
+      if (isAutoSegment) {
+        const groups: { [key: string]: { month: number; year: number; items: any[] } } = {};
+        for (const item of parsedItems) {
+          const m = item.sessionDate.getMonth();
+          const y = item.sessionDate.getFullYear();
+          const key = `${y}-${m}`;
+          if (!groups[key]) {
+            groups[key] = { month: m, year: y, items: [] };
+          }
+          groups[key].items.push(item);
+        }
+
+        let totalImported = 0;
+        const processedMonths: string[] = [];
+        const monthNames = [
+          "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+          "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ];
+
+        const sortedKeys = Object.keys(groups).sort((a, b) => {
+          const [yA, mA] = a.split('-').map(Number);
+          const [yB, mB] = b.split('-').map(Number);
+          return yA !== yB ? yA - yB : mA - mB;
+        });
+
+        for (const key of sortedKeys) {
+          const { month: m, year: y, items: groupItems } = groups[key];
+          const startOfMonth = new Date(y, m, 1);
+          const endOfMonth = new Date(y, m + 1, 0, 23, 59, 59);
+
+          await prisma.session.deleteMany({
+            where: {
+              date: { gte: startOfMonth, lte: endOfMonth }
+            }
+          });
+
+          await prisma.importLog.deleteMany({
+            where: {
+              fileType: "SEUFISIO",
+              month: m,
+              year: y
+            }
+          });
+
+          let groupImportedCount = 0;
+          const groupStats = {
+            total: groupItems.length,
+            finalizado: 0,
+            falta: 0,
+            ausenciaProfissional: 0,
+            ausenciaJustificada: 0
+          };
+
+          const sessionsToCreate: any[] = [];
+          for (const item of groupItems) {
+            const prof = professionals.find(p => item.professional.includes(p.name) || p.name.includes(item.professional));
+            if (prof) {
+              const specificRule = prof.serviceRules.find(r => item.tipo.includes(r.serviceCode));
+              const percentage = specificRule ? specificRule.percentage : prof.defaultPercentage;
+
+              sessionsToCreate.push({
+                professionalId: prof.id,
+                patientName: item.cliente,
+                date: item.sessionDate,
+                status: item.status,
+                serviceType: item.tipo,
+                value: item.valor,
+                clinicPercentage: percentage
+              });
+
+              if (item.status === 'Finalizado') groupStats.finalizado++;
+              else if (item.status === 'Não Compareceu') groupStats.falta++;
+              else if (item.status === 'Ausência Justificada') groupStats.ausenciaJustificada++;
+              else if (item.status === 'Ausência do Profissional') groupStats.ausenciaProfissional++;
+
+              groupImportedCount++;
             }
           }
 
-          if (isNaN(sessionDate.getTime())) {
-            console.warn("Data inválida para a linha:", item);
-            continue;
+          if (sessionsToCreate.length > 0) {
+            await prisma.session.createMany({
+              data: sessionsToCreate
+            });
           }
 
-          await prisma.session.create({
+          await prisma.importLog.create({
             data: {
+              fileName: safeFileName,
+              fileType: "SEUFISIO",
+              month: m,
+              year: y,
+              totalRecords: groupImportedCount,
+              summary: JSON.stringify(groupStats),
+              rawText: text,
+              filePath: fileName
+            }
+          });
+
+          totalImported += groupImportedCount;
+          processedMonths.push(`${monthNames[m]}/${y}`);
+        }
+
+        return NextResponse.json({ 
+          success: true, 
+          importedCount: totalImported, 
+          message: `${totalImported} atendimentos importados e distribuídos nos meses: ${processedMonths.join(', ')}!` 
+        });
+      } else {
+        let importedCount = 0;
+        const stats = {
+          total: parsedItems.length,
+          finalizado: 0,
+          falta: 0,
+          ausenciaProfissional: 0,
+          ausenciaJustificada: 0
+        };
+
+        const sessionsToCreate: any[] = [];
+        for (const item of parsedItems) {
+          const prof = professionals.find(p => item.professional.includes(p.name) || p.name.includes(item.professional));
+          if (prof) {
+            const specificRule = prof.serviceRules.find(r => item.tipo.includes(r.serviceCode));
+            const percentage = specificRule ? specificRule.percentage : prof.defaultPercentage;
+
+            sessionsToCreate.push({
               professionalId: prof.id,
               patientName: item.cliente,
-              date: sessionDate,
+              date: item.sessionDate,
               status: item.status,
               serviceType: item.tipo,
               value: item.valor,
               clinicPercentage: percentage
-            }
+            });
+
+            if (item.status === 'Finalizado') stats.finalizado++;
+            else if (item.status === 'Não Compareceu') stats.falta++;
+            else if (item.status === 'Ausência Justificada') stats.ausenciaJustificada++;
+            else if (item.status === 'Ausência do Profissional') stats.ausenciaProfissional++;
+
+            importedCount++;
+          }
+        }
+
+        if (sessionsToCreate.length > 0) {
+          await prisma.session.createMany({
+            data: sessionsToCreate
           });
-
-          if (item.status === 'Finalizado') stats.finalizado++;
-          else if (item.status === 'Não Compareceu') stats.falta++;
-          else if (item.status === 'Ausência Justificada') stats.ausenciaJustificada++;
-          else if (item.status === 'Ausência do Profissional') stats.ausenciaProfissional++;
-
-          importedCount++;
         }
+
+        await prisma.importLog.create({
+          data: {
+            fileName: safeFileName,
+            fileType: "SEUFISIO",
+            month,
+            year,
+            totalRecords: importedCount,
+            summary: JSON.stringify(stats),
+            rawText: text,
+            filePath: fileName
+          }
+        });
+
+        return NextResponse.json({ success: true, importedCount, message: `${importedCount} atendimentos importados!` });
       }
-
-      await prisma.importLog.create({
-        data: {
-          fileName: file.name,
-          fileType: "SEUFISIO",
-          month,
-          year,
-          totalRecords: importedCount,
-          summary: JSON.stringify(stats),
-          rawText: text,
-          filePath: fileName // Guardamos apenas o nome para facilitar o acesso via API
-        }
-      });
-
-      return NextResponse.json({ success: true, importedCount, message: `${importedCount} atendimentos importados!` });
     } 
     else if (fileTypeSent === "BANCO_BB" || text.includes("Extrato de Conta Corrente")) {
       let transactions: any[] = [];
@@ -199,42 +326,157 @@ export async function POST(request: Request) {
       } else {
         transactions = parseBB(text);
       }
-      let importedCount = 0;
-      
+      // Pre-parse dates for all transactions
+      const parsedTransactions: any[] = [];
       for (const t of transactions) {
-        await prisma.transaction.create({
-          data: {
-            date: new Date(t.date.split('/').reverse().join('-') + 'T12:00:00'),
+        if (!t.date) continue;
+        let transDate: Date;
+        if (t.date instanceof Date) {
+          transDate = t.date;
+        } else {
+          const dateStr = String(t.date);
+          if (dateStr.includes('/')) {
+            transDate = new Date(dateStr.split('/').reverse().join('-') + 'T12:00:00');
+          } else {
+            transDate = new Date(dateStr);
+          }
+        }
+        if (isNaN(transDate.getTime())) {
+          console.warn("Data de transação inválida:", t.date);
+          continue;
+        }
+        parsedTransactions.push({ ...t, transDate });
+      }
+
+      if (isAutoSegment) {
+        const groups: { [key: string]: { month: number; year: number; items: any[] } } = {};
+        for (const t of parsedTransactions) {
+          const m = t.transDate.getMonth();
+          const y = t.transDate.getFullYear();
+          const key = `${y}-${m}`;
+          if (!groups[key]) {
+            groups[key] = { month: m, year: y, items: [] };
+          }
+          groups[key].items.push(t);
+        }
+
+        let totalImported = 0;
+        const processedMonths: string[] = [];
+        const monthNames = [
+          "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+          "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ];
+
+        const sortedKeys = Object.keys(groups).sort((a, b) => {
+          const [yA, mA] = a.split('-').map(Number);
+          const [yB, mB] = b.split('-').map(Number);
+          return yA !== yB ? yA - yB : mA - mB;
+        });
+
+        for (const key of sortedKeys) {
+          const { month: m, year: y, items: groupItems } = groups[key];
+          const startOfMonth = new Date(y, m, 1);
+          const endOfMonth = new Date(y, m + 1, 0, 23, 59, 59);
+
+          await prisma.transaction.deleteMany({
+            where: {
+              date: { gte: startOfMonth, lte: endOfMonth },
+              bank: 'Banco do Brasil'
+            }
+          });
+
+          await prisma.importLog.deleteMany({
+            where: {
+              fileType: "BANCO_BB",
+              month: m,
+              year: y
+            }
+          });
+
+          let groupImportedCount = 0;
+          const transactionsToCreate: any[] = [];
+          for (const t of groupItems) {
+            transactionsToCreate.push({
+              date: t.transDate,
+              description: t.description,
+              amount: t.amount,
+              type: t.type,
+              category: t.type === 'INCOME' ? 'Recebimento' : 'Despesa',
+              bank: 'Banco do Brasil'
+            });
+            groupImportedCount++;
+          }
+
+          if (transactionsToCreate.length > 0) {
+            await prisma.transaction.createMany({
+              data: transactionsToCreate
+            });
+          }
+
+          await prisma.importLog.create({
+            data: {
+              fileName: safeFileName,
+              fileType: "BANCO_BB",
+              month: m,
+              year: y,
+              totalRecords: groupImportedCount,
+              summary: JSON.stringify({ total: groupImportedCount }),
+              rawText: text,
+              filePath: fileName
+            }
+          });
+
+          totalImported += groupImportedCount;
+          processedMonths.push(`${monthNames[m]}/${y}`);
+        }
+
+        return NextResponse.json({ 
+          success: true, 
+          importedCount: totalImported, 
+          message: `${totalImported} transações bancárias importadas e distribuídas nos meses: ${processedMonths.join(', ')}!` 
+        });
+      } else {
+        let importedCount = 0;
+        const transactionsToCreate: any[] = [];
+        for (const t of parsedTransactions) {
+          transactionsToCreate.push({
+            date: t.transDate,
             description: t.description,
             amount: t.amount,
             type: t.type,
             category: t.type === 'INCOME' ? 'Recebimento' : 'Despesa',
             bank: 'Banco do Brasil'
+          });
+          importedCount++;
+        }
+
+        if (transactionsToCreate.length > 0) {
+          await prisma.transaction.createMany({
+            data: transactionsToCreate
+          });
+        }
+
+        await prisma.importLog.create({
+          data: {
+            fileName: safeFileName,
+            fileType: "BANCO_BB",
+            month,
+            year,
+            totalRecords: importedCount,
+            summary: JSON.stringify({ total: importedCount }),
+            rawText: text,
+            filePath: fileName
           }
         });
-        importedCount++;
+
+        return NextResponse.json({ success: true, importedCount, message: `${importedCount} transações bancárias importadas!` });
       }
-
-      await prisma.importLog.create({
-        data: {
-          fileName: file.name,
-          fileType: "BANCO_BB",
-          month,
-          year,
-          totalRecords: importedCount,
-          summary: JSON.stringify({ total: importedCount }),
-          rawText: text,
-          filePath: fileName
-        }
-      });
-
-      return NextResponse.json({ success: true, importedCount, message: `${importedCount} transações bancárias importadas!` });
     }
     else if (fileTypeSent === "BANCO_INTER") {
       // Placeholder para Banco Inter
       await prisma.importLog.create({
         data: {
-          fileName: file.name,
+          fileName: safeFileName,
           fileType: "BANCO_INTER",
           month,
           year,
@@ -247,18 +489,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: "Extrato Banco Inter recebido!" });
     }
     else if (fileTypeSent === "COBRANCAS") {
-      let importedCount = 0;
-      
-      // Limpar cobranças anteriores usando SQL Puro (evita erro de cache do Prisma)
-      try {
-        await prisma.$executeRawUnsafe(
-          `DELETE FROM "BillingSession" WHERE month = $1 AND year = $2`,
-          month, year
-        );
-      } catch (e) {
-        console.error("Erro ao limpar cobranças antigas via SQL:", e);
-      }
-
+      const parsedBillingSessions: any[] = [];
       if (isExcel) {
         console.log("Processando Excel de Cobranças via SQL Puro...", excelData.length, "linhas");
         for (const row of excelData) {
@@ -281,24 +512,20 @@ export async function POST(request: Request) {
 
           if (!name || !dataAtendimento) continue;
 
-          // NOVAS REGRAS DE NEGÓCIO:
-          // 1. Ignorar se for PACOTE FIXO
           if (obs.includes("PACOTE FIXO")) continue;
           
-          // 2. Ignorar se já estiver pago (Filtro Super Sensível)
           const isPaid = 
             pago.includes("sim") || 
             pago === "s" || 
             pago.includes("pago") || 
             pago.includes("ok") || 
             pago === "p" || 
-            pago === "confirmado" || 
+            pago.includes("confirmado") || 
             pago === "x" ||
-            pago === "v"; // Algumas planilhas usam 'v' de visto
+            pago === "v"; 
           
           if (isPaid) continue;
           
-          // 3. Deve ter valor preenchido e maior que zero
           const valNum = typeof valor === "number" ? valor : parseFloat(String(valor).replace(/[^\d,.-]/g, '').replace(',', '.'));
           if (!valNum || valNum <= 0) continue;
 
@@ -310,9 +537,9 @@ export async function POST(request: Request) {
               const dateStr = String(dataAtendimento);
               if (dateStr.includes('/')) {
                 const dateParts = dateStr.split(' ')[0].split('/');
-                if (dateParts[0].length === 4) { // YYYY/MM/DD
+                if (dateParts[0].length === 4) {
                   sessionDate = new Date(`${dateParts.join('-')}T12:00:00`);
-                } else { // DD/MM/YYYY
+                } else {
                   sessionDate = new Date(`${dateParts.reverse().join('-')}T12:00:00`);
                 }
               } else {
@@ -323,46 +550,164 @@ export async function POST(request: Request) {
 
           if (isNaN(sessionDate.getTime())) continue;
 
-          // INSERÇÃO VIA SQL PURO
-          try {
-            await prisma.$executeRawUnsafe(
-              `INSERT INTO "BillingSession" (id, "patientName", phone, date, "serviceType", value, "isPaid", month, year, "importLogId", "createdAt") 
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-              Math.random().toString(36).substring(7), // ID aleatório simples
-              String(name),
-              telefone ? String(telefone) : null,
-              sessionDate,
-              String(servico),
-              valNum,
-              false,
-              month,
-              year,
-              "MANUAL",
-              new Date()
-            );
-            importedCount++;
-          } catch (err) {
-            console.error("Erro ao inserir via SQL:", err);
-          }
+          parsedBillingSessions.push({
+            name,
+            telefone,
+            sessionDate,
+            servico,
+            valNum
+          });
         }
       }
 
-      console.log("Importação concluída. Registros:", importedCount);
-
-      const log = await prisma.importLog.create({
-        data: {
-          fileName: file.name,
-          fileType: "COBRANCAS",
-          month,
-          year,
-          totalRecords: importedCount,
-          summary: JSON.stringify({ total: importedCount }),
-          rawText: text,
-          filePath: fileName
+      if (isAutoSegment) {
+        const groups: { [key: string]: { month: number; year: number; items: any[] } } = {};
+        for (const bs of parsedBillingSessions) {
+          const m = bs.sessionDate.getMonth();
+          const y = bs.sessionDate.getFullYear();
+          const key = `${y}-${m}`;
+          if (!groups[key]) {
+            groups[key] = { month: m, year: y, items: [] };
+          }
+          groups[key].items.push(bs);
         }
-      });
 
-      return NextResponse.json({ success: true, importedCount, message: `${importedCount} atendimentos para cobrança importados!` });
+        let totalImported = 0;
+        const processedMonths: string[] = [];
+        const monthNames = [
+          "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+          "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ];
+
+        const sortedKeys = Object.keys(groups).sort((a, b) => {
+          const [yA, mA] = a.split('-').map(Number);
+          const [yB, mB] = b.split('-').map(Number);
+          return yA !== yB ? yA - yB : mA - mB;
+        });
+
+        for (const key of sortedKeys) {
+          const { month: m, year: y, items: groupItems } = groups[key];
+
+          try {
+            await prisma.billingSession.deleteMany({
+              where: {
+                month: m,
+                year: y
+              }
+            });
+          } catch (e) {
+            console.error("Erro ao limpar cobranças antigas:", e);
+          }
+
+          await prisma.importLog.deleteMany({
+            where: {
+              fileType: "COBRANCAS",
+              month: m,
+              year: y
+            }
+          });
+
+          let groupImportedCount = 0;
+          const billingToCreate: any[] = [];
+          for (const bs of groupItems) {
+            billingToCreate.push({
+              id: Math.random().toString(36).substring(7),
+              patientName: String(bs.name),
+              phone: bs.telefone ? String(bs.telefone) : null,
+              date: bs.sessionDate,
+              serviceType: String(bs.servico),
+              value: bs.valNum,
+              isPaid: false,
+              month: m,
+              year: y,
+              importLogId: "MANUAL",
+              createdAt: new Date()
+            });
+            groupImportedCount++;
+          }
+
+          if (billingToCreate.length > 0) {
+            await prisma.billingSession.createMany({
+              data: billingToCreate
+            });
+          }
+
+          await prisma.importLog.create({
+            data: {
+              fileName: safeFileName,
+              fileType: "COBRANCAS",
+              month: m,
+              year: y,
+              totalRecords: groupImportedCount,
+              summary: JSON.stringify({ total: groupImportedCount }),
+              rawText: text,
+              filePath: fileName
+            }
+          });
+
+          totalImported += groupImportedCount;
+          processedMonths.push(`${monthNames[m]}/${y}`);
+        }
+
+        return NextResponse.json({ 
+          success: true, 
+          importedCount: totalImported, 
+          message: `${totalImported} atendimentos para cobrança importados e distribuídos nos meses: ${processedMonths.join(', ')}!` 
+        });
+      } else {
+        try {
+          await prisma.billingSession.deleteMany({
+            where: {
+              month: month,
+              year: year
+            }
+          });
+        } catch (e) {
+          console.error("Erro ao limpar cobranças antigas:", e);
+        }
+
+        let importedCount = 0;
+        const billingToCreate: any[] = [];
+        for (const bs of parsedBillingSessions) {
+          billingToCreate.push({
+            id: Math.random().toString(36).substring(7),
+            patientName: String(bs.name),
+            phone: bs.telefone ? String(bs.telefone) : null,
+            date: bs.sessionDate,
+            serviceType: String(bs.servico),
+            value: bs.valNum,
+            isPaid: false,
+            month: month,
+            year: year,
+            importLogId: "MANUAL",
+            createdAt: new Date()
+          });
+          importedCount++;
+        }
+
+        if (billingToCreate.length > 0) {
+          await prisma.billingSession.createMany({
+            data: billingToCreate
+          });
+        }
+
+        console.log("Importação concluída. Registros:", importedCount);
+
+        await prisma.importLog.create({
+          data: {
+            fileName: safeFileName,
+            fileType: "COBRANCAS",
+            month,
+            year,
+            totalRecords: importedCount,
+            summary: JSON.stringify({ total: importedCount }),
+            rawText: text,
+            filePath: fileName
+          }
+        });
+
+        return NextResponse.json({ success: true, importedCount, message: `${importedCount} atendimentos para cobrança importados!` });
+      }
     }
     else if (fileTypeSent === "PERFIL_PACIENTE") {
       let importedCount = 0;
@@ -380,6 +725,16 @@ export async function POST(request: Request) {
           const name = findKey(["Cliente", "Paciente", "Nome Cliente", "Nome"]);
           if (!name) continue;
 
+          const rawDateStr = String(findKey(["Data Nascimento", "Nascimento", "Nasc"]) || "");
+          let birthDate: Date | null = null;
+          if (rawDateStr) {
+            const match = rawDateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (match) {
+              const [_, d, m, y] = match;
+              birthDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0);
+            }
+          }
+
           await prisma.patient.upsert({
             where: { name: String(name) },
             update: {
@@ -393,6 +748,7 @@ export async function POST(request: Request) {
               address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
               latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
               longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
+              birth_date: birthDate
             },
             create: {
               registration: String(findKey(["Matrícula", "ID", "Código"]) || ""),
@@ -406,6 +762,7 @@ export async function POST(request: Request) {
               address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
               latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
               longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
+              birth_date: birthDate
             }
           });
           importedCount++;
@@ -414,7 +771,7 @@ export async function POST(request: Request) {
 
       await prisma.importLog.create({
         data: {
-          fileName: file.name,
+          fileName: safeFileName,
           fileType: "PERFIL_PACIENTE",
           month,
           year,

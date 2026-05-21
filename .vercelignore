@@ -1,0 +1,18 @@
+# Exclude local spreadsheets from build payload
+Gestão Conta BB.xlsx
+Financeiro 26.xlsx
+*.xlsx
+*.pdf
+
+# Exclude local uploaded patient documents for absolute privacy!
+uploads/
+public/uploads/
+
+# NextJS & Development cache
+.next/
+node_modules/
+.env
+.env.local
+*.log
+scripts/apply_rls.js
+scripts/consolidate_apis.js

@@ -40,10 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/src/generated/
+/src/generated/prisma
 
-# Data files
-*.xls
+.vercel
+
+# User data and uploads
+/uploads/
 *.xlsx
 *.pdf
-
+*.csv

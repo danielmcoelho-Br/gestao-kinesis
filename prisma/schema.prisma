@@ -4,9 +4,11 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
+
+// ----------------------------------------------------------------------
+// GESTÃO KINESIS MODELS
+// ----------------------------------------------------------------------
 
 model Professional {
   id                String              @id @default(cuid())
@@ -32,6 +34,9 @@ model Session {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
   professional     Professional @relation(fields: [professionalId], references: [id])
+
+  @@index([professionalId])
+  @@index([date])
 }
 
 model Transaction {
@@ -56,6 +61,8 @@ model ServicePercentage {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([professionalId])
 }
 
 model ImportLog {
@@ -72,24 +79,6 @@ model ImportLog {
   createdAt    DateTime @default(now())
 }
 
-model Patient {
-  id           String   @id @default(cuid())
-  registration String?
-  name         String   @unique
-  gender       String?
-  age          Int?
-  phone        String?
-  profession   String?
-  origin       String?
-  provenance   String?
-  address      String?
-  latitude     Float?
-  longitude    Float?
-  ownerId      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
 model BillingSession {
   id          String   @id @default(cuid())
   patientName String
@@ -103,19 +92,159 @@ model BillingSession {
   ownerId     String?
   createdAt   DateTime @default(now())
   phone       String?
+
+  @@index([patientName])
+  @@index([importLogId])
+  @@index([date])
 }
 
-enum UserRole {
-  ADMIN
-  SECRETARIA
+// ----------------------------------------------------------------------
+// UNIFIED MODELS (Patient & User)
+// ----------------------------------------------------------------------
+
+model Patient {
+  id             String       @id @default(cuid())
+  name           String       @unique
+  
+  // Gestão Kinesis fields
+  registration   String?
+  gender         String?
+  age            Int?
+  phone          String?
+  profession     String?
+  origin         String?
+  provenance     String?
+  address        String?
+  latitude       Float?
+  longitude      Float?
+  ownerId        String?
+  updatedAt      DateTime     @updatedAt
+  
+  // KinesisLab fields
+  dominance      String?
+  activity_level String?
+  birth_date     DateTime?    @db.Timestamptz(6)
+  created_by_id  String?
+  change_logs    Json?
+  documents      Json?
+  prescribed_exercises Json?
+  push_subscription Json?
+  accessToken    String?      @unique
+  
+  createdAt      DateTime     @default(now())
+
+  // Relations
+  assessments    Assessment[]
+  diary_logs     DiaryLog[]
+  evolutions     Evolution[]
+  created_by     User?        @relation("PatientCreatedBy", fields: [created_by_id], references: [id])
+  groups         Group[]
+}
+
+model DiaryLog {
+  id          String   @id @default(cuid())
+  patientId   String
+  painLevel   Int
+  mood        String?
+  disposition String?
+  note        String?  @db.Text
+  createdAt   DateTime @default(now())
+  
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      UserRole @default(SECRETARIA)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    String               @id @default(cuid())
+  email                 String               @unique
+  password              String
+  name                  String
+  
+  // Unified Role (Gestao uses Enum, Lab uses String. Using String for broader compatibility)
+  role                  String               @default("SECRETARIA") 
+  
+  // KinesisLab fields
+  crefito               String?
+  avatar_url            String?
+  signature             String?
+  birth_date            DateTime?            @db.Timestamptz(6)
+  is_active             Boolean?             @default(true)
+  force_password_change Boolean?             @default(false)
+  change_logs           Json?
+
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  // Relations
+  created_patients      Patient[]            @relation("PatientCreatedBy")
+  created_assessments   Assessment[]         @relation("AssessmentCreatedBy")
+  templates_created     AssessmentTemplate[] @relation("TemplateCreatedBy")
+  created_evolutions    Evolution[]          @relation("EvolutionCreatedBy")
 }
+
+// ----------------------------------------------------------------------
+// KINESIS LAB MODELS
+// ----------------------------------------------------------------------
+
+model Assessment {
+  id                    String    @id @default(cuid())
+  patient_id            String    
+  assessment_type       String
+  segment               String
+  clinical_data         Json?
+  questionnaire_answers Json?
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  created_by_id         String?
+  change_logs           Json?
+  patient               Patient   @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  created_by            User?     @relation("AssessmentCreatedBy", fields: [created_by_id], references: [id])
+
+  @@index([patient_id])
+  @@map("assessments")
+}
+
+model AssessmentTemplate {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  segment       String
+  icon_url      String?
+  structure     Json
+  is_active     Boolean?  @default(true)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  created_by_id String?
+  change_logs   Json?
+  created_by    User?     @relation("TemplateCreatedBy", fields: [created_by_id], references: [id])
+
+  @@map("assessment_templates")
+}
+
+model Evolution {
+  id          String   @id @default(cuid())
+  patientId   String
+  content     String   @db.Text
+  date        DateTime
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation("EvolutionCreatedBy", fields: [createdById], references: [id])
+
+  @@index([patientId])
+  @@map("evolutions")
+}
+
+// ----------------------------------------------------------------------
+// GROUP MESSAGING MODELS
+// ----------------------------------------------------------------------
+
+model Group {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  patients  Patient[]
+}
+

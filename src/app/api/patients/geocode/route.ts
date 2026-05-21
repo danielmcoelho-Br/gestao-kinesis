@@ -16,7 +16,8 @@ export async function POST(request: Request) {
           { longitude: null }
         ],
         AND: [
-          { address: { not: null, not: "" } }
+          { address: { not: null } },
+          { address: { not: "" } }
         ]
       },
       take: 100 // Aumentado para processar mais de uma vez
@@ -63,7 +64,10 @@ export async function POST(request: Request) {
     const remaining = await prisma.patient.count({ 
       where: { 
         latitude: null, 
-        address: { not: null, not: "" } 
+        AND: [
+          { address: { not: null } },
+          { address: { not: "" } }
+        ]
       } 
     });
 
