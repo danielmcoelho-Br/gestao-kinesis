@@ -318,12 +318,102 @@ export async function POST(request: Request) {
     else if (fileTypeSent === "BANCO_BB" || text.includes("Extrato de Conta Corrente")) {
       let transactions: any[] = [];
       if (isExcel) {
-        transactions = excelData.map(row => ({
-          date: row["Data"] || row["Data Movimento"] || "",
-          description: row["Histórico"] || row["Descrição"] || "",
-          amount: typeof row["Valor"] === "number" ? Math.abs(row["Valor"]) : parseFloat(String(row["Valor"] || "0").replace(/\./g, '').replace(',', '.')),
-          type: (typeof row["Valor"] === "number" ? row["Valor"] > 0 : String(row["Valor"]).includes('+')) ? 'INCOME' : 'EXPENSE'
-        }));
+        transactions = excelData.map(row => {
+          const dateVal = row["Data"] || row["Data Movimento"] || row["Data de Lançamento"] || row["Data Lançamento"] || "";
+          
+          let description = "";
+          const finalidade = row["Finalidade"];
+          const detalhes = row["Detalhes"];
+          const lancamento = row["Lançamento"];
+          const historico = row["Histórico"];
+          const descricao = row["Descrição"];
+          const favorecido = row["Favorecido"];
+
+          if (finalidade) {
+            description = String(finalidade).trim();
+          } else if (detalhes && String(detalhes).trim() !== "") {
+            let cleaned = String(detalhes)
+              .replace(/^\d{2}\/\d{2}\s+\d{2}:\d{2}\s+/, "") 
+              .replace(/^\d+\s+/, "") 
+              .trim();
+            if (cleaned) {
+              description = cleaned;
+            } else {
+              description = String(detalhes).trim();
+            }
+          }
+
+          if (!description) {
+            description = String(historico || descricao || lancamento || "").trim();
+          }
+
+          const descLower = description.toLowerCase();
+          if (!description || descLower.includes("saldo") || descLower === "lançamentos" || descLower.includes("extrato")) {
+            return null;
+          }
+
+          if (favorecido && String(favorecido).trim() !== "" && String(favorecido).toLowerCase().trim() !== "kinesis") {
+            description = `${description} (${String(favorecido).trim()})`;
+          }
+
+          const valCol = row["Valor Transação"] !== undefined ? row["Valor Transação"] : row["Valor"];
+          if (valCol === undefined || valCol === null) return null;
+
+          let amountVal = 0;
+          let isNegative = false;
+
+          if (typeof valCol === "number") {
+            amountVal = Math.abs(valCol);
+            isNegative = valCol < 0;
+          } else {
+            const strVal = String(valCol).trim();
+            const isCredit = strVal.endsWith("C") || strVal.endsWith("c");
+            const isDebit = strVal.endsWith("D") || strVal.endsWith("d");
+            
+            let cleaned = strVal.replace(/[^\d\.,-]/g, "");
+            if (cleaned.includes(",") && cleaned.includes(".")) {
+              cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+            } else if (cleaned.includes(",")) {
+              cleaned = cleaned.replace(",", ".");
+            }
+            
+            let num = parseFloat(cleaned);
+            if (isNaN(num)) num = 0;
+            
+            amountVal = Math.abs(num);
+            isNegative = num < 0 || isDebit;
+            if (isCredit) isNegative = false;
+          }
+
+          if (amountVal === 0) return null;
+
+          let typeVal: "INCOME" | "EXPENSE" = "INCOME";
+          const tipoLancamento = row["Tipo Lançamento"];
+          if (tipoLancamento) {
+            const tlClean = String(tipoLancamento).toLowerCase().trim();
+            if (tlClean === "entrada" || tlClean === "crédito" || tlClean === "c") {
+              typeVal = "INCOME";
+            } else if (tlClean === "saída" || tlClean === "débito" || tlClean === "d") {
+              typeVal = "EXPENSE";
+            } else {
+              typeVal = isNegative ? "EXPENSE" : "INCOME";
+            }
+          } else {
+            typeVal = isNegative ? "EXPENSE" : "INCOME";
+          }
+
+          let dateObj = dateVal;
+          if (!dateObj) {
+            dateObj = new Date(year, month, 15);
+          }
+
+          return {
+            date: dateObj,
+            description,
+            amount: amountVal,
+            type: typeVal
+          };
+        }).filter(Boolean);
       } else {
         transactions = parseBB(text);
       }
