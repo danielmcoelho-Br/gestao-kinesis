@@ -10,7 +10,11 @@ export interface RawTransaction {
 
 function normalizeText(txt: any): string {
   if (!txt) return '';
-  return String(txt).toUpperCase().trim();
+  return String(txt)
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .trim();
 }
 
 export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTransaction[] {
@@ -77,6 +81,14 @@ export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTrans
     const rawDoc = docCol !== -1 ? row[docCol] : '';
 
     if (!rawDate || (!rawDesc && !rawDetalhes) || rawValor === '') return;
+
+    const descUpper = String(rawDesc || '').toUpperCase();
+    const detailsUpper = String(rawDetalhes || '').toUpperCase();
+
+    if (descUpper.includes('SALDO') || descUpper.includes('TOTAL') || descUpper.includes('RESUMO') ||
+        detailsUpper.includes('SALDO') || detailsUpper.includes('TOTAL') || detailsUpper.includes('RESUMO')) {
+      return; // Skip balances/totals rows immediately
+    }
 
     // Parse Value safely
     let amount = 0;
