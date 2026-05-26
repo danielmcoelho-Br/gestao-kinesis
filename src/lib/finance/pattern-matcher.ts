@@ -28,7 +28,8 @@ export function buildHistoricalPatterns(): PatternMap {
     return {};
   }
 
-  const workbook = XLSX.readFile(filePath);
+  const fileBuffer = fs.readFileSync(filePath);
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
   const patternMap: PatternMap = {};
 
   // Processes sheets in reverse order (oldest to newest) so newer ones overwrite/update frequencies naturally

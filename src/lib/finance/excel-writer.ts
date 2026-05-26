@@ -20,7 +20,8 @@ export async function writeToGestaoBB(
     return false;
   }
 
-  const workbook = XLSX.readFile(filePath);
+  const fileBuffer = fs.readFileSync(filePath);
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
   // 1. Fetch Previous Month's Balance for Rollover
   let lastMonthBalance = 0;
@@ -124,7 +125,8 @@ export async function writeToGestaoBB(
   workbook.SheetNames.unshift(monthYear);
   workbook.Sheets[monthYear] = ws;
 
-  XLSX.writeFile(workbook, filePath);
+  const outBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  fs.writeFileSync(filePath, outBuffer);
   return true;
 }
 
@@ -139,7 +141,8 @@ export async function writeToFinanceiro26(
   }
 
   // Load the workbook
-  const workbook = XLSX.readFile(filePath);
+  const fileBuffer = fs.readFileSync(filePath);
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
   // Capitalize month name to match sheet names e.g. "Maio"
   const targetSheetName = monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase();
@@ -243,6 +246,7 @@ export async function writeToFinanceiro26(
   const finalWs = XLSX.utils.aoa_to_sheet(rows);
   workbook.Sheets[targetSheetName] = finalWs;
 
-  XLSX.writeFile(workbook, filePath);
+  const outBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  fs.writeFileSync(filePath, outBuffer);
   return true;
 }
