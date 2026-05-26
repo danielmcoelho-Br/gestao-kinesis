@@ -47,14 +47,23 @@ export async function writeToGestaoBB(
   const sheetData: any[][] = [];
 
   // Header Row
-  sheetData[0] = ["Valor Transação", "Favorecido", "Finalidade", "", "Saldo Mês Anterior", lastMonthBalance];
+  sheetData[0] = ["Data", "Nome do Depositante", "Valor Transação", "Responsável Financeiro", "Saldo Mês Anterior", lastMonthBalance];
 
   // Fill transactions
   transactions.forEach((t, idx) => {
+    let formattedDate = "";
+    if (t.date) {
+      if (t.date.includes('-')) {
+        formattedDate = t.date.split('-').reverse().join('/');
+      } else {
+        formattedDate = t.date;
+      }
+    }
     sheetData[idx + 1] = [
+      formattedDate,
+      t.description || '',
       t.amount,
-      t.favorecido || '',
-      t.description || ''
+      t.favorecido || ''
     ];
   });
 
