@@ -57,6 +57,41 @@ export async function POST(req: NextRequest) {
       return name.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     };
 
+    const cleanDescriptionPrefixes = (desc: string) => {
+      let cleaned = desc.replace(/-/g, ' ');
+      const prefixes = ['PIX RECEBIDO', 'PIX', 'TED', 'DOC', 'TRANSF', 'PAGAMENTO', 'DEPOSITO', 'RECEBIMENTO', 'RECEBIDO', 'CUSTEIO'];
+      prefixes.forEach(p => {
+        cleaned = cleaned.replace(new RegExp(`\\b${p}\\b`, 'g'), ' ');
+      });
+      return cleaned.replace(/[^A-Z\s]/g, '').replace(/\s+/g, ' ').trim();
+    };
+
+    const fuzzyMatchName = (bankDesc: string, pName: string) => {
+      if (pName.includes(bankDesc) || bankDesc.includes(pName)) return true;
+      
+      const bParts = bankDesc.split(' ');
+      const pParts = pName.split(' ');
+      
+      if (bParts.length < 2 || pParts.length < 2) return false;
+      if (bParts[0] !== pParts[0]) return false;
+      
+      let pIdx = 1;
+      for (let bIdx = 1; bIdx < bParts.length; bIdx++) {
+        const bPart = bParts[bIdx];
+        let matched = false;
+        while (pIdx < pParts.length) {
+          if (pParts[pIdx].startsWith(bPart)) {
+            matched = true;
+            pIdx++;
+            break;
+          }
+          pIdx++;
+        }
+        if (!matched) return false;
+      }
+      return true;
+    };
+
     const patientMap = new Map<string, { professionals: Set<string>, hasPilates: boolean }>();
     sessions.forEach(s => {
       const normName = normalizeName(s.patientName);
@@ -95,16 +130,18 @@ export async function POST(req: NextRequest) {
       let selectedFavorecido = suggestedFav || '';
       
       const normDesc = normalizeName(tx.description);
+      const cleanedDesc = cleanDescriptionPrefixes(normDesc);
 
       if (tx.amount >= 0) {
         // Income Logic
         let matchedPatientEntry: { professionals: Set<string>, hasPilates: boolean } | null = null;
         
         for (const pName of sortedPatientNames) {
-          // Remove short first names to avoid false positive matches in PIX texts
-          if (pName.length > 4 && normDesc.includes(pName)) {
-            matchedPatientEntry = patientMap.get(pName)!;
-            break;
+          if (cleanedDesc.length >= 5) {
+            if (fuzzyMatchName(cleanedDesc, pName)) {
+              matchedPatientEntry = patientMap.get(pName)!;
+              break;
+            }
           }
         }
 
