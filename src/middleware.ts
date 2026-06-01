@@ -39,10 +39,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // - Authentication API Endpoint and Login View
+  // - Authentication API Endpoint, Login View, and Chrome Extension Sync Endpoint
   if (
     pathname === "/login" ||
-    pathname.startsWith("/api/auth")
+    pathname.startsWith("/api/auth") ||
+    pathname === "/api/financeiro/seufisio-sync"
   ) {
     return NextResponse.next();
   }
@@ -74,9 +75,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Enforce role-based access for SECRETARIA
+  // Enforce role-based access for SECRETARIA and FISIOTERAPEUTA
   const role = String(sessionPayload.role || "").toUpperCase();
-  if (role === "SECRETARIA") {
+  if (role === "SECRETARIA" || role === "FISIOTERAPEUTA") {
     // Restricted UI routes in Gestão
     const isRestrictedPath = 
       pathname === "/gestao" || pathname.startsWith("/gestao/") ||
@@ -85,14 +86,21 @@ export async function middleware(request: NextRequest) {
       pathname === "/financeiro" || pathname.startsWith("/financeiro/") ||
       pathname === "/admin" || pathname.startsWith("/admin/");
 
-    if (isRestrictedPath) {
+    // Fisioterapeuta is also restricted from cobrancas and upload
+    const isFisioRestricted = role === "FISIOTERAPEUTA" && 
+      (pathname === "/cobrancas" || pathname.startsWith("/cobrancas/") ||
+       pathname === "/upload" || pathname.startsWith("/upload/"));
+
+    if (isRestrictedPath || isFisioRestricted) {
       if (isApiRoute) {
         return NextResponse.json(
           { error: "Acesso proibido para esta função." },
           { status: 403 }
         );
       }
-      return NextResponse.redirect(new URL("/cobrancas", request.url));
+      // Redirect secretária to cobrancas, and fisioterapeuta to dashboard
+      const redirectTarget = role === "SECRETARIA" ? "/cobrancas" : "/dashboard";
+      return NextResponse.redirect(new URL(redirectTarget, request.url));
     }
 
     // Restricted API routes
@@ -101,7 +109,11 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith("/api/patients/stats") ||
       pathname.startsWith("/api/admin/") ||
       pathname.startsWith("/api/profissionais") ||
-      pathname.startsWith("/api/financeiro");
+      pathname.startsWith("/api/financeiro") ||
+      (role === "FISIOTERAPEUTA" && (
+        pathname.startsWith("/api/cobrancas") ||
+        pathname.startsWith("/api/upload")
+      ));
 
     if (isRestrictedApi && isApiRoute) {
       return NextResponse.json(

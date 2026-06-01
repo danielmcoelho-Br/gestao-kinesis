@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-secondary: #94a3b8;
+    }
+    body {
+      width: 320px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 16px;
+    }
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      margin: 0 0 4px;
+      display: flex;
+      alignItems: center;
+      gap: 6px;
+      color: var(--primary);
+    }
+    p {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin: 0 0 16px;
+      line-height: 1.4;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      color: var(--text-secondary);
+    }
+    input, select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+    }
+    .btn {
+      width: 100%;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--primary);
+      margin-bottom: 12px;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .log-box {
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 0.7rem;
+      color: #38bdf8;
+      max-height: 80px;
+      overflow-y: auto;
+      margin-top: 12px;
+      white-space: pre-wrap;
+    }
+    .collapsible {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+    }
+  </style>
+</head>
+<body>
+  <h2>📊 Kinesis SeuFisio Sync</h2>
+  <p>Sincronize a agenda e presenças do SeuFisio diretamente com o Kinesis App.</p>
+
+  <div class="status-badge" id="statusBadge">Pronto para escanear</div>
+
+  <div style="display: flex; gap: 8px;" class="form-group">
+    <div style="flex: 2;">
+      <label>Mês de Competência</label>
+      <select id="month">
+        <option value="0">Janeiro</option>
+        <option value="1">Fevereiro</option>
+        <option value="2">Março</option>
+        <option value="3">Abril</option>
+        <option value="4">Maio</option>
+        <option value="5">Junho</option>
+        <option value="6">Julho</option>
+        <option value="7">Agosto</option>
+        <option value="8">Setembro</option>
+        <option value="9">Outubro</option>
+        <option value="10">Novembro</option>
+        <option value="11">Dezembro</option>
+      </select>
+    </div>
+    <div style="flex: 1;">
+      <label>Ano</label>
+      <select id="year">
+        <option value="2026">2026</option>
+        <option value="2025">2025</option>
+        <option value="2024">2024</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="btn" id="syncBtn">
+    ⚡ Sincronizar Página Ativa
+  </button>
+
+  <div class="log-box" id="logBox">Aguardando ação...</div>
+
+  <!-- Fallback Mode -->
+  <div class="collapsible" id="toggleFallback">
+    <span>Modo Fallback (Copiar/Colar)</span>
+    <span>▼</span>
+  </div>
+  <div id="fallbackArea" style="display: none; margin-top: 8px;">
+    <label>Cole o texto bruto do SeuFisio</label>
+    <textarea id="rawText" placeholder="Cole as linhas copiadas da página..." rows="4"></textarea>
+    <button class="btn" id="parseRawBtn" style="background: #475569;">
+      Processar Texto Bruto
+    </button>
+  </div>
+
+  <!-- Advanced Config -->
+  <div class="collapsible" id="toggleConfig">
+    <span>Configurações do Servidor</span>
+    <span>▼</span>
+  </div>
+  <div id="configArea" style="display: none; margin-top: 8px;">
+    <div class="form-group">
+      <label>URL do Kinesis App</label>
+      <input type="text" id="serverUrl" value="http://localhost:3000">
+    </div>
+    <div class="form-group">
+      <label>Token de Sincronização</label>
+      <input type="password" id="syncToken" value="kinesis-sync-secret-token-2026-v1">
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

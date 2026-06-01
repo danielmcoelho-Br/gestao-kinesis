@@ -71,7 +71,9 @@ export async function POST(request: Request) {
     } else {
       let pdfData;
       try {
-        pdfData = await pdfParse(buffer);
+        const { PDFParse } = require("pdf-parse");
+        const parser = new PDFParse(new Uint8Array(buffer));
+        pdfData = await parser.getText();
         text = pdfData.text;
       } catch (pdfError: any) {
         console.error("Erro no pdf-parse:", pdfError);
@@ -348,7 +350,8 @@ export async function POST(request: Request) {
           }
 
           const descLower = description.toLowerCase();
-          if (!description || descLower.includes("saldo") || descLower === "lançamentos" || descLower.includes("extrato")) {
+          const descNorm = descLower.replace(/\s+/g, '');
+          if (!description || descNorm.includes("saldo") || descNorm.includes("total") || descNorm.includes("resumo") || descLower === "lançamentos" || descLower.includes("extrato")) {
             return null;
           }
 
@@ -963,30 +966,86 @@ function parseSeufisio(text: string, knownProfessionals: any[]) {
 function parseBB(text: string) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   const transactions: any[] = [];
-  let currentDate = null;
-  let currentDesc: string[] = [];
+  
+  let currentTx: any = null;
+  let state = "LOOKING_FOR_TX";
+  let descriptionLines: string[] = [];
+
+  function cleanDescription(rawDesc: string) {
+    if (!rawDesc) return "";
+    let cleaned = String(rawDesc)
+      .replace(/^\d{2}\/\d{2}\s+\d{2}:\d{2}\s+/, "") 
+      .replace(/^\d+\s+/, "") 
+      .trim();
+    return cleaned;
+  }
+
+  function commitCurrentTx() {
+    if (!currentTx) return;
+    
+    let fullDesc = descriptionLines.join(" ").trim();
+    fullDesc = cleanDescription(fullDesc);
+    
+    if (!fullDesc) {
+      fullDesc = "Transação sem descrição";
+    }
+
+    const normDesc = fullDesc.toUpperCase().replace(/\s+/g, "");
+
+    if (normDesc.includes("SALDO") || normDesc.includes("TOTAL") || normDesc.includes("RESUMO")) {
+      // Skip balance/totals rows completely
+    } else {
+      currentTx.description = fullDesc;
+      transactions.push(currentTx);
+    }
+    currentTx = null;
+    descriptionLines = [];
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const dateMatch = line.match(/^(\d{2}\/\d{2}\/\d{4})$/);
-    if (dateMatch) {
-      currentDate = dateMatch[1];
-      currentDesc = [];
+    const valMatch = line.match(/^([\d\.,]+)\s+\(([\+-])\)$/);
+    
+    if (valMatch) {
+      commitCurrentTx();
+
+      const rawAmountStr = valMatch[1];
+      const sign = valMatch[2];
+      const amount = parseFloat(rawAmountStr.replace(/\./g, '').replace(',', '.'));
+      const type: 'INCOME' | 'EXPENSE' = sign === '+' ? 'INCOME' : 'EXPENSE';
+
+      currentTx = {
+        amount: amount,
+        type: type,
+        date: null,
+        description: ""
+      };
+      state = "WAITING_FOR_DATE";
       continue;
     }
-    const valMatch = line.match(/([\d\.,]+)\s+\(([\+-])\)/);
-    if (valMatch && currentDate && currentDate !== "00/00/0000") {
-      const amount = parseFloat(valMatch[1].replace(/\./g, '').replace(',', '.'));
-      const type = valMatch[2] === '+' ? 'INCOME' : 'EXPENSE';
-      let description = currentDesc.join(' ');
-      if (!description.includes("Saldo")) {
-        transactions.push({ date: currentDate, description: description || "Transação sem descrição", amount, type });
+
+    if (state === "WAITING_FOR_DATE") {
+      const dateMatch = line.match(/^(\d{2}\/\d{2}\/\d{4})/);
+      if (dateMatch) {
+        currentTx.date = dateMatch[1];
+        const restOfLine = line.substring(dateMatch[1].length).trim();
+        if (restOfLine && !/^\d+\s+\d+$/.test(restOfLine) && !/^\d+$/.test(restOfLine)) {
+          descriptionLines.push(restOfLine);
+        }
+        state = "COLLECTING_DESC";
       }
-      currentDesc = [];
-    } else {
-      if (!/^\d+$/.test(line) && line !== "Lançamentos" && !line.includes("Extrato")) {
-        currentDesc.push(line);
+      continue;
+    }
+
+    if (state === "COLLECTING_DESC") {
+      if (line.includes("Extrato de Conta Corrente") || line.includes("Cliente CLE M") || line.includes("Agência:") || line.includes("Lançamentos") || line.includes("Dia Lote Documento") || line.startsWith("--") || line.includes("of")) {
+        continue;
       }
+      descriptionLines.push(line);
     }
   }
+
+  commitCurrentTx();
+
   return transactions;
 }

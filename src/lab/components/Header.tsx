@@ -93,13 +93,6 @@ export default function Header({ showBackButton = false }: HeaderProps) {
               {['Administrador', 'ADMINISTRADOR', 'ADMIN', 'admin', 'administrator'].includes(user?.role) && (
                 <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                   <button 
-                    onClick={() => router.push('/dashboard/admin/users')}
-                    className="no-print nav-btn"
-                  >
-                    <Shield size={18} />
-                    <span className="hidden-tablet">Usuários</span>
-                  </button>
-                  <button 
                     onClick={() => router.push('/dashboard/admin/assessments')}
                     className="no-print nav-btn"
                   >

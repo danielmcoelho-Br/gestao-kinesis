@@ -99,7 +99,7 @@ export function MetricChart({ history, dataKey, type, isCurrency, isDecimal, isA
             <YAxis fontSize={11} tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(v) => isCurrency ? `R$${Math.round(v/1000)}k` : v} />
             <Tooltip 
               formatter={(value: any, name: any) => [
-                value ? (isCurrency ? `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : isDecimal ? value.toFixed(1) : value) : 'N/A',
+                value ? (isCurrency ? `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : isDecimal ? value.toFixed(1) : value) : 'N/A',
                 `Ano ${(name as string).replace('year_', '')}`
               ]}
               labelFormatter={(m: any) => `Mês: ${monthsNames[m]}`}

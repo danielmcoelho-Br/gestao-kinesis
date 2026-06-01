@@ -13,7 +13,7 @@ export const createPatientSchema = z.object({
 });
 
 export const updatePatientSchema = z.object({
-  id: z.string().uuid("ID de paciente inválido."),
+  id: z.string().min(1, "ID de paciente inválido."),
   name: z.string().min(3).optional(),
   age: z.coerce.number().min(0).max(130).optional(),
   weight: z.coerce.number().min(0).max(300).optional().nullable(),
@@ -26,7 +26,7 @@ export const updatePatientSchema = z.object({
 });
 
 export const addPatientDocumentSchema = z.object({
-  patient_id: z.string().uuid("ID de paciente inválido."),
+  patient_id: z.string().min(1, "ID de paciente inválido."),
   description: z.string().min(3, "A descrição do documento é muito curta."),
   file_url: z.string().url("URL de arquivo inválida."),
   file_type: z.string(),

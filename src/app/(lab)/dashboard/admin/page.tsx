@@ -19,15 +19,6 @@ import Header from "@/lab/components/Header";
 
 const adminCards = [
     {
-        id: "users",
-        title: "Gestão de Usuários",
-        description: "Adicione, edite e remova profissionais cadastrados na plataforma.",
-        icon: Users,
-        href: "/dashboard/admin/users",
-        color: "#1E40AF",
-        bg: "#DBEAFE"
-    },
-    {
         id: "assessments",
         title: "Avaliações & Templates",
         description: "Gerencie os modelos de avaliação disponíveis no sistema.",

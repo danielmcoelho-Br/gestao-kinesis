@@ -28,7 +28,7 @@ export function MetricCard({ title, value, icon, color, isCurrency, children }: 
         <div>
           <div style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '8px', letterSpacing: '0.5px' }}>{title}</div>
           <div style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-            {isCurrency ? `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : value}
+            {isCurrency ? `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : value}
           </div>
         </div>
         <div style={{ padding: '10px', borderRadius: '12px', background: `${color}15`, color: color }}>
@@ -74,7 +74,7 @@ export function ComparisonItem({ label, current, prev, isQty }: ComparisonItemPr
       {label && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>{label}</div>}
       <div style={{ display: 'flex', justifyContent: label ? 'space-between' : 'center', alignItems: 'center', gap: '8px', flexDirection: label ? 'row' : 'column' }}>
         <div style={{ fontWeight: 'bold', fontSize: label ? '1rem' : '0.95rem' }}>
-          {isPositive ? '+' : ''}{isQty ? diff : `R$ ${diff.toLocaleString('pt-BR')}`}
+          {isPositive ? '+' : ''}{isQty ? diff : `R$ ${diff.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: isPositive ? 'var(--success)' : 'var(--danger)', fontWeight: 'bold', fontSize: '0.75rem' }}>
           {isPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}

@@ -95,10 +95,10 @@ export function getTherapeuticSuggestions(questionnaireId: string, answers: Reco
   // -- LOGIC FOR HAND (afMao) --
   if (questionnaireId === 'afMao') {
     // 1. ADM
-    if (safeParse(answers['adm_punho_ext_esq']) < 60 || safeParse(answers['adm_punho_ext_dir']) < 60) {
+    if (safeParse(answers['extensao_pun_at_esq']) < 60 || safeParse(answers['extensao_pun_at_dir']) < 60) {
       suggestions.push({ id: 'mao_adm_ext', title: 'Ganho de Extensão de Punho', description: 'Exercícios de mobilidade e alongamento de flexores de punho.', category: 'Mobilidade' });
     }
-    if (safeParse(answers['adm_punho_flex_esq']) < 60 || safeParse(answers['adm_punho_flex_dir']) < 60) {
+    if (safeParse(answers['flexao_pun_at_esq']) < 60 || safeParse(answers['flexao_pun_at_dir']) < 60) {
       suggestions.push({ id: 'mao_adm_flex', title: 'Ganho de Flexão de Punho', description: 'Exercícios de mobilidade e alongamento de extensores de punho.', category: 'Mobilidade' });
     }
 
@@ -112,11 +112,11 @@ export function getTherapeuticSuggestions(questionnaireId: string, answers: Reco
     }
 
     // 3. Special Tests / Nerve
-    if (answers['test_phalen_esq'] || answers['test_phalen_dir'] || answers['test_tinel_punho_esq'] || answers['test_tinel_punho_dir']) {
+    if (answers['test_phalen_esq'] || answers['test_phalen_dir'] || answers['test_tinelm_esq'] || answers['test_tinelm_dir']) {
       suggestions.push({ id: 'mao_neuro_mediano', title: 'Deslizamento de Nervo Mediano', description: 'Técnicas de mobilização neural para túnel do carpo.', category: 'Manual' });
       suggestions.push({ id: 'mao_ed_posicao', title: 'Educação: Posicionamento Neutro', description: 'Orientação sobre ergonomia e repouso articular.', category: 'Educação' });
     }
-    if (answers['test_finkelstein_esq'] || answers['test_finkelstein_dir']) {
+    if (answers['test_fink_esq'] || answers['test_fink_dir']) {
       suggestions.push({ id: 'mao_t_glide', title: 'Deslizamento Tendíneo (De Quervain)', description: 'Exercícios suaves para o 1º compartimento extensor.', category: 'Mobilidade' });
     }
   }
@@ -732,13 +732,13 @@ export function generateDiagnosticText(questionnaireId: string, answers: Record<
     });
 
     // ADM Punho
-    if (safeParse(answers['adm_punho_ext_esq']) < 60 || safeParse(answers['adm_punho_ext_dir']) < 60) findings.push('Restrição de AM em Extensão de Punho.');
-    if (safeParse(answers['adm_punho_flex_esq']) < 60 || safeParse(answers['adm_punho_flex_dir']) < 60) findings.push('Restrição de AM em Flexão de Punho.');
+    if (safeParse(answers['extensao_pun_at_esq']) < 60 || safeParse(answers['extensao_pun_at_dir']) < 60) findings.push('Restrição de AM em Extensão de Punho.');
+    if (safeParse(answers['flexao_pun_at_esq']) < 60 || safeParse(answers['flexao_pun_at_dir']) < 60) findings.push('Restrição de AM em Flexão de Punho.');
 
     // Testes Especiais
     if (answers['test_phalen_esq'] || answers['test_phalen_dir']) findings.push('Teste de Phalen Positivo (Sinais de Síndrome do Túnel do Carpo).');
-    if (answers['test_tinel_punho_esq'] || answers['test_tinel_punho_dir']) findings.push('Sinal de Tinel Positivo no Punho.');
-    if (answers['test_finkelstein_esq'] || answers['test_finkelstein_dir']) findings.push('Teste de Finkelstein Positivo (Tendinite de De Quervain).');
+    if (answers['test_tinelm_esq'] || answers['test_tinelm_dir']) findings.push('Sinal de Tinel Positivo no Punho.');
+    if (answers['test_fink_esq'] || answers['test_fink_dir']) findings.push('Teste de Finkelstein Positivo (Tendinite de De Quervain).');
     if (answers['test_roos_esq'] || answers['test_roos_dir']) findings.push('Teste de Roos Positivo (Sugestivo de Síndrome do Desfiladeiro Torácico).');
   }
 

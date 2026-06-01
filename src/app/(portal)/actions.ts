@@ -51,3 +51,14 @@ export async function saveDiaryEntry(token: string, data: {
         return { success: false, error: "Erro no servidor." };
     }
 }
+
+export async function saveReengagementFeedbackAction(token: string, reason: string, comment?: string) {
+    try {
+        const { ReengagementService } = await import("@/gestao/services/reengagementService");
+        return await ReengagementService.saveReengagementFeedback(token, { reason, comment });
+    } catch (error) {
+        console.error("Error saving reengagement feedback:", error);
+        return { success: false, error: "Erro no servidor." };
+    }
+}
+

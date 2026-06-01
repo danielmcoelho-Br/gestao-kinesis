@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Kinesis SeuFisio Sync",
+  "version": "1.0.0",
+  "description": "Sincronizador em 1-clique para importar dados do SeuFisio para o Kinesis App.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.seufisio.com.br/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.seufisio.com.br/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  }
+}

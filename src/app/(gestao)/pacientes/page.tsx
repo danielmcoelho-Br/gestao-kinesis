@@ -11,7 +11,12 @@ import {
   Search,
   Filter,
   Download,
-  Activity
+  Activity,
+  Clock,
+  MessageSquare,
+  Send,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
 import { MetricCard } from "@/gestao/components/DashboardComponents";
 import { 
@@ -41,7 +46,53 @@ export default function PacientesPage() {
   const [loading, setLoading] = useState(true);
   const [geocoding, setGeocoding] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeView, setActiveView] = useState<'stats' | 'list' | 'map'>('stats');
+  const [activeView, setActiveView] = useState<'stats' | 'list' | 'map' | 'inactive'>('stats');
+  const [inactiveData, setInactiveData] = useState<{ inactivePatients: any[], feedbacks: any[] } | null>(null);
+  const [loadingInactive, setLoadingInactive] = useState(false);
+  const [triggeringId, setTriggeringId] = useState<string | null>(null);
+
+  const fetchInactivePatients = async () => {
+    setLoadingInactive(true);
+    try {
+      const res = await fetch('/api/patients/inactive');
+      if (res.ok) {
+        const json = await res.json();
+        setInactiveData(json);
+      }
+    } catch (e) {
+      console.error("Erro ao buscar inativos", e);
+    } finally {
+      setLoadingInactive(false);
+    }
+  };
+
+  const handleTriggerReengagement = async (patientId: string) => {
+    setTriggeringId(patientId);
+    try {
+      const res = await fetch('/api/patients/inactive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId })
+      });
+      const result = await res.json();
+      if (result.success) {
+        alert("Mensagem de reengajamento simulada enviada com sucesso!");
+        fetchInactivePatients(); // Refresh list to update log timestamp
+      } else {
+        alert("Erro: " + result.error);
+      }
+    } catch (e) {
+      alert("Erro ao disparar mensagem");
+    } finally {
+      setTriggeringId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (activeView === 'inactive') {
+      fetchInactivePatients();
+    }
+  }, [activeView]);
 
   const fetchStats = async () => {
     if (!initialized) return;
@@ -169,6 +220,12 @@ export default function PacientesPage() {
               style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: activeView === 'map' ? 'white' : 'transparent', color: activeView === 'map' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: '700', cursor: 'pointer', boxShadow: activeView === 'map' ? '0 4px 12px rgba(0,0,0,0.05)' : 'none' }}
             >
               Mapa Geográfico
+            </button>
+            <button 
+              onClick={() => setActiveView('inactive')} 
+              style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: activeView === 'inactive' ? 'white' : 'transparent', color: activeView === 'inactive' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: '700', cursor: 'pointer', boxShadow: activeView === 'inactive' ? '0 4px 12px rgba(0,0,0,0.05)' : 'none' }}
+            >
+              Inativos & Reengajamento
             </button>
           </div>
         </div>
@@ -467,6 +524,129 @@ export default function PacientesPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeView === 'inactive' && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            {loadingInactive ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40vh', flexDirection: 'column', gap: '20px' }}>
+                <div className="loader"></div>
+                <p style={{ color: 'var(--text-secondary)' }}>Carregando dados de reengajamento...</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '32px' }}>
+                {/* Column 1: Inactive Patients List */}
+                <div className="card" style={{ padding: '24px' }}>
+                  <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.25rem', fontWeight: '800' }}>
+                    <Clock size={20} color="var(--primary)" /> Pacientes Inativos (+14 dias sem agenda)
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '550px', overflowY: 'auto', paddingRight: '8px' }}>
+                    {inactiveData?.inactivePatients && inactiveData.inactivePatients.length > 0 ? (
+                      inactiveData.inactivePatients.map((p: any) => (
+                        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'rgba(0,0,0,0.015)', border: '1px solid var(--border-color)', borderRadius: '16px' }}>
+                          <div>
+                            <h4 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '1rem' }}>{p.name}</h4>
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>Última sessão: <strong>{new Date(p.lastSessionDate).toLocaleDateString('pt-BR')}</strong></span>
+                              <span>•</span>
+                              <span style={{ color: p.daysInactive > 30 ? 'var(--danger)' : '#f59e0b', fontWeight: '700' }}>{p.daysInactive} dias inativo</span>
+                            </p>
+                            {p.lastContactedAt && (
+                              <p style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: '700', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <CheckCircle2 size={12} /> Último contato: {new Date(p.lastContactedAt).toLocaleDateString('pt-BR')} às {new Date(p.lastContactedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            )}
+                          </div>
+                          
+                          <button
+                            onClick={() => handleTriggerReengagement(p.id)}
+                            disabled={triggeringId === p.id}
+                            className="btn"
+                            style={{
+                              padding: '10px 16px',
+                              background: '#25D366',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '10px',
+                              fontWeight: '800',
+                              fontSize: '0.8rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 4px 10px rgba(37, 211, 102, 0.2)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {triggeringId === p.id ? (
+                              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            ) : (
+                              <MessageSquare size={14} />
+                            )}
+                            Disparar
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(0,0,0,0.01)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Nenhum paciente inativo no momento. Todos estão assíduos!</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Column 2: Feedbacks List */}
+                <div className="card" style={{ padding: '24px' }}>
+                  <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.25rem', fontWeight: '800' }}>
+                    <MessageSquare size={20} color="#6366f1" /> Feedbacks e Motivos de Ausência
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '550px', overflowY: 'auto', paddingRight: '8px' }}>
+                    {inactiveData?.feedbacks && inactiveData.feedbacks.length > 0 ? (
+                      inactiveData.feedbacks.map((f: any, idx: number) => (
+                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px', background: 'rgba(99, 102, 241, 0.02)', border: '1px solid rgba(99, 102, 241, 0.1)', borderRadius: '16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <h4 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '0.95rem' }}>{f.patientName}</h4>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                Recebido em: {new Date(f.date).toLocaleDateString('pt-BR')} às {new Date(f.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: '800',
+                              padding: '4px 10px',
+                              borderRadius: '20px',
+                              background: f.reason.includes('Melhor') ? '#dcfce7' : f.reason.includes('Financeiro') ? '#dbeafe' : '#fef3c7',
+                              color: f.reason.includes('Melhor') ? '#15803d' : f.reason.includes('Financeiro') ? '#1e40af' : '#b45309'
+                            }}>
+                              {f.reason}
+                            </span>
+                          </div>
+                          {f.comment && (
+                            <div style={{
+                              background: 'white',
+                              padding: '12px',
+                              borderRadius: '10px',
+                              border: '1px solid var(--border-color)',
+                              fontSize: '0.85rem',
+                              color: 'var(--text-secondary)',
+                              lineHeight: '1.5',
+                              fontStyle: 'italic'
+                            }}>
+                              &ldquo;{f.comment}&rdquo;
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(0,0,0,0.01)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Nenhum feedback de paciente inativo recebido ainda.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

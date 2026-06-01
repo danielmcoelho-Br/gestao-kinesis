@@ -17,7 +17,13 @@ function normalizeText(txt: any): string {
     .trim();
 }
 
-export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTransaction[] {
+export async function parseBBStatement(fileBuffer: Buffer, filename: string): Promise<{ transactions: RawTransaction[], saldoAnterior: number }> {
+  const isPdf = filename.toLowerCase().endsWith('.pdf') || (fileBuffer.length > 4 && fileBuffer.readUInt32BE(0) === 0x25504446);
+  
+  if (isPdf) {
+    return parseBBStatementPdf(fileBuffer);
+  }
+
   let workbook: XLSX.WorkBook;
   
   try {
@@ -34,6 +40,7 @@ export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTrans
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
   
   const transactions: RawTransaction[] = [];
+  let saldoAnterior = 0;
   
   let headerIdx = -1;
   let dataCol = -1;
@@ -48,7 +55,7 @@ export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTrans
     const row = rows[r];
     for (let c = 0; c < row.length; c++) {
       const val = normalizeText(row[c]);
-      if (val.includes('DATA')) dataCol = c;
+      if (val.includes('DATA') || val === 'DIA') dataCol = c;
       if (val.includes('HISTORICO') || val.includes('DESCRICAO') || val.includes('LANCAMENTO') || val.includes('FINALIDADE')) descCol = c;
       if (val.includes('DETALHE')) detalhesCol = c;
       if (val.includes('VALOR')) valorCol = c;
@@ -85,8 +92,41 @@ export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTrans
     const descUpper = String(rawDesc || '').toUpperCase();
     const detailsUpper = String(rawDetalhes || '').toUpperCase();
 
-    if (descUpper.includes('SALDO') || descUpper.includes('TOTAL') || descUpper.includes('RESUMO') ||
-        detailsUpper.includes('SALDO') || detailsUpper.includes('TOTAL') || detailsUpper.includes('RESUMO')) {
+    const descNorm = descUpper.replace(/\s+/g, '');
+    const detailsNorm = detailsUpper.replace(/\s+/g, '');
+
+    // Check if it's the previous month's balance rollover
+    if (descNorm.includes('SALDOANTERIOR') || detailsNorm.includes('SALDOANTERIOR')) {
+      let amount = 0;
+      let isNegative = false;
+      if (typeof rawValor === 'number') {
+        amount = Math.abs(rawValor);
+        isNegative = rawValor < 0;
+      } else {
+        const strVal = String(rawValor).trim();
+        const isCredit = strVal.endsWith("C") || strVal.endsWith("c");
+        const isDebit = strVal.endsWith("D") || strVal.endsWith("d");
+        
+        let cleaned = strVal.replace(/[^\d\.,-]/g, "");
+        if (cleaned.includes(",") && cleaned.includes(".")) {
+          cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+        } else if (cleaned.includes(",")) {
+          cleaned = cleaned.replace(",", ".");
+        }
+        
+        let num = parseFloat(cleaned);
+        if (isNaN(num)) num = 0;
+        
+        amount = Math.abs(num);
+        isNegative = num < 0 || isDebit;
+        if (isCredit) isNegative = false;
+      }
+      saldoAnterior = isNegative ? -amount : amount;
+      return; // Skip from regular transactions list
+    }
+
+    if (descNorm.includes('SALDO') || descNorm.includes('TOTAL') || descNorm.includes('RESUMO') ||
+        detailsNorm.includes('SALDO') || detailsNorm.includes('TOTAL') || detailsNorm.includes('RESUMO')) {
       return; // Skip balances/totals rows immediately
     }
 
@@ -166,7 +206,8 @@ export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTrans
 
     // Skip common Excel total rows
     const upperDesc = description.toUpperCase();
-    if (upperDesc.includes('SALDO') || upperDesc.includes('TOTAL') || upperDesc.includes('RESUMO')) return;
+    const normUpperDesc = upperDesc.replace(/\s+/g, '');
+    if (normUpperDesc.includes('SALDO') || normUpperDesc.includes('TOTAL') || normUpperDesc.includes('RESUMO')) return;
 
     transactions.push({
       id: `tx_${Date.now()}_${index}`,
@@ -177,5 +218,167 @@ export function parseBBStatement(fileBuffer: Buffer, filename: string): RawTrans
     });
   });
 
-  return transactions;
+  return { transactions, saldoAnterior };
+}
+
+async function parseBBStatementPdf(fileBuffer: Buffer): Promise<{ transactions: RawTransaction[], saldoAnterior: number }> {
+  const { PDFParse } = require('pdf-parse');
+  let text = '';
+  try {
+    const parser = new PDFParse(new Uint8Array(fileBuffer));
+    const res = await parser.getText();
+    text = res.text;
+  } catch (err: any) {
+    console.error("Failed to parse PDF:", err);
+    throw new Error("Erro ao ler o arquivo PDF: " + err.message);
+  }
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const transactions: RawTransaction[] = [];
+  let saldoAnterior = 0;
+  
+  let currentTx: any = null;
+  let state = "LOOKING_FOR_TX";
+  let descriptionLines: string[] = [];
+
+  function cleanDescription(rawDesc: string) {
+    if (!rawDesc) return "";
+    let cleaned = String(rawDesc)
+      .replace(/^\d{2}\/\d{2}\s+\d{2}:\d{2}\s+/, "") 
+      .replace(/^\d+\s+/, "") 
+      .trim();
+    return cleaned;
+  }
+
+  function commitCurrentTx(index: number) {
+    if (!currentTx) return;
+    
+    let fullDesc = descriptionLines.join(" ").trim();
+    fullDesc = cleanDescription(fullDesc);
+    
+    if (!fullDesc) {
+      fullDesc = "Transação sem descrição";
+    }
+
+    const normDesc = fullDesc.toUpperCase().replace(/\s+/g, "");
+
+    if (normDesc.includes("SALDOANTERIOR")) {
+      saldoAnterior = currentTx.type === 'EXPENSE' ? -currentTx.amount : currentTx.amount;
+    } else if (normDesc.includes("SALDO") || normDesc.includes("TOTAL") || normDesc.includes("RESUMO")) {
+      // Skip balance/totals rows completely
+    } else {
+      let dateStr = "";
+      if (currentTx.date) {
+        const match = currentTx.date.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (match) {
+          dateStr = `${match[3]}-${match[2]}-${match[1]}`;
+        }
+      }
+      if (!dateStr) {
+        dateStr = new Date().toISOString().split('T')[0];
+      }
+
+      transactions.push({
+        id: `tx_pdf_${Date.now()}_${index}`,
+        date: dateStr,
+        description: fullDesc,
+        amount: currentTx.amount,
+        document: currentTx.document || ""
+      });
+    }
+    currentTx = null;
+    descriptionLines = [];
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Check if it matches a single-line transaction:
+    // e.g. "01/04/2026  14397  Pix - Recebido  555,00 (+)" or "01/04/2026 PIX - RECEBIDO 555,00 C"
+    const singleLineMatch = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.*?)\s+([\d\.,]+)\s+(\([+-]\)|[+-]|[CDcd])$/);
+    if (singleLineMatch) {
+      commitCurrentTx(i);
+
+      const dateStr = singleLineMatch[1];
+      const middle = singleLineMatch[2].trim();
+      const rawAmountStr = singleLineMatch[3];
+      const signRaw = singleLineMatch[4] || '';
+      
+      const amount = parseFloat(rawAmountStr.replace(/\./g, '').replace(',', '.'));
+      const isNegative = signRaw.includes('-') || signRaw.toUpperCase() === 'D';
+      const finalAmount = isNegative ? -amount : amount;
+
+      // Extract document if it starts with numbers
+      const middleParts = middle.split(/\s+/);
+      let document = "";
+      let description = middle;
+      if (middleParts.length > 1 && /^\d+$/.test(middleParts[0])) {
+        document = middleParts[0];
+        description = middle.substring(document.length).trim();
+      }
+
+      currentTx = {
+        amount: finalAmount,
+        type: finalAmount >= 0 ? 'INCOME' : 'EXPENSE',
+        date: dateStr,
+        document,
+        description: ""
+      };
+      descriptionLines.push(description);
+      commitCurrentTx(i);
+      state = "LOOKING_FOR_TX";
+      continue;
+    }
+
+    const valMatch = line.match(/^([\d\.,]+)\s+\(([\+-])\)$/);
+    
+    if (valMatch) {
+      commitCurrentTx(i);
+
+      const rawAmountStr = valMatch[1];
+      const sign = valMatch[2];
+      const amount = parseFloat(rawAmountStr.replace(/\./g, '').replace(',', '.'));
+      const finalAmount = sign === '-' ? -amount : amount;
+
+      currentTx = {
+        amount: finalAmount,
+        type: sign === '+' ? 'INCOME' : 'EXPENSE',
+        date: null,
+        document: "",
+        description: ""
+      };
+      state = "WAITING_FOR_DATE";
+      continue;
+    }
+
+    if (state === "WAITING_FOR_DATE") {
+      const dateMatch = line.match(/^(\d{2}\/\d{2}\/\d{4})/);
+      if (dateMatch) {
+        currentTx.date = dateMatch[1];
+        
+        const parts = line.split(/\s+/);
+        if (parts.length >= 3) {
+          currentTx.document = parts[2] || "";
+        }
+
+        const restOfLine = line.substring(dateMatch[1].length).trim();
+        if (restOfLine && !/^\d+\s+\d+$/.test(restOfLine) && !/^\d+$/.test(restOfLine)) {
+          descriptionLines.push(restOfLine);
+        }
+        state = "COLLECTING_DESC";
+      }
+      continue;
+    }
+
+    if (state === "COLLECTING_DESC") {
+      if (line.includes("Extrato de Conta Corrente") || line.includes("Cliente CLE M") || line.includes("Agência:") || line.includes("Lançamentos") || line.includes("Dia Lote Documento") || line.startsWith("--") || line.includes("of")) {
+        continue;
+      }
+      descriptionLines.push(line);
+    }
+  }
+
+  commitCurrentTx(lines.length);
+
+  return { transactions, saldoAnterior };
 }

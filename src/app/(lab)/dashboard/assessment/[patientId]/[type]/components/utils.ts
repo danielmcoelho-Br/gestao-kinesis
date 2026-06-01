@@ -36,7 +36,7 @@ export const NORMATIVE_DATA: Record<string, any> = {
 };
 
 export const getNormalityValue = (rowId: string, gender?: string): number | undefined => {
-    const isMale = gender === 'Masculino' || gender === 'masculino';
+    const isMale = typeof gender === 'string' && (gender.trim().toLowerCase() === 'masculino' || gender.trim().toLowerCase() === 'm');
     
     const norms: Record<string, any> = {
         'preensao_palmar': isMale ? 40 : 25,

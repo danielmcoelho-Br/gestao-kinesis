@@ -179,6 +179,37 @@ export default function UploadPage() {
                 </div>
               )}
               
+              {type.id === "SEUFISIO" && (
+                <div style={{ 
+                  marginTop: '16px', 
+                  fontSize: '0.75rem', 
+                  padding: '16px', 
+                  borderRadius: '12px', 
+                  background: 'rgba(16, 185, 129, 0.05)', 
+                  border: '1px solid rgba(16, 185, 129, 0.15)', 
+                  color: '#065f46',
+                  lineHeight: '1.5'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <strong style={{ fontSize: '0.8rem', color: '#047857' }}>🔌 SeuFisio Sync (Extensão)</strong>
+                    <a href="/seufisio-sync-extension.zip" download style={{ color: '#047857', fontWeight: 'bold', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      📥 Baixar (.zip)
+                    </a>
+                  </div>
+                  <ol style={{ paddingLeft: '16px', margin: '0', display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
+                    <li>
+                      <strong>Instalação:</strong> Clique no link acima para baixar o arquivo <code>.zip</code>. Descompacte-o no computador. Vá até <code>chrome://extensions</code> no seu Chrome, ative o <strong>Modo do desenvolvedor</strong> (canto superior direito) e clique em <strong>Carregar expandida</strong> selecionando a pasta descompactada.
+                    </li>
+                    <li>
+                      <strong>Acesso:</strong> Entre no site do SeuFisio e abra o relatório de atendimentos gerais do mês que você deseja atualizar.
+                    </li>
+                    <li>
+                      <strong>Sincronização:</strong> Clique no ícone da extensão Kinesis na sua barra do Chrome, selecione o mês e o ano e clique em <strong>⚡ Sincronizar Página Ativa</strong>.
+                    </li>
+                  </ol>
+                </div>
+              )}
+              
               {loading && (
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', zIndex: 10 }}>
                   Processando...

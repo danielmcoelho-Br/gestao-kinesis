@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createPatientSchema, updatePatientSchema, addPatientDocumentSchema } from "@/lab/lib/schemas";
 
-const isValidUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const isValidUUID = (id: string) => {
+  if (typeof id !== "string") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || 
+         /^[a-z0-9]{20,32}$/i.test(id);
+};
 
 export async function getPatients(query: string = "", limit?: number) {
   try {
@@ -343,10 +347,16 @@ export async function ensurePatientAccessToken(patientId: string) {
 export async function getGestaoPatientsPendingRegister() {
   try {
     const sessions = await prisma.session.findMany({
-      select: { patientName: true }
+      select: { patientName: true },
+      distinct: ['patientName']
     });
     const billingSessions = await prisma.billingSession.findMany({
-      select: { patientName: true, phone: true }
+      select: { patientName: true, phone: true },
+      distinct: ['patientName'],
+      orderBy: [
+        { patientName: 'asc' },
+        { phone: 'desc' }
+      ]
     });
 
     const nameToPhoneMap = new Map<string, string>();

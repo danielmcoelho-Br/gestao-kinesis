@@ -19,7 +19,11 @@ interface UseAssessmentStateProps {
     searchParams: any;
 }
 
-const isValidUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const isValidUUID = (id: string) => {
+    if (typeof id !== "string") return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || 
+           /^[a-z0-9]{20,32}$/i.test(id);
+};
 
 export function useAssessmentState({ 
     patientId, 

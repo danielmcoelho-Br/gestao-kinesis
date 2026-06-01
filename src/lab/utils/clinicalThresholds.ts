@@ -14,8 +14,8 @@ export interface ThresholdParams {
 }
 
 export function getEnduranceThreshold({ testId, gender, age, activityLevel = 'Inativo' }: ThresholdParams): number {
-    const isMale = gender === 'Masculino';
-    const isActive = activityLevel === 'Ativo';
+    const isMale = typeof gender === 'string' && (gender.trim().toLowerCase() === 'masculino' || gender.trim().toLowerCase() === 'm');
+    const isActive = typeof activityLevel === 'string' && (activityLevel.trim().toLowerCase() === 'ativo' || activityLevel.trim().toLowerCase().startsWith('ativo'));
     const isYoung = age <= 40;
 
     // Cervical Flexor Endurance Test
@@ -160,8 +160,8 @@ const MM_DATA = {
 };
 
 export function getMuscleStrengthReference(muscleId: string, gender: Gender, age: number, activityLevel: ActivityLevel = 'Inativo'): number {
-    const isMale = gender === 'Masculino';
-    const isActive = activityLevel === 'Ativo';
+    const isMale = typeof gender === 'string' && (gender.trim().toLowerCase() === 'masculino' || gender.trim().toLowerCase() === 'm');
+    const isActive = typeof activityLevel === 'string' && (activityLevel.trim().toLowerCase() === 'ativo' || activityLevel.trim().toLowerCase().startsWith('ativo'));
     const gKey = isMale ? 'male' : 'female';
     const aKey = isActive ? 'active' : 'sedentary';
     const ageKey = age <= 40 ? 'young' : 'old';
@@ -196,8 +196,8 @@ export function getMuscleStrengthReference(muscleId: string, gender: Gender, age
 }
 
 export function getPatientProfileString(gender: Gender, age: number, activityLevel: ActivityLevel = 'Inativo'): string {
-    const isMale = (gender || "").toLowerCase() === 'masculino';
-    const isActive = activityLevel === 'Ativo';
+    const isMale = typeof gender === 'string' && (gender.trim().toLowerCase() === 'masculino' || gender.trim().toLowerCase() === 'm');
+    const isActive = typeof activityLevel === 'string' && (activityLevel.trim().toLowerCase() === 'ativo' || activityLevel.trim().toLowerCase().startsWith('ativo'));
     const isYoung = age <= 40;
 
     const gStr = isMale ? 'Homem' : 'Mulher';
@@ -237,7 +237,7 @@ const HAND_NORMS = {
 };
 
 export function getHandStrengthReference(testId: string, gender: Gender, age: number): string {
-    const isMale = (gender || "").toLowerCase() === 'masculino';
+    const isMale = typeof gender === 'string' && (gender.trim().toLowerCase() === 'masculino' || gender.trim().toLowerCase() === 'm');
     const gKey = isMale ? 'male' : 'female';
     
     // Nearest age bracket finder

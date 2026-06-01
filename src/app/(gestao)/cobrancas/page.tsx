@@ -92,7 +92,7 @@ export default function CobrançasPage() {
 Prezado(a) Sr. (a). ${p.patientName}, segue relatório das sessões de Fisioterapia do corrente mês, incluindo as previstas nesta última semana, em caso de dúvidas entrar em contato por este número ou presencialmente.
 
 - Quantidade de sessões feitas: ${p.sessionCount} Sessões
-Valor total: R$ ${p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+Valor total: R$ ${p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 
 ${datesStr}
 
@@ -279,7 +279,7 @@ Clínica Kinesis Fisioterapia`;
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.5px' }}>Valor Total</div>
                     <div style={{ fontSize: '1.5rem', fontWeight: '900', color: 'var(--primary)' }}>
-                      R$ {p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>

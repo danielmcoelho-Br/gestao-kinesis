@@ -190,7 +190,7 @@ export default function DashboardPage() {
 
   const handlePatientClick = (patient: any) => {
     trackPatientSearch(patient);
-    if (user?.role === 'Secretaria') {
+    if (String(user?.role || '').toUpperCase() === 'SECRETARIA') {
       toast.info("Acesso restrito a uso clínico.");
     } else {
       router.push(`/dashboard/patient/${patient.id}`);
@@ -273,7 +273,6 @@ export default function DashboardPage() {
     if (savedRecent) setRecentPatients(JSON.parse(savedRecent));
 
     fetchPatients();
-    fetchPendingPatients();
     fetchGroups();
   }, []);
 
@@ -527,7 +526,7 @@ export default function DashboardPage() {
                                   <Edit size={18} />
                                 </button>
 
-                                {user?.role !== 'Secretaria' && (
+                                {String(user?.role || '').toUpperCase() !== 'SECRETARIA' && (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/assessment/select-segment/${patient.id}`); }}
                                     className="btn-action new-btn"
@@ -600,7 +599,7 @@ export default function DashboardPage() {
                                   <Edit size={18} />
                                 </button>
 
-                                {user?.role !== 'Secretaria' && (
+                                {String(user?.role || '').toUpperCase() !== 'SECRETARIA' && (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/assessment/select-segment/${patient.id}`); }}
                                     className="btn-action new-btn"

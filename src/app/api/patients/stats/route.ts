@@ -25,15 +25,20 @@ export async function GET(request: Request) {
       select: {
         patientName: true,
       },
+      distinct: ['patientName']
     });
 
     const uniquePatientNames = Array.from(new Set(sessions.map(s => s.patientName.trim().toLowerCase())));
 
-    // 2. Buscar perfis completos desses pacientes (Busca insensível a maiúsculas/minúsculas)
-    const allPatients = await prisma.patient.findMany();
-    const patientProfiles = allPatients.filter(p => 
-      uniquePatientNames.includes(p.name.trim().toLowerCase())
-    );
+    // 2. Buscar perfis completos desses pacientes
+    const patientProfiles = await prisma.patient.findMany({
+      where: {
+        name: {
+          in: uniquePatientNames,
+          mode: 'insensitive'
+        }
+      }
+    });
 
     // 3. Cruzar dados: Identificar quem foi atendido mas não tem perfil cadastrado
     const profileNamesLower = patientProfiles.map(p => p.name.trim().toLowerCase());

@@ -41,7 +41,7 @@ export function Sidebar() {
   }, []);
 
   const isActive = (path: string) => pathname === path;
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = ['ADMIN', 'ADMINISTRADOR', 'ADMINISTRATOR'].includes(String(user?.role || '').toUpperCase());
   const hasChanges = lStartMonth !== startMonth || lStartYear !== startYear || lEndMonth !== endMonth || lEndYear !== endYear;
 
   const handleApply = () => {
@@ -133,16 +133,7 @@ export function Sidebar() {
               </Link>
             )}
 
-            {isAdmin && (
-              <>
-                <p className="nav-label">Administração</p>
-                <Link href="/admin" className={`nav-item admin-item ${isActive("/admin") ? 'active' : ''}`}>
-                  <Shield size={18} />
-                  <span>Painel de Controle</span>
-                  <div className="badge">Config</div>
-                </Link>
-              </>
-            )}
+
           </nav>
         </div>
       )}

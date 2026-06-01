@@ -79,7 +79,7 @@ export function buildHistoricalPatterns(): PatternMap {
       const cleanFav = String(favorecidoVal).trim();
 
       // Skip calculations rows on the right by making sure favorecido matches one of the clinical categories
-      const allowedFavs = ['DANIEL', 'STUART', 'PAULA', 'KINESIS', 'PILATES', 'CURSO'];
+      const allowedFavs = ['DANIEL', 'STUART', 'PAULA', 'KINESIS', 'PILATES', 'FUNDO'];
       const uppercaseFav = cleanFav.toUpperCase();
       
       if (!allowedFavs.includes(uppercaseFav)) return;

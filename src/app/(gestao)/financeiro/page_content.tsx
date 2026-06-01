@@ -1,16 +1,99 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
-import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet } from "lucide-react";
+import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet, Split, Plus, X, Trash2, RefreshCw, Undo2, Redo2 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
+
+const monthsPt = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+const getFriendlyDescription = (description: string) => {
+  const norm = (description || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  if (norm.includes('IMOBILIARIA') || norm.includes('FORTES GUIMARAES') || norm.includes('ALUGUEL')) {
+    return 'Aluguel + IPTU';
+  }
+  if (norm.includes('LBRK') || norm.includes('CONTABILIDADE') || norm.includes('CONTADOR')) {
+    return 'Contador';
+  }
+  if (norm.includes('ARTEMIDAS') || norm.includes('SISTEMA')) {
+    return 'Sistema';
+  }
+  if (norm.includes('TARIFA') || norm.includes('CESTA') || norm.includes('PACOTE') || norm.includes('TAR. AGRUPADAS')) {
+    return 'Taxa Banco';
+  }
+  if (norm.includes('LETICIA')) {
+    return 'Leticia ';
+  }
+  if (norm.includes('SIND EMPREG') || norm.includes('SINDICATO')) {
+    return 'Sindicato';
+  }
+  if (norm.includes('CENTRO ELETRONICO') || norm.includes('SETRON')) {
+    return 'Setron';
+  }
+  if (norm.includes('SAERP') || norm.includes('AGUA')) {
+    return 'SAERP';
+  }
+  if (norm.includes('CLARO')) {
+    return 'Claro';
+  }
+  if (norm.includes('PARTIC')) {
+    return 'Partic';
+  }
+  if (norm.includes('BONCAFE') || norm.includes('CAFE')) {
+    return 'Café';
+  }
+  if (norm.includes('BRUNO REIS DE FARIA') || norm.includes('AR CONDICIONADO')) {
+    return 'ar condicionado';
+  }
+  if (norm.includes('ALICE MARTINS FERREIRA') || norm.includes('NINA')) {
+    return 'Nina';
+  }
+  if (norm.includes('SILVANA RIBEIRO SOARES') || norm.includes('GUARDA')) {
+    return 'Guarda';
+  }
+  if (norm.includes('SIMPLES NACIONAL')) {
+    return 'Simples Nacional';
+  }
+  if (norm.includes('DARF') || norm.includes('IMPOSTO')) {
+    return 'Imposto';
+  }
+  return description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
+};
 
 export default function FinanceiroPageContent() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<'date' | 'description' | 'favorecido' | 'amount'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [activeTab, setActiveTab] = useState<'fluxo' | 'custos'>('fluxo');
+  const [syncing, setSyncing] = useState(false);
+  
+  // History State for Undo/Redo
+  const [historyStack, setHistoryStack] = useState<any[]>([]);
+  const [redoStack, setRedoStack] = useState<any[]>([]);
+  const historyStackRef = useRef<any[]>([]);
+  const redoStackRef = useRef<any[]>([]);
 
-  useEffect(() => {
+  // Search Filter state for Description column
+  const [descriptionFilter, setDescriptionFilter] = useState("");
+
+  // Manual Transaction Modal State
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualDate, setManualDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [manualDescription, setManualDescription] = useState("");
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualType, setManualType] = useState("INCOME");
+  const [manualFavorecido, setManualFavorecido] = useState("");
+  const [manualCategory, setManualCategory] = useState("Recebimento");
+  const [manualBank, setManualBank] = useState("Banco do Brasil");
+
+  const loadTransactions = () => {
     if (!initialized) return;
     setLoading(true);
     fetch(`/api/financeiro?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}`)
@@ -23,106 +106,1997 @@ export default function FinanceiroPageContent() {
         setTransactions([]);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    loadTransactions();
   }, [startMonth, startYear, endMonth, endYear, initialized]);
 
-  const totalIncome = transactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
-  const totalExpense = transactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
+  useEffect(() => {
+    clientLog("FinanceiroPageContent mounted! historyStack size: " + historyStackRef.current.length);
+  }, []);
+
+  useEffect(() => {
+    if (showManualModal) {
+      const monthStr = String(startMonth + 1).padStart(2, '0');
+      setManualDate(`${startYear}-${monthStr}-01`);
+    }
+  }, [showManualModal, startMonth, startYear]);
+
+  const handleSort = (field: 'date' | 'description' | 'favorecido' | 'amount') => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+    if (!confirm("Deseja realmente excluir este lançamento?")) return;
+    const target = transactions.find(t => t.id === id);
+    if (!target) return;
+
+    const toastId = toast.loading("Excluindo lançamento...");
+    try {
+      const res = await fetch('/api/financeiro/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: id })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao excluir.");
+      
+      // Track history
+      historyStackRef.current = [...historyStackRef.current, {
+        type: 'DELETE',
+        transactionId: id,
+        description: target.description,
+        category: target.category,
+        amount: target.amount,
+        date: target.date,
+        typeTx: target.type,
+        bank: target.bank,
+        favorecido: target.favorecido
+      }];
+      setHistoryStack(historyStackRef.current);
+      clientLog("Pushed DELETE to history. Stack size: " + historyStackRef.current.length);
+
+      redoStackRef.current = [];
+      setRedoStack([]);
+
+      toast.success("Excluído com sucesso!", { id: toastId });
+      loadTransactions();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir lançamento.", { id: toastId });
+    }
+  };
+
+  const handleRemoveFromClinicCosts = async (id: string) => {
+    if (!confirm("Deseja realmente remover esta despesa dos Custos da Clínica? Ela continuará registrada no Fluxo de Caixa.")) return;
+    const target = transactions.find(t => t.id === id);
+    if (!target) return;
+    const oldCategory = target.category;
+
+    const toastId = toast.loading("Removendo despesa dos custos...");
+    try {
+      const res = await fetch('/api/financeiro/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: id, category: 'OUTROS' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao remover.");
+      
+      // Track history
+      historyStackRef.current = [...historyStackRef.current, {
+        type: 'REMOVE_COST',
+        transactionId: id,
+        oldCategory
+      }];
+      setHistoryStack(historyStackRef.current);
+      clientLog("Pushed REMOVE_COST to history. Stack size: " + historyStackRef.current.length);
+
+      redoStackRef.current = [];
+      setRedoStack([]);
+
+      toast.success("Removido dos custos com sucesso!", { id: toastId });
+      loadTransactions();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao remover despesa dos custos.", { id: toastId });
+    }
+  };
+
+  const clientLog = (msg: string) => {
+    fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log: msg })
+    }).catch(() => {});
+  };
+
+  const handleUndo = async () => {
+    clientLog("handleUndo clicked! Stack size: " + historyStackRef.current.length);
+    if (historyStackRef.current.length === 0) return;
+    const item = historyStackRef.current[historyStackRef.current.length - 1];
+    clientLog("Undoing item: " + JSON.stringify(item));
+    
+    // Update stacks
+    historyStackRef.current = historyStackRef.current.slice(0, -1);
+    setHistoryStack(historyStackRef.current);
+
+    if (item.type === 'REMOVE_COST') {
+      try {
+        const res = await fetch('/api/financeiro/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionId: item.transactionId, category: item.oldCategory })
+        });
+        if (!res.ok) throw new Error();
+        
+        // Push to redo stack
+        redoStackRef.current = [...redoStackRef.current, item];
+        setRedoStack(redoStackRef.current);
+        toast.success("Desfeito com sucesso!");
+        loadTransactions();
+      } catch (err) {
+        toast.error("Erro ao desfazer.");
+      }
+      return;
+    }
+
+    if (item.type === 'CREATE') {
+      // Remove from UI
+      setTransactions(prev => prev.filter(t => t.id !== item.transactionId));
+      
+      try {
+        const res = await fetch('/api/financeiro/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionId: item.transactionId })
+        });
+        if (!res.ok) throw new Error();
+        
+        // Push to redo stack
+        redoStackRef.current = [...redoStackRef.current, item];
+        setRedoStack(redoStackRef.current);
+        toast.success("Desfeito com sucesso!");
+      } catch (err) {
+        toast.error("Erro ao desfazer.");
+        loadTransactions();
+      }
+      return;
+    }
+
+    if (item.type === 'DELETE') {
+      try {
+        const targetDate = item.date || new Date(startYear, startMonth, 1).toISOString().split('T')[0];
+        const type = item.typeTx || (item.category === 'PRO_EARNING' ? 'INCOME' : 'EXPENSE');
+        const res = await fetch('/api/financeiro/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: targetDate,
+            description: item.description,
+            amount: item.amount,
+            type,
+            category: item.category,
+            bank: item.bank || 'BANCO DO BRASIL',
+            favorecido: item.favorecido || 'KINESIS'
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error();
+        
+        const newTxId = data.transaction.id;
+        const updatedItem = { ...item, transactionId: newTxId };
+        
+        // Push to redo stack
+        redoStackRef.current = [...redoStackRef.current, updatedItem];
+        setRedoStack(redoStackRef.current);
+        toast.success("Desfeito com sucesso!");
+        loadTransactions();
+      } catch (err) {
+        toast.error("Erro ao desfazer.");
+      }
+      return;
+    }
+
+    // Standard field update undo
+    setTransactions(prev => prev.map(t => {
+      if (t.id === item.transactionId) {
+        return { ...t, [item.field]: item.oldValue };
+      }
+      return t;
+    }));
+
+    try {
+      const body = { transactionId: item.transactionId, [item.field]: item.oldValue };
+      const res = await fetch('/api/financeiro/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error();
+      
+      // Push to redo stack
+      redoStackRef.current = [...redoStackRef.current, item];
+      setRedoStack(redoStackRef.current);
+      toast.success("Desfeito com sucesso!");
+    } catch (err) {
+      toast.error("Erro ao desfazer.");
+      loadTransactions();
+    }
+  };
+
+  const handleRedo = async () => {
+    clientLog("handleRedo clicked! Stack size: " + redoStackRef.current.length);
+    if (redoStackRef.current.length === 0) return;
+    const item = redoStackRef.current[redoStackRef.current.length - 1];
+    clientLog("Redoing item: " + JSON.stringify(item));
+    
+    // Update stacks
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    setRedoStack(redoStackRef.current);
+
+    if (item.type === 'REMOVE_COST') {
+      try {
+        const res = await fetch('/api/financeiro/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionId: item.transactionId, category: 'OUTROS' })
+        });
+        if (!res.ok) throw new Error();
+        
+        // Push to history stack
+        historyStackRef.current = [...historyStackRef.current, item];
+        setHistoryStack(historyStackRef.current);
+        toast.success("Refeito com sucesso!");
+        loadTransactions();
+      } catch (err) {
+        toast.error("Erro ao refazer.");
+      }
+      return;
+    }
+
+    if (item.type === 'CREATE') {
+      const toastId = toast.loading("Recriando...");
+      try {
+        const targetDate = item.date || new Date(startYear, startMonth, 1).toISOString().split('T')[0];
+        const type = item.typeTx || (item.category === 'PRO_EARNING' ? 'INCOME' : 'EXPENSE');
+        const res = await fetch('/api/financeiro/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: targetDate,
+            description: item.description,
+            amount: item.amount,
+            type,
+            category: item.category,
+            bank: item.bank || 'BANCO DO BRASIL',
+            favorecido: item.favorecido || 'KINESIS'
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error();
+        
+        const newTxId = data.transaction.id;
+        const updatedItem = { ...item, transactionId: newTxId };
+        
+        // Push to history stack
+        historyStackRef.current = [...historyStackRef.current, updatedItem];
+        setHistoryStack(historyStackRef.current);
+        toast.success("Refeito com sucesso!", { id: toastId });
+        loadTransactions();
+      } catch (err) {
+        toast.error("Erro ao refazer.", { id: toastId });
+      }
+      return;
+    }
+
+    if (item.type === 'DELETE') {
+      // Remove from UI
+      setTransactions(prev => prev.filter(t => t.id !== item.transactionId));
+      
+      try {
+        const res = await fetch('/api/financeiro/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionId: item.transactionId })
+        });
+        if (!res.ok) throw new Error();
+        
+        // Push to history stack
+        historyStackRef.current = [...historyStackRef.current, item];
+        setHistoryStack(historyStackRef.current);
+        toast.success("Refeito com sucesso!");
+      } catch (err) {
+        toast.error("Erro ao refazer.");
+        loadTransactions();
+      }
+      return;
+    }
+
+    // Standard field update redo
+    setTransactions(prev => prev.map(t => {
+      if (t.id === item.transactionId) {
+        return { ...t, [item.field]: item.newValue };
+      }
+      return t;
+    }));
+
+    try {
+      const body = { transactionId: item.transactionId, [item.field]: item.newValue };
+      const res = await fetch('/api/financeiro/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error();
+
+      // Push to history stack
+      historyStackRef.current = [...historyStackRef.current, item];
+      setHistoryStack(historyStackRef.current);
+      toast.success("Refeito com sucesso!");
+    } catch (err) {
+      toast.error("Erro ao refazer.");
+      loadTransactions();
+    }
+  };
+
+  const handleUpdateTransactionField = async (id: string, field: string, value: any) => {
+    clientLog("handleUpdateTransactionField called: " + id + ", field: " + field + ", val: " + value);
+    const target = transactions.find(t => t.id === id);
+    if (!target) return;
+    
+    // Parse value for type safety and format checks
+    let parsedValue = value;
+    if (field === 'amount') {
+      parsedValue = Number(Math.abs(parseFloat(value) || 0).toFixed(2));
+    }
+    
+    const oldValue = target[field];
+    if (oldValue === parsedValue) return;
+
+    // Track history
+    historyStackRef.current = [...historyStackRef.current, { transactionId: id, field, oldValue, newValue: parsedValue }];
+    setHistoryStack(historyStackRef.current);
+    clientLog("Pushed to history (update). New stack size: " + historyStackRef.current.length);
+    
+    redoStackRef.current = [];
+    setRedoStack([]);
+
+    // Optimistic local update
+    setTransactions(prev => prev.map(t => {
+      if (t.id === id) {
+        if (field === 'amount') return { ...t, amount: parsedValue };
+        if (field === 'description') return { ...t, description: parsedValue };
+        if (field === 'favorecido') return { ...t, favorecido: parsedValue };
+        if (field === 'category') return { ...t, category: parsedValue };
+      }
+      return t;
+    }));
+
+    try {
+      const body: any = { transactionId: id };
+      body[field] = parsedValue;
+      const res = await fetch('/api/financeiro/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error();
+    } catch (err) {
+      toast.error("Erro ao atualizar campo. Recarregando...");
+      loadTransactions();
+    }
+  };
+
+  const handleCreateClinicCost = async (category: 'GERAL' | 'SECRETARIA' | 'KINESIS') => {
+    const toastId = toast.loading("Adicionando novo custo...");
+    try {
+      const targetDate = new Date(startYear, startMonth, 1).toISOString().split('T')[0];
+      const descName = `Novo Gasto ${category === 'GERAL' ? 'Geral' : category === 'SECRETARIA' ? 'Secretária' : 'Kinesis'}`;
+      const res = await fetch('/api/financeiro/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: targetDate,
+          description: descName,
+          amount: 0.01,
+          type: 'EXPENSE',
+          category,
+          bank: 'BANCO DO BRASIL',
+          favorecido: 'KINESIS'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao criar.");
+
+      // Track history
+      if (data.transaction && data.transaction.id) {
+        historyStackRef.current = [...historyStackRef.current, {
+          type: 'CREATE',
+          transactionId: data.transaction.id,
+          description: descName,
+          category,
+          amount: 0.01,
+          date: targetDate,
+          typeTx: 'EXPENSE',
+          bank: 'BANCO DO BRASIL',
+          favorecido: 'KINESIS'
+        }];
+        setHistoryStack(historyStackRef.current);
+        clientLog("Pushed CREATE to history (new cost). Stack size: " + historyStackRef.current.length);
+
+        redoStackRef.current = [];
+        setRedoStack([]);
+      }
+
+      toast.success("Novo custo criado com sucesso!", { id: toastId });
+      loadTransactions();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao adicionar custo.", { id: toastId });
+    }
+  };
+
+  const handleSaveExtraField = async (cleanDesc: string, category: 'CPFL_SALA' | 'PRO_EARNING' | 'PARTNER_ADJ', value: number, existingId?: string) => {
+    clientLog("handleSaveExtraField called: desc=" + cleanDesc + ", val=" + value + ", existingId=" + existingId);
+    if (existingId) {
+      if (value === 0) {
+        const toastId = toast.loading("Removendo...");
+        try {
+          const res = await fetch('/api/financeiro/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transactionId: existingId })
+          });
+          if (!res.ok) throw new Error();
+          
+          // Track deletion in history
+          const target = transactions.find(t => t.id === existingId);
+          const oldValue = target ? target.amount : 0;
+          historyStackRef.current = [...historyStackRef.current, { 
+            type: 'DELETE', 
+            transactionId: existingId, 
+            description: cleanDesc,
+            category: category,
+            amount: oldValue
+          }];
+          setHistoryStack(historyStackRef.current);
+          clientLog("Pushed to history (delete extra). New stack size: " + historyStackRef.current.length);
+          
+          redoStackRef.current = [];
+          setRedoStack([]);
+
+          toast.success("Valor zerado e removido.", { id: toastId });
+          loadTransactions();
+        } catch (err) {
+          toast.error("Erro ao remover.", { id: toastId });
+        }
+      } else {
+        const target = transactions.find(t => t.id === existingId);
+        const oldValue = target ? target.amount : 0;
+        if (oldValue !== value) {
+          historyStackRef.current = [...historyStackRef.current, { transactionId: existingId, field: 'amount', oldValue, newValue: value }];
+          setHistoryStack(historyStackRef.current);
+          clientLog("Pushed to history (update extra). New stack size: " + historyStackRef.current.length);
+          
+          redoStackRef.current = [];
+          setRedoStack([]);
+        }
+        const toastId = toast.loading("Atualizando...");
+        try {
+          const res = await fetch('/api/financeiro/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transactionId: existingId, amount: value })
+          });
+          if (!res.ok) throw new Error();
+          toast.success("Valor atualizado.", { id: toastId });
+          loadTransactions();
+        } catch (err) {
+          toast.error("Erro ao atualizar.", { id: toastId });
+        }
+      }
+    } else {
+      if (value === 0) return;
+      const toastId = toast.loading("Criando...");
+      try {
+        const targetDate = new Date(startYear, startMonth, 1).toISOString().split('T')[0];
+        const type = category === 'PRO_EARNING' ? 'INCOME' : 'EXPENSE';
+        const res = await fetch('/api/financeiro/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: targetDate,
+            description: cleanDesc,
+            amount: value,
+            type,
+            category,
+            bank: 'BANCO DO BRASIL',
+            favorecido: 'KINESIS'
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error();
+        
+        // Track creation in history
+        if (data.transaction && data.transaction.id) {
+          historyStackRef.current = [...historyStackRef.current, { 
+            type: 'CREATE', 
+            transactionId: data.transaction.id, 
+            description: cleanDesc,
+            category: category,
+            amount: value 
+          }];
+          setHistoryStack(historyStackRef.current);
+          clientLog("Pushed to history (create extra). New stack size: " + historyStackRef.current.length);
+          
+          redoStackRef.current = [];
+          setRedoStack([]);
+        }
+
+        toast.success("Valor gravado.", { id: toastId });
+        loadTransactions();
+      } catch (err) {
+        toast.error("Erro ao gravar.", { id: toastId });
+      }
+    }
+  };
+
+  const handleSyncSpreadsheet = async () => {
+    setSyncing(true);
+    const monthName = monthsPt[startMonth];
+    const yearStr = String(startYear).slice(-2);
+    
+    const toastId = toast.loading(`Sincronizando planilhas de ${monthName}/${startYear}...`);
+    try {
+      const res = await fetch('/api/financeiro/sincronizar-planilha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: monthName, year: yearStr, sortBy, sortOrder })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao sincronizar.");
+      
+      toast.success(data.message || "Planilhas sincronizadas com sucesso!", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao sincronizar planilhas.", { id: toastId });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleSplitSingleTransaction = async (id: string) => {
+    const target = transactions.find(t => t.id === id);
+    if (!target) return;
+
+    const totalAmount = target.amount;
+    const userInput = prompt(
+      `Digite o valor para a primeira parte da divisão (Valor total atual: R$ ${totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}):`
+    );
+
+    if (userInput === null) return; // User cancelled
+
+    let cleanInput = userInput.replace(/[R$\s]/g, '');
+    if (cleanInput.includes(',')) {
+      cleanInput = cleanInput.replace(/\./g, '').replace(',', '.');
+    }
+    const val1 = Number(parseFloat(cleanInput).toFixed(2));
+    if (isNaN(val1) || val1 <= 0 || val1 >= totalAmount) {
+      alert("Valor inválido! Deve ser um número maior que 0 e menor que o valor total.");
+      return;
+    }
+
+    const val2 = Number((totalAmount - val1).toFixed(2));
+
+    const toastId = toast.loading("Dividindo lançamento...");
+    try {
+      const res = await fetch('/api/financeiro/split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          transactionId: id,
+          amount1: val1,
+          amount2: val2
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao dividir.");
+      
+      toast.success("Lançamento dividido com sucesso!", { id: toastId });
+      loadTransactions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Falha ao dividir transação.", { id: toastId });
+    }
+  };
+
+  const handleSaveManualTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualDate || !manualDescription || !manualAmount) {
+      toast.error("Por favor, preencha todos os campos obrigatórios.");
+      return;
+    }
+
+    let cleanAmount = manualAmount.replace(/[R$\s]/g, '');
+    if (cleanAmount.includes(',')) {
+      cleanAmount = cleanAmount.replace(/\./g, '').replace(',', '.');
+    }
+    const amountNum = Number(parseFloat(cleanAmount).toFixed(2));
+    if (isNaN(amountNum) || amountNum === 0) {
+      toast.error("O valor da transação deve ser diferente de zero.");
+      return;
+    }
+
+    const toastId = toast.loading("Salvando lançamento manual...");
+    try {
+      const res = await fetch('/api/financeiro/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: manualDate,
+          description: manualDescription,
+          amount: Math.abs(amountNum),
+          type: amountNum < 0 ? 'EXPENSE' : manualType,
+          favorecido: manualFavorecido,
+          category: manualCategory,
+          bank: manualBank
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao salvar.");
+
+      // Track history
+      if (data.transaction && data.transaction.id) {
+        historyStackRef.current = [...historyStackRef.current, {
+          type: 'CREATE',
+          transactionId: data.transaction.id,
+          description: manualDescription,
+          category: manualCategory,
+          amount: Math.abs(amountNum),
+          date: manualDate,
+          typeTx: amountNum < 0 ? 'EXPENSE' : manualType,
+          bank: manualBank,
+          favorecido: manualFavorecido
+        }];
+        setHistoryStack(historyStackRef.current);
+        clientLog("Pushed CREATE to history (manual transaction). Stack size: " + historyStackRef.current.length);
+
+        redoStackRef.current = [];
+        setRedoStack([]);
+      }
+
+      toast.success("Lançamento manual criado com sucesso!", { id: toastId });
+      setShowManualModal(false);
+      
+      // Clear form
+      setManualDescription("");
+      setManualAmount("");
+      setManualFavorecido("");
+      setManualCategory(manualType === "INCOME" ? "Recebimento" : "Despesa");
+
+      loadTransactions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Falha ao criar lançamento manual.", { id: toastId });
+    }
+  };
+
+  const handleUpdateSingleFavorecido = async (id: string, value: string) => {
+    const toastId = toast.loading("Atualizando favorecido...");
+    try {
+      const res = await fetch('/api/financeiro/update-favorecido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: id, favorecido: value })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao atualizar.");
+      
+      setTransactions(prev => prev.map(t => 
+        t.id === id ? { ...t, favorecido: value } : t
+      ));
+      toast.success("Favorecido atualizado com sucesso!", { id: toastId });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Falha ao atualizar favorecido.", { id: toastId });
+    }
+  };
+
+  const bankTransactions = transactions.filter((t: any) => {
+    const cat = (t.category || '').toUpperCase();
+    return !['PRO_EARNING', 'PARTNER_ADJ', 'CPFL_SALA'].includes(cat);
+  });
+
+  const totalIncome = bankTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
+  const totalExpense = bankTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
   const balance = totalIncome - totalExpense;
+
+  // Calculo de totais por favorecido
+  const allowedFavorecidos = ["KINESIS", "DANIEL", "STUART", "PAULA", "PILATES", "FUNDO"];
+  const favTotals: Record<string, number> = {
+    KINESIS: 0,
+    DANIEL: 0,
+    STUART: 0,
+    PAULA: 0,
+    PILATES: 0,
+    FUNDO: 0
+  };
+
+  bankTransactions.forEach((t: any) => {
+    const favorecido = (t.favorecido || '').toUpperCase();
+    if (favorecido && allowedFavorecidos.includes(favorecido)) {
+      if (t.type === 'INCOME') {
+        favTotals[favorecido] += t.amount;
+      } else {
+        favTotals[favorecido] -= t.amount;
+      }
+    }
+  });
+
+  const favColors: Record<string, { border: string, bg: string, text: string }> = {
+    KINESIS: { border: '#8b5cf6', bg: '#f5f3ff', text: '#6d28d9' },
+    DANIEL: { border: '#10b981', bg: '#ecfdf5', text: '#047857' },
+    STUART: { border: '#3b82f6', bg: '#eff6ff', text: '#1d4ed8' },
+    PAULA: { border: '#ec4899', bg: '#fdf2f8', text: '#be185d' },
+    PILATES: { border: '#06b6d4', bg: '#ecfeff', text: '#0891b2' },
+    FUNDO: { border: '#f59e0b', bg: '#fffbeb', text: '#b45309' }
+  };
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" /> Carregando financeiro...</div>;
 
   return (
     <div style={{ marginTop: '20px' }}>
+      {/* Top Bar for Active Month & Undo/Redo */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '25px', 
+        backgroundColor: '#ffffff', 
+        padding: '16px 24px', 
+        borderRadius: '12px',
+        border: '1px solid var(--border-color)',
+        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Dados de:</span>
+          <span style={{ 
+            fontSize: '1.2rem', 
+            fontWeight: '800', 
+            color: 'var(--primary)', 
+            backgroundColor: 'rgba(99, 102, 241, 0.08)', 
+            padding: '6px 14px', 
+            borderRadius: '8px' 
+          }}>
+            {monthsPt[startMonth]} {startYear}
+            { (startMonth !== endMonth || startYear !== endYear) && ` até ${monthsPt[endMonth]} ${endYear}` }
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={handleUndo}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontWeight: '800',
+              fontSize: '0.85rem',
+              cursor: historyStack.length === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              border: '1px solid #cbd5e1',
+              background: historyStack.length === 0 ? '#f8fafc' : '#ffffff',
+              color: historyStack.length === 0 ? '#94a3b8' : '#334155',
+              boxShadow: historyStack.length === 0 ? 'none' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+              opacity: historyStack.length === 0 ? 0.6 : 1
+            }}
+            onMouseEnter={(e) => {
+              if (historyStack.length > 0) {
+                e.currentTarget.style.background = '#f1f5f9';
+                e.currentTarget.style.borderColor = '#94a3b8';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (historyStack.length > 0) {
+                e.currentTarget.style.background = '#ffffff';
+                e.currentTarget.style.borderColor = '#cbd5e1';
+              }
+            }}
+          >
+            <Undo2 size={16} />
+            Desfazer
+          </button>
+          <button
+            onClick={handleRedo}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontWeight: '800',
+              fontSize: '0.85rem',
+              cursor: redoStack.length === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              border: '1px solid #cbd5e1',
+              background: redoStack.length === 0 ? '#f8fafc' : '#ffffff',
+              color: redoStack.length === 0 ? '#94a3b8' : '#334155',
+              boxShadow: redoStack.length === 0 ? 'none' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+              opacity: redoStack.length === 0 ? 0.6 : 1
+            }}
+            onMouseEnter={(e) => {
+              if (redoStack.length > 0) {
+                e.currentTarget.style.background = '#f1f5f9';
+                e.currentTarget.style.borderColor = '#94a3b8';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (redoStack.length > 0) {
+                e.currentTarget.style.background = '#ffffff';
+                e.currentTarget.style.borderColor = '#cbd5e1';
+              }
+            }}
+          >
+            <Redo2 size={16} />
+            Refazer
+          </button>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
         <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--success)' }}>
           <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Entradas</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
             <TrendingUp color="var(--success)" size={24} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--success)' }}>R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--success)' }}>R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
           </div>
         </div>
         <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--danger)' }}>
           <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Saídas</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
             <TrendingDown color="var(--danger)" size={24} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--danger)' }}>R$ {totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--danger)' }}>R$ {totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
           </div>
         </div>
         <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--primary)' }}>
           <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Saldo Período</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
             <DollarSign color="var(--primary)" size={24} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--text-primary)' }}>R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--text-primary)' }}>R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <CreditCard color="var(--primary)" size={24} />
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>Fluxo de Caixa (Banco)</h3>
-          </div>
-          
-          <Link 
-            href="/financeiro/conciliador" 
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', padding: '10px 20px', fontWeight: '800' }}
-          >
-            <FileSpreadsheet size={16} />
-            Conciliar Extrato BB
-          </Link>
-        </div>
-        
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Categoria</th>
-                <th>Banco</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t: any) => (
-                <tr key={t.id}>
-                  <td style={{ fontWeight: '600' }}>{new Date(t.date).toLocaleDateString('pt-BR')}</td>
-                  <td>{t.description}</td>
-                  <td><span style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem' }}>{t.category}</span></td>
-                  <td>{t.bank}</td>
-                  <td>
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      borderRadius: '6px', 
-                      fontSize: '0.7rem', 
-                      fontWeight: '800',
-                      background: t.type === 'INCOME' ? '#dcfce7' : '#fee2e2',
-                      color: t.type === 'INCOME' ? '#166534' : '#991b1b',
-                    }}>
-                      {t.type === 'INCOME' ? 'ENTRADA' : 'SAÍDA'}
-                    </span>
-                  </td>
-                  <td style={{ 
-                    fontWeight: '800', 
-                    color: t.type === 'INCOME' ? '#166534' : '#991b1b',
-                    textAlign: 'right'
-                  }}>
-                    {t.type === 'INCOME' ? '+' : '-'} R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {transactions.length === 0 && (
-            <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
-              Nenhuma transação encontrada para este período.
-            </div>
-          )}
+      {/* Resumo por Favorecido */}
+      <div style={{ marginBottom: '30px' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b' }}>Resumo por Favorecido</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
+          {allowedFavorecidos.map(fav => {
+            const value = favTotals[fav];
+            const isNegative = value < 0;
+            const colors = favColors[fav] || { border: '#cbd5e1', bg: '#f8fafc', text: '#475569' };
+            return (
+              <div key={fav} className="card" style={{ 
+                padding: '16px', 
+                borderLeft: `4px solid ${colors.border}`,
+                backgroundColor: '#ffffff',
+                borderRadius: '8px',
+                margin: 0
+              }}>
+                <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', marginTop: 0 }}>{fav}</p>
+                <h4 style={{ 
+                  fontSize: '1.05rem', 
+                  fontWeight: '800', 
+                  color: value === 0 ? '#475569' : isNegative ? '#dc2626' : '#16a34a',
+                  margin: 0
+                }}>
+                  {isNegative ? '-' : ''}R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </h4>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Tab Switcher */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+        <button 
+          onClick={() => setActiveTab('fluxo')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            fontWeight: '800',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            border: '1px solid #cbd5e1',
+            background: activeTab === 'fluxo' ? 'var(--primary)' : 'white',
+            color: activeTab === 'fluxo' ? 'white' : '#475569',
+            boxShadow: activeTab === 'fluxo' ? '0 4px 6px -1px rgba(99, 102, 241, 0.2)' : 'none'
+          }}
+        >
+          Fluxo de Caixa (Banco)
+        </button>
+        <button 
+          onClick={() => setActiveTab('custos')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            fontWeight: '800',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            border: '1px solid #cbd5e1',
+            background: activeTab === 'custos' ? 'var(--primary)' : 'white',
+            color: activeTab === 'custos' ? 'white' : '#475569',
+            boxShadow: activeTab === 'custos' ? '0 4px 6px -1px rgba(99, 102, 241, 0.2)' : 'none'
+          }}
+        >
+          Custos da Clínica (Financeiro 26)
+        </button>
+      </div>
+
+      {activeTab === 'fluxo' ? (
+        <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <CreditCard color="var(--primary)" size={24} />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>Fluxo de Caixa (Banco)</h3>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setShowManualModal(true)}
+                className="btn"
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  fontSize: '0.85rem', 
+                  padding: '10px 20px', 
+                  fontWeight: '800',
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  color: '#334155',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f1f5f9';
+                  e.currentTarget.style.borderColor = '#94a3b8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#f8fafc';
+                  e.currentTarget.style.borderColor = '#cbd5e1';
+                }}
+              >
+                <Plus size={16} />
+                Novo Lançamento Manual
+              </button>
+
+              <Link 
+                href="/financeiro/conciliador" 
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', padding: '10px 20px', fontWeight: '800' }}
+              >
+                <FileSpreadsheet size={16} />
+                Conciliar Extrato BB
+              </Link>
+            </div>
+          </div>
+          
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th 
+                    onClick={() => handleSort('date')}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    title="Ordenar por Data"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      Data {sortBy === 'date' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    </div>
+                  </th>
+                  <th style={{ minWidth: '240px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
+                      <div 
+                        onClick={() => handleSort('description')}
+                        style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="Ordenar por Descrição"
+                      >
+                        Descrição {sortBy === 'description' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                      </div>
+                      <input 
+                        type="text" 
+                        placeholder="Buscar..."
+                        value={descriptionFilter}
+                        onChange={(e) => setDescriptionFilter(e.target.value)}
+                        onClick={(e) => e.stopPropagation()} // Impede que a ordenação seja ativada ao clicar no campo de busca
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.75rem',
+                          fontWeight: 'normal',
+                          width: '130px',
+                          outline: 'none',
+                          color: '#334155',
+                          background: '#ffffff'
+                        }}
+                      />
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('favorecido')}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    title="Ordenar por Favorecido"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      Favorecido {sortBy === 'favorecido' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    </div>
+                  </th>
+                  <th>Banco</th>
+                  <th 
+                    onClick={() => handleSort('amount')}
+                    style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'right' }}
+                    title="Ordenar por Valor"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                      Valor {sortBy === 'amount' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    </div>
+                  </th>
+                  <th style={{ width: '80px', textAlign: 'center' }}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const filtered = bankTransactions.filter((t: any) => {
+                    const desc = (t.description || '').toLowerCase();
+                    return desc.includes(descriptionFilter.toLowerCase());
+                  });
+                  const sorted = [...filtered];
+                  const order = sortOrder === 'desc' ? -1 : 1;
+                  sorted.sort((a, b) => {
+                    let valA: any = a[sortBy] || '';
+                    let valB: any = b[sortBy] || '';
+
+                    if (sortBy === 'amount') {
+                      const amtA = a.type === 'INCOME' ? a.amount : -a.amount;
+                      const amtB = b.type === 'INCOME' ? b.amount : -b.amount;
+                      return (amtA - amtB) * order;
+                    }
+
+                    if (typeof valA === 'string') {
+                      valA = valA.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    }
+                    if (typeof valB === 'string') {
+                      valB = valB.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    }
+
+                    if (valA < valB) return -1 * order;
+                    if (valA > valB) return 1 * order;
+                    return 0;
+                  });
+
+                  return sorted.map((t: any) => {
+                    const favorecido = (t.favorecido || '').toUpperCase();
+                    const friendlyDesc = getFriendlyDescription(t.description);
+
+                    return (
+                      <tr key={t.id}>
+                        <td style={{ fontWeight: '600' }}>{new Date(t.date).toLocaleDateString('pt-BR')}</td>
+                        <td>{friendlyDesc}</td>
+                        <td>
+                          <select
+                            value={favorecido}
+                            onChange={(e) => handleUpdateSingleFavorecido(t.id, e.target.value)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: `1px solid ${favorecido ? (favColors[favorecido]?.border || '#cbd5e1') : '#cbd5e1'}`,
+                              fontWeight: '800',
+                              fontSize: '0.75rem',
+                              background: favorecido ? (favColors[favorecido]?.bg || '#ffffff') : '#ffffff',
+                              color: favorecido ? (favColors[favorecido]?.text || '#475569') : '#475569',
+                              cursor: 'pointer',
+                              outline: 'none',
+                              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                            }}
+                          >
+                            <option value="" style={{ background: '#ffffff', color: '#94a3b8' }}>-- Sem Favorecido --</option>
+                            {allowedFavorecidos.map(fav => (
+                              <option key={fav} value={fav} style={{ background: '#ffffff', color: favColors[fav]?.text || '#000000', fontWeight: '700' }}>
+                                {fav}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>{t.bank}</td>
+                        <td style={{ 
+                          fontWeight: '800', 
+                          color: t.type === 'INCOME' ? '#166534' : '#991b1b',
+                          textAlign: 'right',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {t.type === 'INCOME' ? '+' : '-'} R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                            <button 
+                              onClick={() => handleSplitSingleTransaction(t.id)}
+                              title="Dividir Lançamento"
+                              style={{ 
+                                padding: '6px', 
+                                borderRadius: '6px', 
+                                border: '1px solid #e2e8f0', 
+                                background: '#ffffff', 
+                                color: '#64748b', 
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s',
+                                outline: 'none'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = '#1e40af';
+                                e.currentTarget.style.borderColor = '#1e40af40';
+                                e.currentTarget.style.background = '#eff6ff';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = '#64748b';
+                                e.currentTarget.style.borderColor = '#e2e8f0';
+                                e.currentTarget.style.background = '#ffffff';
+                              }}
+                            >
+                              <Split size={12} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteTransaction(t.id)}
+                              title="Excluir Lançamento"
+                              style={{ 
+                                padding: '6px', 
+                                borderRadius: '6px', 
+                                border: '1px solid #fecaca', 
+                                background: '#ffffff', 
+                                color: '#ef4444', 
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s',
+                                outline: 'none'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = '#b91c1c';
+                                e.currentTarget.style.borderColor = '#fca5a5';
+                                e.currentTarget.style.background = '#fef2f2';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = '#ef4444';
+                                e.currentTarget.style.borderColor = '#fecaca';
+                                e.currentTarget.style.background = '#ffffff';
+                              }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+            {transactions.length === 0 && (
+              <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
+                Nenhuma transação encontrada para este período.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (() => {
+        // Clinic Costs Filter and Sum Calculations
+        const geralCosts = transactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'GERAL');
+        const secretariaCosts = transactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'SECRETARIA');
+        const kinesisCosts = transactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'KINESIS');
+
+        const totalGeral = geralCosts.reduce((acc, t) => acc + t.amount, 0);
+        const totalSecretaria = secretariaCosts.reduce((acc, t) => acc + t.amount, 0);
+        const totalKinesis = kinesisCosts.reduce((acc, t) => acc + t.amount, 0);
+
+        const getExtraVal = (desc: string, cat: string) => {
+          const found = transactions.find(t => 
+            t.category.toUpperCase() === cat.toUpperCase() && 
+            (
+              t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
+              t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim().toUpperCase() === desc.trim().toUpperCase()
+            )
+          );
+          return found ? found.amount : 0;
+        };
+
+        const getExtraValWithSign = (desc: string, cat: string) => {
+          const found = transactions.find(t => 
+            t.category.toUpperCase() === cat.toUpperCase() && 
+            (
+              t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
+              t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim().toUpperCase() === desc.trim().toUpperCase()
+            )
+          );
+          if (!found) return 0;
+          return found.type === 'INCOME' ? found.amount : -found.amount;
+        };
+
+        const getExtraId = (desc: string, cat: string) => {
+          const found = transactions.find(t => 
+            t.category.toUpperCase() === cat.toUpperCase() && 
+            (
+              t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
+              t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim().toUpperCase() === desc.trim().toUpperCase()
+            )
+          );
+          return found ? found.id : undefined;
+        };
+
+        const cpflSala01 = getExtraVal("CPFL Sala 01", "CPFL_SALA");
+        const cpflSala02 = getExtraVal("CPFL Sala 02", "CPFL_SALA");
+        const cpflSala03 = getExtraVal("CPFL Sala 03", "CPFL_SALA");
+        const cpflSala04 = getExtraVal("CPFL Sala 04", "CPFL_SALA");
+        const cpflSala05 = getExtraVal("CPFL Sala 05", "CPFL_SALA");
+        const cpflSala06 = getExtraVal("CPFL Sala 06", "CPFL_SALA");
+        const cpflSum = cpflSala01 + cpflSala03 + cpflSala04 + cpflSala05 + cpflSala06;
+
+        const fundoVal = 1000;
+        
+        // Fisioterapia calculations
+        const totalShared = (totalGeral * 0.83) + (totalSecretaria * 0.666) + (totalKinesis * 0.5) + cpflSum + fundoVal;
+
+        const juliaEarning = getExtraVal("Julia", "PRO_EARNING");
+        const gambaEarning = getExtraVal("Gambá", "PRO_EARNING");
+        const newtonEarning = getExtraVal("Newton", "PRO_EARNING");
+        const crisEarning = getExtraVal("Cris", "PRO_EARNING");
+        const joaoEarning = getExtraVal("João", "PRO_EARNING");
+        const ausenciaEarning = getExtraVal("Ausência Nula", "PRO_EARNING");
+
+        const totalArrecadado = juliaEarning + gambaEarning + newtonEarning + crisEarning + joaoEarning + ausenciaEarning;
+        const saldoFinal = totalArrecadado - totalShared;
+
+        // Pilates calculations
+        const juliaPilates = getExtraVal("Julia (Pilates)", "PRO_EARNING");
+        const paulaPilates = getExtraVal("Paula (Pilates)", "PRO_EARNING");
+        const ausenciaPilates = getExtraVal("Ausência Nula (Pilates)", "PRO_EARNING");
+        const impostoPilates = getExtraVal("Imposto (Pilates)", "PRO_EARNING");
+
+        const arrecadadoPilates = (juliaPilates * 2) + paulaPilates + ausenciaPilates;
+        const custosPilates = (totalGeral * 0.17) + (totalSecretaria * 0.333) + (totalKinesis * 0.5) + cpflSala02;
+        const saldoFinalPilates = arrecadadoPilates - juliaPilates - paulaPilates - custosPilates - impostoPilates;
+
+        // Adjustments and Partner Splits
+        const danielAdj = getExtraValWithSign("Daniel Adicional", "PARTNER_ADJ");
+        const stuartAdj = getExtraValWithSign("Stuart Adicional", "PARTNER_ADJ");
+        const paulaAdj = getExtraValWithSign("Paula Adicional", "PARTNER_ADJ");
+
+        const danielShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) - crisEarning + danielAdj;
+        const stuartShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) + stuartAdj;
+        const paulaShare = (saldoFinal * 0.20) + (saldoFinalPilates / 3) + paulaAdj;
+
+        const renderExtraField = (label: string, cleanDesc: string, category: 'CPFL_SALA' | 'PRO_EARNING' | 'PARTNER_ADJ') => {
+          const value = getExtraVal(cleanDesc, category);
+          const existingId = getExtraId(cleanDesc, category);
+          
+          return (
+            <div key={cleanDesc} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>{label}</span>
+              <input 
+                type="number" 
+                step="0.01"
+                key={`${cleanDesc}_${value}`}
+                defaultValue={value ? Number(value).toFixed(2) : ''}
+                placeholder="0,00"
+                onBlur={async (e) => {
+                  const val = Number((parseFloat(e.target.value) || 0).toFixed(2));
+                  if (val === value) return;
+                  await handleSaveExtraField(cleanDesc, category, val, existingId);
+                }}
+                style={{
+                  width: '105px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.8rem',
+                  fontWeight: '800',
+                  textAlign: 'right',
+                  outline: 'none',
+                  background: '#ffffff',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                }}
+              />
+            </div>
+          );
+        };
+
+        return (
+          <div>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '20px',
+              padding: '8px 4px'
+            }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                Custos da Clínica — Referentes a {monthsPt[startMonth]} de {startYear}
+              </h2>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
+              
+              {/* Geral Card */}
+              <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>Gastos Gerais</h3>
+                  <button 
+                    onClick={() => handleCreateClinicCost('GERAL')}
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
+                    <Plus size={14} /> Novo
+                  </button>
+                </div>
+                <div style={{ padding: '10px 0' }}>
+                  <table className="data-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th>Gastos</th>
+                        <th style={{ textAlign: 'right', width: '90px' }}>Valor</th>
+                        <th style={{ width: '90px' }}>Pago por</th>
+                        <th style={{ width: '40px', textAlign: 'center' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {geralCosts.map(t => {
+                        const displayDesc = t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
+                        const payee = t.favorecido || '';
+                        return (
+                          <tr key={t.id}>
+                            <td>
+                              <input 
+                                type="text" 
+                                key={`${t.id}_desc_${displayDesc}`}
+                                defaultValue={displayDesc}
+                                onBlur={(e) => handleUpdateTransactionField(t.id, 'description', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '600', color: '#334155', outline: 'none' }}
+                              />
+                            </td>
+                            <td>
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                key={`${t.id}_amount_${t.amount}`}
+                                defaultValue={Number(t.amount).toFixed(2)}
+                                onBlur={(e) => handleUpdateTransactionField(t.id, 'amount', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#991b1b', textAlign: 'right', outline: 'none' }}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={payee}
+                                onChange={(e) => handleUpdateTransactionField(t.id, 'favorecido', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.75rem', fontWeight: '800', outline: 'none', color: payee ? (favColors[payee]?.text || '#334155') : '#334155', cursor: 'pointer' }}
+                              >
+                                <option value="">--</option>
+                                {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button onClick={() => handleRemoveFromClinicCosts(t.id)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', outline: 'none' }}>
+                                <Trash2 size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.85rem', color: '#1e293b' }}>
+                    <span>TOTAL GERAIS:</span>
+                    <span>R$ {totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Secretária Card */}
+              <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>Gastos Secretária</h3>
+                  <button 
+                    onClick={() => handleCreateClinicCost('SECRETARIA')}
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
+                    <Plus size={14} /> Novo
+                  </button>
+                </div>
+                <div style={{ padding: '10px 0' }}>
+                  <table className="data-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th>Gastos</th>
+                        <th style={{ textAlign: 'right', width: '90px' }}>Valor</th>
+                        <th style={{ width: '90px' }}>Pago por</th>
+                        <th style={{ width: '40px', textAlign: 'center' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {secretariaCosts.map(t => {
+                        const displayDesc = t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
+                        const payee = t.favorecido || '';
+                        return (
+                          <tr key={t.id}>
+                            <td>
+                              <input 
+                                type="text" 
+                                key={`${t.id}_desc_${displayDesc}`}
+                                defaultValue={displayDesc}
+                                onBlur={(e) => handleUpdateTransactionField(t.id, 'description', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '600', color: '#334155', outline: 'none' }}
+                              />
+                            </td>
+                            <td>
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                key={`${t.id}_amount_${t.amount}`}
+                                defaultValue={Number(t.amount).toFixed(2)}
+                                onBlur={(e) => handleUpdateTransactionField(t.id, 'amount', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#991b1b', textAlign: 'right', outline: 'none' }}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={payee}
+                                onChange={(e) => handleUpdateTransactionField(t.id, 'favorecido', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.75rem', fontWeight: '800', outline: 'none', color: payee ? (favColors[payee]?.text || '#334155') : '#334155', cursor: 'pointer' }}
+                              >
+                                <option value="">--</option>
+                                {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button onClick={() => handleRemoveFromClinicCosts(t.id)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', outline: 'none' }}>
+                                <Trash2 size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.85rem', color: '#1e293b' }}>
+                    <span>TOTAL SECRETÁRIA:</span>
+                    <span>R$ {totalSecretaria.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kinesis Card */}
+              <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>Gastos Kinesis</h3>
+                  <button 
+                    onClick={() => handleCreateClinicCost('KINESIS')}
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
+                    <Plus size={14} /> Novo
+                  </button>
+                </div>
+                <div style={{ padding: '10px 0' }}>
+                  <table className="data-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th>Gastos</th>
+                        <th style={{ textAlign: 'right', width: '90px' }}>Valor</th>
+                        <th style={{ width: '90px' }}>Pago por</th>
+                        <th style={{ width: '40px', textAlign: 'center' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kinesisCosts.map(t => {
+                        const displayDesc = t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
+                        const payee = t.favorecido || '';
+                        return (
+                          <tr key={t.id}>
+                            <td>
+                              <input 
+                                type="text" 
+                                key={`${t.id}_desc_${displayDesc}`}
+                                defaultValue={displayDesc}
+                                onBlur={(e) => handleUpdateTransactionField(t.id, 'description', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '600', color: '#334155', outline: 'none' }}
+                              />
+                            </td>
+                            <td>
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                key={`${t.id}_amount_${t.amount}`}
+                                defaultValue={Number(t.amount).toFixed(2)}
+                                onBlur={(e) => handleUpdateTransactionField(t.id, 'amount', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#991b1b', textAlign: 'right', outline: 'none' }}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={payee}
+                                onChange={(e) => handleUpdateTransactionField(t.id, 'favorecido', e.target.value)}
+                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.75rem', fontWeight: '800', outline: 'none', color: payee ? (favColors[payee]?.text || '#334155') : '#334155', cursor: 'pointer' }}
+                              >
+                                <option value="">--</option>
+                                {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button onClick={() => handleRemoveFromClinicCosts(t.id)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', outline: 'none' }}>
+                                <Trash2 size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.85rem', color: '#1e293b' }}>
+                    <span>TOTAL KINESIS:</span>
+                    <span>R$ {totalKinesis.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Bottom summary and extra fields */}
+            {/* Bottom summary and extra fields */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '25px' }}>
+              
+              {/* CPFL card */}
+              <div className="card" style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>CPFL por Sala</h3>
+                {renderExtraField("Sala 01", "CPFL Sala 01", "CPFL_SALA")}
+                {renderExtraField("Sala 02 (Pilates)", "CPFL Sala 02", "CPFL_SALA")}
+                {renderExtraField("Sala 03", "CPFL Sala 03", "CPFL_SALA")}
+                {renderExtraField("Sala 04", "CPFL Sala 04", "CPFL_SALA")}
+                {renderExtraField("Sala 05", "CPFL Sala 05", "CPFL_SALA")}
+                {renderExtraField("Sala 06", "CPFL Sala 06", "CPFL_SALA")}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.8rem', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '12px', color: '#1e293b' }}>
+                  <span>Total CPFL:</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>R$ {(cpflSum + cpflSala02).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              {/* Ganhos card */}
+              <div className="card" style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Ganhos Fisioterapia</h3>
+                {renderExtraField("Julia", "Julia", "PRO_EARNING")}
+                {renderExtraField("Gambá", "Gambá", "PRO_EARNING")}
+                {renderExtraField("Newton", "Newton", "PRO_EARNING")}
+                {renderExtraField("Cris", "Cris", "PRO_EARNING")}
+                {renderExtraField("João", "João", "PRO_EARNING")}
+                {renderExtraField("Ausência Nula", "Ausência Nula", "PRO_EARNING")}
+              </div>
+
+              {/* Parâmetros do Pilates card */}
+              <div className="card" style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Parâmetros do Pilates</h3>
+                {renderExtraField("Julia (Pilates)", "Julia (Pilates)", "PRO_EARNING")}
+                {renderExtraField("Paula (Pilates)", "Paula (Pilates)", "PRO_EARNING")}
+                {renderExtraField("Ausência Nula (P)", "Ausência Nula (Pilates)", "PRO_EARNING")}
+                {renderExtraField("Imposto (Pilates)", "Imposto (Pilates)", "PRO_EARNING")}
+              </div>
+
+              {/* Ajustes card */}
+              <div className="card" style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Ajustes Sócios & Fundo</h3>
+                {renderExtraField("Daniel Adic.", "Daniel Adicional", "PARTNER_ADJ")}
+                {renderExtraField("Stuart Adic.", "Stuart Adicional", "PARTNER_ADJ")}
+                {renderExtraField("Paula Adic.", "Paula Adicional", "PARTNER_ADJ")}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700', color: '#64748b', marginTop: '20px', borderTop: '1px dashed #cbd5e1', paddingTop: '10px' }}>
+                  <span>Fundo Kinesis:</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>R$ 1.000,00</span>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Resumo da Partilha e Rateio Final (Full Width Side-by-Side Breakdown) */}
+            <div className="card" style={{ 
+              padding: '24px', 
+              background: 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)', 
+              borderLeft: '5px solid var(--primary)',
+              marginBottom: '30px'
+            }}>
+              <h3 style={{ 
+                fontSize: '1.1rem', 
+                fontWeight: '900', 
+                color: 'var(--primary)', 
+                marginBottom: '20px', 
+                borderBottom: '1px solid var(--border-color)', 
+                paddingBottom: '12px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Split size={20} />
+                  <span>Resumo da Partilha e Rateio Final</span>
+                </div>
+                <button 
+                  onClick={handleSyncSpreadsheet}
+                  disabled={syncing}
+                  title="Sincronizar com planilhas Excel"
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--primary)', outline: 'none' }}
+                >
+                  <RefreshCw className={syncing ? "animate-spin" : ""} size={16} />
+                </button>
+              </h3>
+
+              {/* Side-by-side Columns */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: '1fr 1fr', 
+                gap: '24px', 
+                marginBottom: '24px'
+              }}>
+                
+                {/* Fisioterapia Section */}
+                <div style={{ 
+                  backgroundColor: '#ffffff', 
+                  padding: '20px', 
+                  borderRadius: '12px', 
+                  border: '1.5px solid #cbd5e1',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#0f172a', marginBottom: '12px', borderBottom: '1.5px solid #f1f5f9', paddingBottom: '6px' }}>
+                    Divisão Fisioterapia (40/40/20)
+                  </h4>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.75rem', fontWeight: '600', color: '#475569' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Gerais (83%):</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {(totalGeral * 0.83).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Secretária (66.6%):</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {(totalSecretaria * 0.666).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Kinesis (50%):</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {(totalKinesis * 0.5).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>CPFL Salas (1,3,4,5,6):</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {cpflSum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Fundo Kinesis:</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {fundoVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '6px', fontWeight: '800', color: '#0f172a' }}>
+                      <span>Custos Compartilhados:</span>
+                      <span style={{ color: '#b91c1c', whiteSpace: 'nowrap' }}>- R$ {totalShared.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
+                      <span>Faturamento Arrecadado:</span>
+                      <span style={{ color: '#15803d', whiteSpace: 'nowrap' }}>+ R$ {totalArrecadado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px double #cbd5e1', paddingTop: '6px', fontWeight: '900', color: '#0f172a', fontSize: '0.8rem' }}>
+                      <span>LUCRO LÍQUIDO FISIOTERAPIA:</span>
+                      <span style={{ color: saldoFinal >= 0 ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                        R$ {saldoFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pilates Section */}
+                <div style={{ 
+                  backgroundColor: '#ffffff', 
+                  padding: '20px', 
+                  borderRadius: '12px', 
+                  border: '1.5px solid #cbd5e1',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#0f172a', marginBottom: '12px', borderBottom: '1.5px solid #f1f5f9', paddingBottom: '6px' }}>
+                    Divisão Pilates (1/3 cada)
+                  </h4>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.75rem', fontWeight: '600', color: '#475569' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Gerais (17%):</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {(totalGeral * 0.17).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Secretária (33.3%):</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {(totalSecretaria * 0.333).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Kinesis (50%):</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {(totalKinesis * 0.5).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>CPFL Sala 02:</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>R$ {cpflSala02.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '6px', fontWeight: '800', color: '#0f172a' }}>
+                      <span>Custos Operacionais:</span>
+                      <span style={{ color: '#b91c1c', whiteSpace: 'nowrap' }}>- R$ {custosPilates.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
+                      <span>Repasses Profissionais (Julia + Paula):</span>
+                      <span style={{ color: '#b91c1c', whiteSpace: 'nowrap' }}>- R$ {(juliaPilates + paulaPilates).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
+                      <span>Imposto Pilates:</span>
+                      <span style={{ color: '#b91c1c', whiteSpace: 'nowrap' }}>- R$ {impostoPilates.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
+                      <span>Faturamento Pilates Arrecadado:</span>
+                      <span style={{ color: '#15803d', whiteSpace: 'nowrap' }}>+ R$ {arrecadadoPilates.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px double #cbd5e1', paddingTop: '6px', fontWeight: '900', color: '#0f172a', fontSize: '0.8rem' }}>
+                      <span>LUCRO LÍQUIDO PILATES:</span>
+                      <span style={{ color: saldoFinalPilates >= 0 ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                        R$ {saldoFinalPilates.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Socio Distribution Block */}
+              <div style={{ 
+                backgroundColor: '#ffffff', 
+                padding: '20px 24px', 
+                borderRadius: '12px', 
+                border: '1.5px solid #bfdbfe' 
+              }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: '900', color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <TrendingUp size={18} color="var(--primary)" />
+                  <span>Distribuição Consolidada de Sócios</span>
+                </h4>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+                  
+                  <div style={{ borderLeft: '4px solid #16a34a', paddingLeft: '14px' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Daniel</span>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '950', color: danielShare >= 0 ? '#166534' : '#991b1b', marginTop: '4px', whiteSpace: 'nowrap' }}>
+                      R$ {danielShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} - Cris: R$ {crisEarning.toFixed(2)} {danielAdj !== 0 && `+ Adj: R$ ${danielAdj.toFixed(2)}`}
+                    </div>
+                  </div>
+
+                  <div style={{ borderLeft: '4px solid #3b82f6', paddingLeft: '14px' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Stuart</span>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '950', color: stuartShare >= 0 ? '#1d4ed8' : '#991b1b', marginTop: '4px', whiteSpace: 'nowrap' }}>
+                      R$ {stuartShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {stuartAdj !== 0 && `+ Adj: R$ ${stuartAdj.toFixed(2)}`}
+                    </div>
+                  </div>
+
+                  <div style={{ borderLeft: '4px solid #ec4899', paddingLeft: '14px' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Paula</span>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '950', color: paulaShare >= 0 ? '#be185d' : '#991b1b', marginTop: '4px', whiteSpace: 'nowrap' }}>
+                      R$ {paulaShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                      Fisio (20%): R$ {(saldoFinal * 0.2).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {paulaAdj !== 0 && `+ Adj: R$ ${paulaAdj.toFixed(2)}`}
+                    </div>
+                  </div>
+
+                </div>
+
+                <button 
+                  onClick={handleSyncSpreadsheet}
+                  disabled={syncing}
+                  className="btn btn-primary"
+                  style={{ width: '100%', marginTop: '20px', fontSize: '0.85rem', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}
+                >
+                  {syncing ? <Loader2 className="animate-spin" size={16} /> : <FileSpreadsheet size={16} />}
+                  Sincronizar Planilha
+                </button>
+              </div>
+            </div>
+
+          </div>
+        );
+      })()}
+
+      {/* Modal de Lançamento Manual */}
+      {showManualModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.4)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            width: '100%',
+            maxWidth: '520px',
+            padding: '24px',
+            border: '1px solid #e2e8f0',
+            position: 'relative'
+          }}>
+            <button 
+              onClick={() => setShowManualModal(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#64748b',
+                padding: '4px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <X size={18} />
+            </button>
+
+            <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Plus size={20} color="var(--primary)" /> Novo Lançamento Manual
+            </h3>
+
+            <form onSubmit={handleSaveManualTransaction} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>Data *</label>
+                  <input 
+                    type="date" 
+                    value={manualDate} 
+                    onChange={(e) => setManualDate(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>Tipo *</label>
+                  <select 
+                    value={manualType} 
+                    onChange={(e) => {
+                      setManualType(e.target.value);
+                      setManualCategory(e.target.value === "INCOME" ? "Recebimento" : "Despesa");
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: '800', outline: 'none', background: 'white' }}
+                  >
+                    <option value="INCOME">Entrada (Crédito)</option>
+                    <option value="EXPENSE">Saída (Débito)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>Descrição / Cliente *</label>
+                <input 
+                  type="text" 
+                  placeholder="Nome do cliente ou finalidade do lançamento"
+                  value={manualDescription} 
+                  onChange={(e) => setManualDescription(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: '600', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>Valor (R$) *</label>
+                  <input 
+                    type="text" 
+                    placeholder="0,00"
+                    value={manualAmount} 
+                    onChange={(e) => setManualAmount(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: '800', outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>Responsável (Favorecido)</label>
+                  <select 
+                    value={manualFavorecido} 
+                    onChange={(e) => setManualFavorecido(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: '800', outline: 'none', background: 'white' }}
+                  >
+                    <option value="">-- Sem Favorecido --</option>
+                    {allowedFavorecidos.map(fav => (
+                      <option key={fav} value={fav}>{fav}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>Categoria</label>
+                  <input 
+                    type="text" 
+                    value={manualCategory} 
+                    onChange={(e) => setManualCategory(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>Banco</label>
+                  <input 
+                    type="text" 
+                    value={manualBank} 
+                    onChange={(e) => setManualBank(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontWeight: '600', outline: 'none' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowManualModal(false)}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: 'white',
+                    color: '#475569',
+                    fontSize: '0.85rem',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  style={{
+                    padding: '10px 24px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'var(--primary)',
+                    color: 'white',
+                    fontSize: '0.85rem',
+                    fontWeight: '800',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Gravar Lançamento
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

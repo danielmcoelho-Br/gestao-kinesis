@@ -1,7 +1,7 @@
 import { getSession } from "@/gestao/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Activity, LayoutDashboard, LogOut, Heart, Send } from "lucide-react";
+import { Activity, LayoutDashboard, LogOut, Shield } from "lucide-react";
 
 export default async function HubPage() {
   const session = await getSession();
@@ -11,9 +11,11 @@ export default async function HubPage() {
   }
 
   // Se for fisioterapeuta, vai direto para o KinesisLab (Módulo Clínico)
-  if (session.role === "FISIOTERAPEUTA") {
+  if (String(session.role || '').toUpperCase() === "FISIOTERAPEUTA") {
     redirect("/dashboard");
   }
+
+  const isAdmin = ['ADMIN', 'ADMINISTRADOR', 'ADMINISTRATOR'].includes(String(session.role || '').toUpperCase());
 
   // Admins e Secretárias veem a tela de Hub
   return (
@@ -31,7 +33,7 @@ export default async function HubPage() {
           </form>
         </div>
         
-        <div className="p-10 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        <div className={`p-10 grid grid-cols-1 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 max-w-5xl mx-auto`}>
           {/* Card Módulo Clínico (KinesisLab) */}
           <Link href="/dashboard" className="group block h-full">
             <div className="border-2 border-slate-100 rounded-xl p-8 h-full flex flex-col items-center justify-center transition-all duration-300 hover:border-blue-500 hover:shadow-lg hover:-translate-y-1 bg-white cursor-pointer relative overflow-hidden">
@@ -59,6 +61,22 @@ export default async function HubPage() {
               </p>
             </div>
           </Link>
+
+          {/* Card Módulo Administrativo */}
+          {isAdmin && (
+            <Link href="/admin" className="group block h-full">
+              <div className="border-2 border-slate-100 rounded-xl p-8 h-full flex flex-col items-center justify-center transition-all duration-300 hover:border-violet-600 hover:shadow-lg hover:-translate-y-1 bg-white cursor-pointer relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-violet-600 transform origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                <div className="w-20 h-20 rounded-full bg-violet-50 flex items-center justify-center mb-6 group-hover:bg-violet-100 transition-colors">
+                  <Shield size={40} className="text-violet-700" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-3">Módulo Adm</h2>
+                <p className="text-slate-500 text-center leading-relaxed">
+                  Gerenciamento de usuários, controle de permissões de acesso e comissões dos profissionais.
+                </p>
+              </div>
+            </Link>
+          )}
         </div>
         
         <div className="bg-slate-50 p-4 text-center border-t border-slate-100">

@@ -334,7 +334,7 @@ export default function AssessmentsAdminPage() {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)', padding: '1rem', borderRadius: '0.75rem', backgroundColor: '#F9FAFB' }}>
                                         {((formData.structure as any).sections || []).length === 0 && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Nenhuma seção adicionada.</p>}
                                         {((formData.structure as any).sections || []).map((section: any, sIdx: number) => (
-                                            <div key={section.id} style={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
+                                            <div key={`${section.id}_${sIdx}`} style={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
                                                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                                                     <input 
                                                         type="text" 

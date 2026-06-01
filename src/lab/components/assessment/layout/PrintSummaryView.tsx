@@ -226,7 +226,7 @@ export default function PrintSummaryView({
                     const anamneseField = section.fields?.find((f: any) => typeof f !== 'string' && (f.id === 'anamnese' || f.id.startsWith('anamnese_') || f.id === 'queixa'));
                     
                     return (
-                        <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', marginBottom: '1.5rem' }}>
+                        <div key={`${section.id}_${idx}`} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', marginBottom: '1.5rem' }}>
                             {/* Top Row (100% width): Anamnese */}
                             <div style={{ padding: '1rem', backgroundColor: 'white', borderRadius: '0.75rem', border: '1px solid #e2e8f0', width: '100%' }}>
                                 <h3 style={{ fontSize: '1rem', fontWeight: '900', marginBottom: '0.75rem', color: '#8b0000', textTransform: 'uppercase' }}>Histórico Clínico</h3>
@@ -267,7 +267,7 @@ export default function PrintSummaryView({
                 // 2. PAIR GROUP RENDERER (Clean 2-column layout for subsequent tables)
                 if (section.isPairGroup) {
                     return (
-                        <div key={section.id} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
+                        <div key={`${section.id}_${idx}`} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
                             <div style={{ width: '48%' }}>
                                 <FormSection section={section} isPrint={true} halfWidth={true} />
                             </div>
@@ -279,7 +279,7 @@ export default function PrintSummaryView({
                 }
 
                 return (
-                    <div key={(item as Section).id} style={{ marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
+                    <div key={`${(item as Section).id}_${idx}`} style={{ marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
                         <FormSection section={item as Section} isPrint={true} />
                     </div>
                 );
