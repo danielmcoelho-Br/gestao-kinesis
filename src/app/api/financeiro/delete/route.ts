@@ -10,6 +10,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ID da transação não fornecido.' }, { status: 400 });
     }
 
+    const tx = await prisma.transaction.findUnique({
+      where: { id: transactionId }
+    });
+
+    if (tx?.category === 'PRO_EARNING') {
+      await prisma.transaction.update({
+        where: { id: transactionId },
+        data: { ownerId: 'DELETED', amount: 0 }
+      });
+      return NextResponse.json({ success: true, message: 'Transação ocultada com sucesso.' });
+    }
+
     await prisma.transaction.delete({
       where: { id: transactionId }
     });

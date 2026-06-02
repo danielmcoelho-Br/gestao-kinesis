@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
-import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet, Split, Plus, X, Trash2, RefreshCw, Undo2, Redo2 } from "lucide-react";
+import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet, Split, Plus, X, Trash2, RefreshCw, Undo2, Redo2, Unlink, FileText, Sparkles, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -65,6 +65,51 @@ const getFriendlyDescription = (description: string) => {
   return description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
 };
 
+interface ExcelItem {
+  key: string;
+  label: string;
+  block: 'geral' | 'secretaria' | 'kinesis' | 'cpfl_sala_01' | 'cpfl_sala_02' | 'cpfl_sala_03' | 'cpfl_sala_04' | 'cpfl_sala_05' | 'cpfl_sala_06' | 'fundo' | 'imposto';
+  keywords: string[];
+}
+
+const EXCEL_ITEMS: ExcelItem[] = [
+  // Geral (Block A-C)
+  { key: 'aluguel', label: 'Aluguel + IPTU', block: 'geral', keywords: ['IMOBILIARIA', 'FORTES GUIMARAES', 'ALUGUEL'] },
+  { key: 'cpfl_adm', label: 'CPFL ADM', block: 'geral', keywords: ['CPFL'] },
+  { key: 'guarda', label: 'Guarda', block: 'geral', keywords: ['SILVANA RIBEIRO', 'GUARDA'] },
+  { key: 'claro', label: 'Claro', block: 'geral', keywords: ['CLARO'] },
+  { key: 'darf_aluguel', label: 'DARF Aluguel', block: 'geral', keywords: ['DARF ALUGUEL'] },
+  { key: 'saerp', label: 'SAERP', block: 'geral', keywords: ['SAERP', 'AGUA'] },
+  { key: 'setron', label: 'Setron', block: 'geral', keywords: ['SETRON', 'CENTRO ELETRONICO'] },
+  { key: 'cafe', label: 'Café', block: 'geral', keywords: ['CAFE', 'BONCAFE'] },
+  { key: 'nina', label: 'Nina', block: 'geral', keywords: ['ALICE MARTINS', 'NINA'] },
+  { key: 'marketing', label: 'Marketing', block: 'geral', keywords: ['MARKETING'] },
+  { key: 'ar_cond', label: 'ar condicionado', block: 'geral', keywords: ['BRUNO REIS', 'AR COND'] },
+  { key: 'imposto', label: 'Imposto', block: 'geral', keywords: ['SIMPLES NACIONAL', 'DARF SIMPLES'] },
+  
+  // Secretária (Block E-G)
+  { key: 'leticia', label: 'Leticia ', block: 'secretaria', keywords: ['LETICIA'] },
+  { key: 'sindicato', label: 'Sindicato', block: 'secretaria', keywords: ['SINDICATO', 'SIND EMPREG'] },
+  { key: 'fgts', label: 'FGTS', block: 'secretaria', keywords: ['FGTS'] },
+  
+  // Kinesis (Block I-K)
+  { key: 'contador', label: 'Contador', block: 'kinesis', keywords: ['LBRK', 'CONTADOR', 'CONTABILIDADE'] },
+  { key: 'sistema', label: 'Sistema', block: 'kinesis', keywords: ['ARTEMIDAS', 'SISTEMA'] },
+  { key: 'taxa_banco', label: 'Taxa Banco', block: 'kinesis', keywords: ['TARIFA', 'CESTA', 'PACOTE', 'TAR. AGRUPADAS'] },
+  { key: 'darf_pro_labore', label: 'DARF Pró Labore', block: 'kinesis', keywords: ['DARF PRO LABORE'] },
+  { key: 'pix_adm', label: 'PIX', block: 'kinesis', keywords: ['PIX'] },
+  { key: 'certificado_dig', label: 'Certificado Dig', block: 'kinesis', keywords: ['CERTIFICADO DIG'] },
+  
+  // Específicos Fisio/Pilates (Block M-N / Q-R)
+  { key: 'cpfl_sala_01', label: 'CPFL sala 01', block: 'cpfl_sala_01', keywords: ['SALA 01', 'SALA1'] },
+  { key: 'cpfl_sala_02', label: 'CPFL sala 02', block: 'cpfl_sala_02', keywords: ['SALA 02', 'SALA2'] },
+  { key: 'cpfl_sala_03', label: 'CPFL sala 03', block: 'cpfl_sala_03', keywords: ['SALA 03', 'SALA3'] },
+  { key: 'cpfl_sala_04', label: 'CPFL sala 04', block: 'cpfl_sala_04', keywords: ['SALA 04', 'SALA4'] },
+  { key: 'cpfl_sala_05', label: 'CPFL sala 05', block: 'cpfl_sala_05', keywords: ['SALA 05', 'SALA5'] },
+  { key: 'cpfl_sala_06', label: 'CPFL sala 06', block: 'cpfl_sala_06', keywords: ['SALA 06', 'SALA6'] },
+  { key: 'fundo', label: 'Fundo', block: 'fundo', keywords: ['FUNDO'] }
+];
+
 export default function FinanceiroPageContent() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -83,6 +128,8 @@ export default function FinanceiroPageContent() {
   // Search Filter state for Description column
   const [descriptionFilter, setDescriptionFilter] = useState("");
 
+
+
   // Manual Transaction Modal State
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualDate, setManualDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -93,23 +140,32 @@ export default function FinanceiroPageContent() {
   const [manualCategory, setManualCategory] = useState("Recebimento");
   const [manualBank, setManualBank] = useState("Banco do Brasil");
 
-  const loadTransactions = () => {
+  const activeTransactions = activeTab === 'fluxo' 
+    ? transactions.filter((t: any) => t.bank !== 'MANUAL_CLINICA')
+    : transactions.map((t: any) => ({
+      ...t,
+      description: t.clinicDesc ?? t.description,
+      amount: t.clinicAmount ?? t.amount,
+      category: t.clinicCat ?? t.category
+    }));
+
+  const loadTransactions = (showLoading = false) => {
     if (!initialized) return;
-    setLoading(true);
-    fetch(`/api/financeiro?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}`)
+    if (showLoading && transactions.length === 0) setLoading(true);
+    fetch(`/api/financeiro?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}&_t=${Date.now()}`, { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         setTransactions(Array.isArray(data) ? data : []);
-        setLoading(false);
+        if (showLoading) setLoading(false);
       })
       .catch(() => {
         setTransactions([]);
-        setLoading(false);
+        if (showLoading) setLoading(false);
       });
   };
 
   useEffect(() => {
-    loadTransactions();
+    loadTransactions(true);
   }, [startMonth, startYear, endMonth, endYear, initialized]);
 
   useEffect(() => {
@@ -134,7 +190,7 @@ export default function FinanceiroPageContent() {
 
   const handleDeleteTransaction = async (id: string) => {
     if (!confirm("Deseja realmente excluir este lançamento?")) return;
-    const target = transactions.find(t => t.id === id);
+    const target = activeTransactions.find(t => t.id === id);
     if (!target) return;
 
     const toastId = toast.loading("Excluindo lançamento...");
@@ -174,7 +230,7 @@ export default function FinanceiroPageContent() {
 
   const handleRemoveFromClinicCosts = async (id: string) => {
     if (!confirm("Deseja realmente remover esta despesa dos Custos da Clínica? Ela continuará registrada no Fluxo de Caixa.")) return;
-    const target = transactions.find(t => t.id === id);
+    const target = activeTransactions.find(t => t.id === id);
     if (!target) return;
     const oldCategory = target.category;
 
@@ -183,7 +239,7 @@ export default function FinanceiroPageContent() {
       const res = await fetch('/api/financeiro/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: id, category: 'OUTROS' })
+        body: JSON.stringify({ transactionId: id, category: 'OUTROS', isClinicEdit: true })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao remover.");
@@ -444,9 +500,29 @@ export default function FinanceiroPageContent() {
     }
   };
 
-  const handleUpdateTransactionField = async (id: string, field: string, value: any) => {
+  const handleToggleAllChecks = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.checked;
+    const ids = sortedBankTransactions.map((t: any) => t.id);
+    
+    // Optimistic
+    setTransactions(prev => prev.map(t => ids.includes(t.id) ? { ...t, isChecked: newValue } : t));
+    
+    try {
+      const res = await fetch('/api/financeiro/bulk-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionIds: ids, isChecked: newValue })
+      });
+      if (!res.ok) throw new Error();
+    } catch (err) {
+      toast.error("Erro ao atualizar checks em massa. Recarregando...");
+      loadTransactions(false);
+    }
+  };
+
+  const handleUpdateTransactionField = async (id: string, field: string, value: string | boolean) => {
     clientLog("handleUpdateTransactionField called: " + id + ", field: " + field + ", val: " + value);
-    const target = transactions.find(t => t.id === id);
+    const target = activeTransactions.find(t => t.id === id);
     if (!target) return;
     
     // Parse value for type safety and format checks
@@ -469,17 +545,27 @@ export default function FinanceiroPageContent() {
     // Optimistic local update
     setTransactions(prev => prev.map(t => {
       if (t.id === id) {
-        if (field === 'amount') return { ...t, amount: parsedValue };
-        if (field === 'description') return { ...t, description: parsedValue };
-        if (field === 'favorecido') return { ...t, favorecido: parsedValue };
-        if (field === 'category') return { ...t, category: parsedValue };
+        if (field === 'isChecked') return { ...t, isChecked: parsedValue };
+        
+        if (activeTab === 'custos') {
+          if (field === 'amount') return { ...t, clinicAmount: parsedValue };
+          if (field === 'description') return { ...t, clinicDesc: parsedValue };
+          if (field === 'category') return { ...t, clinicCat: parsedValue };
+          if (field === 'favorecido') return { ...t, favorecido: parsedValue };
+        } else {
+          if (field === 'amount') return { ...t, amount: parsedValue };
+          if (field === 'description') return { ...t, description: parsedValue };
+          if (field === 'favorecido') return { ...t, favorecido: parsedValue };
+          if (field === 'category') return { ...t, category: parsedValue };
+        }
       }
       return t;
     }));
 
     try {
-      const body: any = { transactionId: id };
+      const body: any = { transactionId: id, isClinicEdit: activeTab === 'custos' };
       body[field] = parsedValue;
+      if (field === 'isChecked') body.isChecked = parsedValue;
       const res = await fetch('/api/financeiro/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -488,7 +574,7 @@ export default function FinanceiroPageContent() {
       if (!res.ok) throw new Error();
     } catch (err) {
       toast.error("Erro ao atualizar campo. Recarregando...");
-      loadTransactions();
+      loadTransactions(false);
     }
   };
 
@@ -534,7 +620,7 @@ export default function FinanceiroPageContent() {
       }
 
       toast.success("Novo custo criado com sucesso!", { id: toastId });
-      loadTransactions();
+      loadTransactions(false);
     } catch (err: any) {
       toast.error(err.message || "Erro ao adicionar custo.", { id: toastId });
     }
@@ -554,7 +640,7 @@ export default function FinanceiroPageContent() {
           if (!res.ok) throw new Error();
           
           // Track deletion in history
-          const target = transactions.find(t => t.id === existingId);
+          const target = activeTransactions.find(t => t.id === existingId);
           const oldValue = target ? target.amount : 0;
           historyStackRef.current = [...historyStackRef.current, { 
             type: 'DELETE', 
@@ -575,7 +661,7 @@ export default function FinanceiroPageContent() {
           toast.error("Erro ao remover.", { id: toastId });
         }
       } else {
-        const target = transactions.find(t => t.id === existingId);
+        const target = activeTransactions.find(t => t.id === existingId);
         const oldValue = target ? target.amount : 0;
         if (oldValue !== value) {
           historyStackRef.current = [...historyStackRef.current, { transactionId: existingId, field: 'amount', oldValue, newValue: value }];
@@ -590,11 +676,11 @@ export default function FinanceiroPageContent() {
           const res = await fetch('/api/financeiro/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transactionId: existingId, amount: value })
+            body: JSON.stringify({ transactionId: existingId, amount: value, isClinicEdit: true })
           });
           if (!res.ok) throw new Error();
           toast.success("Valor atualizado.", { id: toastId });
-          loadTransactions();
+          loadTransactions(false);
         } catch (err) {
           toast.error("Erro ao atualizar.", { id: toastId });
         }
@@ -638,7 +724,7 @@ export default function FinanceiroPageContent() {
         }
 
         toast.success("Valor gravado.", { id: toastId });
-        loadTransactions();
+        loadTransactions(false);
       } catch (err) {
         toast.error("Erro ao gravar.", { id: toastId });
       }
@@ -669,7 +755,7 @@ export default function FinanceiroPageContent() {
   };
 
   const handleSplitSingleTransaction = async (id: string) => {
-    const target = transactions.find(t => t.id === id);
+    const target = activeTransactions.find(t => t.id === id);
     if (!target) return;
 
     const totalAmount = target.amount;
@@ -706,7 +792,7 @@ export default function FinanceiroPageContent() {
       if (!res.ok) throw new Error(data.error || "Erro ao dividir.");
       
       toast.success("Lançamento dividido com sucesso!", { id: toastId });
-      loadTransactions();
+      loadTransactions(false);
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Falha ao dividir transação.", { id: toastId });
@@ -768,7 +854,7 @@ export default function FinanceiroPageContent() {
         setRedoStack([]);
       }
 
-      toast.success("Lançamento manual criado com sucesso!", { id: toastId });
+      toast.success("Lançamento salvo com sucesso!", { id: toastId });
       setShowManualModal(false);
       
       // Clear form
@@ -777,7 +863,7 @@ export default function FinanceiroPageContent() {
       setManualFavorecido("");
       setManualCategory(manualType === "INCOME" ? "Recebimento" : "Despesa");
 
-      loadTransactions();
+      loadTransactions(false);
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Falha ao criar lançamento manual.", { id: toastId });
@@ -805,10 +891,41 @@ export default function FinanceiroPageContent() {
     }
   };
 
-  const bankTransactions = transactions.filter((t: any) => {
-    const cat = (t.category || '').toUpperCase();
-    return !['PRO_EARNING', 'PARTNER_ADJ', 'CPFL_SALA'].includes(cat);
+  const bankTransactions = activeTransactions.filter((t: any) => {
+    // Exibir TODAS as transações no painel de Custos para não esconder nada indevidamente
+    return true;
   });
+
+  const sortedBankTransactions = useMemo(() => {
+    const filtered = bankTransactions.filter((t: any) => {
+      const desc = (t.description || '').toLowerCase();
+      return desc.includes(descriptionFilter.toLowerCase());
+    });
+    const sorted = [...filtered];
+    const order = sortOrder === 'desc' ? -1 : 1;
+    sorted.sort((a, b) => {
+      let valA: any = a[sortBy] || '';
+      let valB: any = b[sortBy] || '';
+
+      if (sortBy === 'amount') {
+        const amtA = a.type === 'INCOME' ? a.amount : -a.amount;
+        const amtB = b.type === 'INCOME' ? b.amount : -b.amount;
+        return (amtA - amtB) * order;
+      }
+
+      if (typeof valA === 'string') {
+        valA = valA.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      }
+      if (typeof valB === 'string') {
+        valB = valB.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      }
+
+      if (valA < valB) return -1 * order;
+      if (valA > valB) return 1 * order;
+      return 0;
+    });
+    return sorted;
+  }, [bankTransactions, descriptionFilter, sortBy, sortOrder]);
 
   const totalIncome = bankTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
   const totalExpense = bankTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
@@ -1134,12 +1251,19 @@ export default function FinanceiroPageContent() {
                     </div>
                   </th>
                   <th 
-                    onClick={() => handleSort('favorecido')}
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    title="Ordenar por Favorecido"
+                    style={{ padding: '16px 20px', color: '#64748b', fontSize: '0.75rem', fontWeight: '800', borderBottom: '2px solid #f1f5f9' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      Favorecido {sortBy === 'favorecido' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={sortedBankTransactions.length > 0 && sortedBankTransactions.every((t: any) => t.isChecked)} 
+                        onChange={handleToggleAllChecks}
+                        title="Marcar/Desmarcar todos desta página"
+                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary)', flexShrink: 0 }} 
+                      />
+                      <div onClick={() => handleSort('favorecido')} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                        Favorecido {sortBy === 'favorecido' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕'}
+                      </div>
                     </div>
                   </th>
                   <th>Banco</th>
@@ -1156,37 +1280,8 @@ export default function FinanceiroPageContent() {
                 </tr>
               </thead>
               <tbody>
-                {(() => {
-                  const filtered = bankTransactions.filter((t: any) => {
-                    const desc = (t.description || '').toLowerCase();
-                    return desc.includes(descriptionFilter.toLowerCase());
-                  });
-                  const sorted = [...filtered];
-                  const order = sortOrder === 'desc' ? -1 : 1;
-                  sorted.sort((a, b) => {
-                    let valA: any = a[sortBy] || '';
-                    let valB: any = b[sortBy] || '';
-
-                    if (sortBy === 'amount') {
-                      const amtA = a.type === 'INCOME' ? a.amount : -a.amount;
-                      const amtB = b.type === 'INCOME' ? b.amount : -b.amount;
-                      return (amtA - amtB) * order;
-                    }
-
-                    if (typeof valA === 'string') {
-                      valA = valA.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    }
-                    if (typeof valB === 'string') {
-                      valB = valB.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    }
-
-                    if (valA < valB) return -1 * order;
-                    if (valA > valB) return 1 * order;
-                    return 0;
-                  });
-
-                  return sorted.map((t: any) => {
-                    const favorecido = (t.favorecido || '').toUpperCase();
+                {sortedBankTransactions.map((t: any) => {
+                  const favorecido = (t.favorecido || '').toUpperCase();
                     const friendlyDesc = getFriendlyDescription(t.description);
 
                     return (
@@ -1194,29 +1289,38 @@ export default function FinanceiroPageContent() {
                         <td style={{ fontWeight: '600' }}>{new Date(t.date).toLocaleDateString('pt-BR')}</td>
                         <td>{friendlyDesc}</td>
                         <td>
-                          <select
-                            value={favorecido}
-                            onChange={(e) => handleUpdateSingleFavorecido(t.id, e.target.value)}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: '6px',
-                              border: `1px solid ${favorecido ? (favColors[favorecido]?.border || '#cbd5e1') : '#cbd5e1'}`,
-                              fontWeight: '800',
-                              fontSize: '0.75rem',
-                              background: favorecido ? (favColors[favorecido]?.bg || '#ffffff') : '#ffffff',
-                              color: favorecido ? (favColors[favorecido]?.text || '#475569') : '#475569',
-                              cursor: 'pointer',
-                              outline: 'none',
-                              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-                            }}
-                          >
-                            <option value="" style={{ background: '#ffffff', color: '#94a3b8' }}>-- Sem Favorecido --</option>
-                            {allowedFavorecidos.map(fav => (
-                              <option key={fav} value={fav} style={{ background: '#ffffff', color: favColors[fav]?.text || '#000000', fontWeight: '700' }}>
-                                {fav}
-                              </option>
-                            ))}
-                          </select>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={!!t.isChecked} 
+                              onChange={(e) => handleUpdateTransactionField(t.id, 'isChecked', e.target.checked)}
+                              title="Marcar como conferido"
+                              style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary)', flexShrink: 0 }} 
+                            />
+                            <select
+                              value={favorecido}
+                              onChange={(e) => handleUpdateSingleFavorecido(t.id, e.target.value)}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                border: `1px solid ${favorecido ? (favColors[favorecido]?.border || '#cbd5e1') : '#cbd5e1'}`,
+                                fontWeight: '800',
+                                fontSize: '0.75rem',
+                                background: favorecido ? (favColors[favorecido]?.bg || '#ffffff') : '#ffffff',
+                                color: favorecido ? (favColors[favorecido]?.text || '#475569') : '#475569',
+                                cursor: 'pointer',
+                                outline: 'none',
+                                flex: 1
+                              }}
+                            >
+                              <option value="" style={{ background: '#ffffff', color: '#94a3b8' }}>-- Sem Favorecido --</option>
+                              {allowedFavorecidos.map(fav => (
+                                <option key={fav} value={fav} style={{ background: '#ffffff', color: favColors[fav]?.text || '#000000', fontWeight: '700' }}>
+                                  {fav}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </td>
                         <td>{t.bank}</td>
                         <td style={{ 
@@ -1291,11 +1395,10 @@ export default function FinanceiroPageContent() {
                         </td>
                       </tr>
                     );
-                  });
-                })()}
+                })}
               </tbody>
             </table>
-            {transactions.length === 0 && (
+            {activeTransactions.length === 0 && (
               <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
                 Nenhuma transação encontrada para este período.
               </div>
@@ -1304,16 +1407,16 @@ export default function FinanceiroPageContent() {
         </div>
       ) : (() => {
         // Clinic Costs Filter and Sum Calculations
-        const geralCosts = transactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'GERAL');
-        const secretariaCosts = transactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'SECRETARIA');
-        const kinesisCosts = transactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'KINESIS');
+        const geralCosts = activeTransactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'GERAL');
+        const secretariaCosts = activeTransactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'SECRETARIA');
+        const kinesisCosts = activeTransactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'KINESIS');
 
         const totalGeral = geralCosts.reduce((acc, t) => acc + t.amount, 0);
         const totalSecretaria = secretariaCosts.reduce((acc, t) => acc + t.amount, 0);
         const totalKinesis = kinesisCosts.reduce((acc, t) => acc + t.amount, 0);
 
         const getExtraVal = (desc: string, cat: string) => {
-          const found = transactions.find(t => 
+          const found = activeTransactions.find(t => 
             t.category.toUpperCase() === cat.toUpperCase() && 
             (
               t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
@@ -1324,7 +1427,7 @@ export default function FinanceiroPageContent() {
         };
 
         const getExtraValWithSign = (desc: string, cat: string) => {
-          const found = transactions.find(t => 
+          const found = activeTransactions.find(t => 
             t.category.toUpperCase() === cat.toUpperCase() && 
             (
               t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
@@ -1336,7 +1439,7 @@ export default function FinanceiroPageContent() {
         };
 
         const getExtraId = (desc: string, cat: string) => {
-          const found = transactions.find(t => 
+          const found = activeTransactions.find(t => 
             t.category.toUpperCase() === cat.toUpperCase() && 
             (
               t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
@@ -1354,7 +1457,22 @@ export default function FinanceiroPageContent() {
         const cpflSala06 = getExtraVal("CPFL Sala 06", "CPFL_SALA");
         const cpflSum = cpflSala01 + cpflSala03 + cpflSala04 + cpflSala05 + cpflSala06;
 
-        const fundoVal = 1000;
+        // Paid by partners directly (reimbursements)
+        const getPartnerPaidExpenses = (partnerName: string) => {
+          return activeTransactions.filter(t => 
+            t.type === 'EXPENSE' && 
+            t.favorecido?.toUpperCase() === partnerName && 
+            ['GERAL', 'SECRETARIA', 'KINESIS', 'CPFL_SALA'].includes(t.category?.toUpperCase() || '')
+          ).reduce((acc, t) => acc + t.amount, 0);
+        };
+
+        const danielPaid = getPartnerPaidExpenses("DANIEL");
+        const stuartPaid = getPartnerPaidExpenses("STUART");
+        const paulaPaid = getPartnerPaidExpenses("PAULA");
+
+        // Fundo Kinesis
+        const fundoValItem = activeTransactions.find(t => t.category === 'PARTNER_ADJ' && t.description === 'Aporte Fundo Kinesis');
+        const fundoVal = fundoValItem ? fundoValItem.amount : 1000;
         
         // Fisioterapia calculations
         const totalShared = (totalGeral * 0.83) + (totalSecretaria * 0.666) + (totalKinesis * 0.5) + cpflSum + fundoVal;
@@ -1384,9 +1502,9 @@ export default function FinanceiroPageContent() {
         const stuartAdj = getExtraValWithSign("Stuart Adicional", "PARTNER_ADJ");
         const paulaAdj = getExtraValWithSign("Paula Adicional", "PARTNER_ADJ");
 
-        const danielShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) - crisEarning + danielAdj;
-        const stuartShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) + stuartAdj;
-        const paulaShare = (saldoFinal * 0.20) + (saldoFinalPilates / 3) + paulaAdj;
+        const danielShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) - crisEarning + danielAdj + danielPaid;
+        const stuartShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) + stuartAdj + stuartPaid;
+        const paulaShare = (saldoFinal * 0.20) + (saldoFinalPilates / 3) + paulaAdj + paulaPaid;
 
         const renderExtraField = (label: string, cleanDesc: string, category: 'CPFL_SALA' | 'PRO_EARNING' | 'PARTNER_ADJ') => {
           const value = getExtraVal(cleanDesc, category);
@@ -1436,227 +1554,302 @@ export default function FinanceiroPageContent() {
                 Custos da Clínica — Referentes a {monthsPt[startMonth]} de {startYear}
               </h2>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
+            {/* Dossier Structured Blocks with Sidebar */}
+            <div style={{ display: 'flex', gap: '24px', position: 'relative', marginBottom: '30px', alignItems: 'flex-start' }}>
               
-              {/* Geral Card */}
-              <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>Gastos Gerais</h3>
-                  <button 
-                    onClick={() => handleCreateClinicCost('GERAL')}
-                    className="btn btn-secondary" 
-                    style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
-                    <Plus size={14} /> Novo
-                  </button>
-                </div>
-                <div style={{ padding: '10px 0' }}>
-                  <table className="data-table" style={{ width: '100%' }}>
-                    <thead>
-                      <tr>
-                        <th>Gastos</th>
-                        <th style={{ textAlign: 'right', width: '90px' }}>Valor</th>
-                        <th style={{ width: '90px' }}>Pago por</th>
-                        <th style={{ width: '40px', textAlign: 'center' }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {geralCosts.map(t => {
-                        const displayDesc = t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
-                        const payee = t.favorecido || '';
-                        return (
-                          <tr key={t.id}>
-                            <td>
-                              <input 
-                                type="text" 
-                                key={`${t.id}_desc_${displayDesc}`}
-                                defaultValue={displayDesc}
-                                onBlur={(e) => handleUpdateTransactionField(t.id, 'description', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '600', color: '#334155', outline: 'none' }}
-                              />
-                            </td>
-                            <td>
-                              <input 
-                                type="number" 
-                                step="0.01"
-                                key={`${t.id}_amount_${t.amount}`}
-                                defaultValue={Number(t.amount).toFixed(2)}
-                                onBlur={(e) => handleUpdateTransactionField(t.id, 'amount', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#991b1b', textAlign: 'right', outline: 'none' }}
-                              />
-                            </td>
-                            <td>
+              {(() => {
+                const findMappedTransaction = (item: ExcelItem) => {
+                  return activeTransactions.find(t => 
+                    t.type === 'EXPENSE' && 
+                    getFriendlyDescription(t.description).toUpperCase() === item.label.toUpperCase()
+                  );
+                };
+
+                const allMappedIds = EXCEL_ITEMS.map(i => findMappedTransaction(i)?.id).filter(Boolean);
+                const blockCategories = ['GERAL', 'SECRETARIA', 'KINESIS'];
+                const globalUnmappedCosts = activeTransactions.filter(t => 
+                   t.type === 'EXPENSE' && 
+                   blockCategories.includes(t.category?.toUpperCase() || '') &&
+                   !allMappedIds.includes(t.id)
+                );
+
+                const renderDossierRow = (item: ExcelItem) => {
+                  const transaction = findMappedTransaction(item);
+                  
+                  if (transaction) {
+                    return (
+                      <tr key={item.key} style={{ background: '#f0fdf4' }}>
+                        <td style={{ fontWeight: '700', fontSize: '0.85rem', color: '#334155', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                          {item.label}
+                        </td>
+                        <td style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <input 
+                              type="text" 
+                              defaultValue={transaction.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '')}
+                              onBlur={(e) => handleUpdateTransactionField(transaction.id, 'description', e.target.value)}
+                              style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#0f172a', outline: 'none' }}
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                              <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                                Data: {transaction.date.split('-').reverse().slice(0,2).join('/')}
+                              </span>
                               <select
-                                value={payee}
-                                onChange={(e) => handleUpdateTransactionField(t.id, 'favorecido', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.75rem', fontWeight: '800', outline: 'none', color: payee ? (favColors[payee]?.text || '#334155') : '#334155', cursor: 'pointer' }}
+                                value={transaction.favorecido || ''}
+                                onChange={(e) => handleUpdateTransactionField(transaction.id, 'favorecido', e.target.value)}
+                                style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', padding: '2px 6px', fontSize: '0.65rem', fontWeight: '800', outline: 'none', color: transaction.favorecido ? (favColors[transaction.favorecido]?.text || '#166534') : '#166534', cursor: 'pointer' }}
                               >
-                                <option value="">--</option>
+                                <option value="">-- Pago por --</option>
                                 {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
                               </select>
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              <button onClick={() => handleRemoveFromClinicCosts(t.id)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', outline: 'none' }}>
-                                <Trash2 size={12} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.85rem', color: '#1e293b' }}>
-                    <span>TOTAL GERAIS:</span>
-                    <span>R$ {totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Secretária Card */}
-              <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>Gastos Secretária</h3>
-                  <button 
-                    onClick={() => handleCreateClinicCost('SECRETARIA')}
-                    className="btn btn-secondary" 
-                    style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
-                    <Plus size={14} /> Novo
-                  </button>
-                </div>
-                <div style={{ padding: '10px 0' }}>
-                  <table className="data-table" style={{ width: '100%' }}>
-                    <thead>
-                      <tr>
-                        <th>Gastos</th>
-                        <th style={{ textAlign: 'right', width: '90px' }}>Valor</th>
-                        <th style={{ width: '90px' }}>Pago por</th>
-                        <th style={{ width: '40px', textAlign: 'center' }}></th>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', borderBottom: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                            <span style={{ fontWeight: '800', color: '#15803d', fontSize: '0.85rem' }}>R$</span>
+                            <input 
+                              type="number" 
+                              step="0.01"
+                              defaultValue={Number(transaction.amount).toFixed(2)}
+                              onBlur={(e) => handleUpdateTransactionField(transaction.id, 'amount', e.target.value)}
+                              style={{ border: 'none', background: 'transparent', width: '80px', fontSize: '0.85rem', fontWeight: '800', color: '#15803d', textAlign: 'right', outline: 'none' }}
+                            />
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
+                          <button 
+                            onClick={() => handleRemoveFromClinicCosts(transaction.id)} 
+                            title="Desvincular Lançamento"
+                            style={{
+                              padding: '6px',
+                              borderRadius: '6px',
+                              border: '1px solid #fee2e2',
+                              background: '#fef2f2',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                            <Unlink size={14} />
+                          </button>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {secretariaCosts.map(t => {
-                        const displayDesc = t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
-                        const payee = t.favorecido || '';
-                        return (
-                          <tr key={t.id}>
-                            <td>
+                    );
+                  }
+
+                  return (
+                    <tr key={item.key} style={{ background: '#ffffff' }}>
+                      <td style={{ fontWeight: '700', fontSize: '0.85rem', color: '#334155', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                        {item.label}
+                      </td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                        <select
+                          onChange={async (e) => {
+                            const txId = e.target.value;
+                            if (txId) {
+                              const toastId = toast.loading('Vinculando...');
+                              try {
+                                await fetch('/api/financeiro', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ id: txId, field: 'description', value: item.label })
+                                });
+                                toast.success('Vinculado com sucesso!', { id: toastId });
+                                loadTransactions();
+                              } catch(err) {
+                                toast.error('Erro ao vincular', { id: toastId });
+                              }
+                            }
+                          }}
+                          style={{ width: '100%', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', color: '#334155', background: '#f8fafc', cursor: 'pointer' }}
+                        >
+                          <option value="">-- Buscar Lançamento --</option>
+                          {globalUnmappedCosts.map(t => (
+                            <option key={t.id} value={t.id}>
+                              ({t.date.split('-').reverse().slice(0,2).join('/')}) - {t.description.substring(0, 30)}... (R$ {Math.abs(t.amount).toFixed(2)})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', borderBottom: '1px solid #e2e8f0' }}>
+                        <input 
+                          type="number"
+                          step="0.01"
+                          placeholder="0,00 (Manual)"
+                          onBlur={async (e) => {
+                             const val = Number((parseFloat(e.target.value) || 0).toFixed(2));
+                             if (val > 0) {
+                               const cat = ['geral', 'secretaria', 'kinesis'].includes(item.block) ? item.block.toUpperCase() : 'GERAL';
+                               const toastId = toast.loading('Adicionando...');
+                               try {
+                                 await fetch('/api/financeiro/manual', {
+                                   method: 'POST',
+                                   headers: { 'Content-Type': 'application/json' },
+                                   body: JSON.stringify({
+                                     date: new Date(startYear, startMonth - 1, 15).toISOString().split('T')[0],
+                                     description: item.label,
+                                     amount: val,
+                                     type: 'EXPENSE',
+                                     category: cat,
+                                     bank: 'MANUAL_CLINICA'
+                                   })
+                                 });
+                                 toast.success('Adicionado com sucesso!', { id: toastId });
+                                 e.target.value = '';
+                                 loadTransactions();
+                               } catch (err) {
+                                 toast.error('Erro ao adicionar', { id: toastId });
+                               }
+                             }
+                          }}
+                          style={{ width: '100px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: '800', textAlign: 'right', outline: 'none' }}
+                        />
+                      </td>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}></td>
+                    </tr>
+                  );
+                };
+
+                const renderBlock = (title: string, blockName: 'geral' | 'secretaria' | 'kinesis', total: number) => {
+                  const items = EXCEL_ITEMS.filter(i => i.block === blockName);
+
+                  return (
+                    <div className="card" style={{ padding: '0', overflow: 'hidden', marginBottom: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
+                      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
+                        <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <FileText size={16} color="var(--primary)" /> {title}
+                        </h3>
+                        <button 
+                          onClick={() => handleCreateClinicCost(blockName.toUpperCase() as any)}
+                          className="btn btn-secondary" 
+                          style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
+                          <Plus size={14} /> Novo Adicional
+                        </button>
+                      </div>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ padding: '12px 16px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Item Excel</th>
+                              <th style={{ padding: '12px 16px', minWidth: '150px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Lançamento Vinculado</th>
+                              <th style={{ padding: '12px 16px', textAlign: 'right', width: '130px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Valor (R$)</th>
+                              <th style={{ padding: '12px 16px', textAlign: 'center', width: '80px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map(item => renderDossierRow(item))}
+                          </tbody>
+                        </table>
+                        <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '0.9rem', color: '#0f172a', background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+                          <span>TOTAL {title.toUpperCase()}:</span>
+                          <span>R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    {/* LEFT SIDE: BLOCKS */}
+                    <div style={{ flex: '7', display: 'flex', flexDirection: 'column' }}>
+                      {renderBlock("Gastos Gerais", "geral", totalGeral)}
+                      {renderBlock("Gastos Secretária", "secretaria", totalSecretaria)}
+                      {renderBlock("Gastos Kinesis", "kinesis", totalKinesis)}
+                    </div>
+
+                    {/* RIGHT SIDE: UNMAPPED TRANSACTIONS BOX (Sticky Sidebar) */}
+                    <div style={{ 
+                      flex: '3', 
+                      position: 'sticky', 
+                      top: '20px', 
+                      height: 'calc(100vh - 40px)', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '16px' 
+                    }}>
+                      <div className="card" style={{ 
+                        flex: '1', 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        padding: '24px', 
+                        overflow: 'hidden', 
+                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)',
+                        border: '1.5px solid #cbd5e1'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #cbd5e1', paddingBottom: '12px', marginBottom: '16px' }}>
+                          <h3 style={{ fontSize: '0.95rem', fontWeight: '900', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Sparkles size={16} color="#eab308" /> Lançamentos Não Relacionados
+                          </h3>
+                          <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.75rem', fontWeight: '800', padding: '2px 8px', borderRadius: '12px' }}>
+                            {globalUnmappedCosts.length} itens
+                          </span>
+                        </div>
+
+                        {/* Scrollable unmapped list */}
+                        <div style={{ 
+                          flex: '1', 
+                          overflowY: 'auto', 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '12px',
+                          paddingRight: '4px' 
+                        }}>
+                          {globalUnmappedCosts.map(tx => (
+                            <div key={tx.id} style={{ 
+                              background: '#f8fafc', 
+                              border: '1.5px solid #e2e8f0', 
+                              borderRadius: '12px', 
+                              padding: '12px 14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px',
+                              transition: 'all 0.2s',
+                              position: 'relative'
+                            }}>
+                              <button 
+                                onClick={() => handleRemoveFromClinicCosts(tx.id)} 
+                                style={{ position: 'absolute', top: '12px', right: '14px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                                <Trash2 size={14} />
+                              </button>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '20px' }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b' }}>{tx.date.split('-').reverse().slice(0,2).join('/')}</span>
+                                <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#b91c1c', whiteSpace: 'nowrap' }}>
+                                  R$ {Math.abs(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </div>
                               <input 
-                                type="text" 
-                                key={`${t.id}_desc_${displayDesc}`}
-                                defaultValue={displayDesc}
-                                onBlur={(e) => handleUpdateTransactionField(t.id, 'description', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '600', color: '#334155', outline: 'none' }}
+                                type="text"
+                                defaultValue={tx.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '')}
+                                onBlur={(e) => handleUpdateTransactionField(tx.id, 'description', e.target.value)}
+                                style={{ fontSize: '0.8rem', fontWeight: '750', color: '#1e293b', background: 'transparent', border: 'none', outline: 'none', padding: 0, width: '100%', marginTop: '2px' }}
                               />
-                            </td>
-                            <td>
-                              <input 
-                                type="number" 
-                                step="0.01"
-                                key={`${t.id}_amount_${t.amount}`}
-                                defaultValue={Number(t.amount).toFixed(2)}
-                                onBlur={(e) => handleUpdateTransactionField(t.id, 'amount', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#991b1b', textAlign: 'right', outline: 'none' }}
-                              />
-                            </td>
-                            <td>
                               <select
-                                value={payee}
-                                onChange={(e) => handleUpdateTransactionField(t.id, 'favorecido', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.75rem', fontWeight: '800', outline: 'none', color: payee ? (favColors[payee]?.text || '#334155') : '#334155', cursor: 'pointer' }}
+                                value={tx.favorecido || ''}
+                                onChange={(e) => handleUpdateTransactionField(tx.id, 'favorecido', e.target.value)}
+                                style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', padding: '2px 6px', fontSize: '0.65rem', fontWeight: '800', outline: 'none', color: tx.favorecido ? (favColors[tx.favorecido]?.text || '#334155') : '#334155', cursor: 'pointer', width: 'fit-content', marginTop: '6px' }}
                               >
-                                <option value="">--</option>
+                                <option value="">-- Pago por --</option>
                                 {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
                               </select>
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              <button onClick={() => handleRemoveFromClinicCosts(t.id)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', outline: 'none' }}>
-                                <Trash2 size={12} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.85rem', color: '#1e293b' }}>
-                    <span>TOTAL SECRETÁRIA:</span>
-                    <span>R$ {totalSecretaria.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
+                            </div>
+                          ))}
 
-              {/* Kinesis Card */}
-              <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>Gastos Kinesis</h3>
-                  <button 
-                    onClick={() => handleCreateClinicCost('KINESIS')}
-                    className="btn btn-secondary" 
-                    style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
-                    <Plus size={14} /> Novo
-                  </button>
-                </div>
-                <div style={{ padding: '10px 0' }}>
-                  <table className="data-table" style={{ width: '100%' }}>
-                    <thead>
-                      <tr>
-                        <th>Gastos</th>
-                        <th style={{ textAlign: 'right', width: '90px' }}>Valor</th>
-                        <th style={{ width: '90px' }}>Pago por</th>
-                        <th style={{ width: '40px', textAlign: 'center' }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {kinesisCosts.map(t => {
-                        const displayDesc = t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '');
-                        const payee = t.favorecido || '';
-                        return (
-                          <tr key={t.id}>
-                            <td>
-                              <input 
-                                type="text" 
-                                key={`${t.id}_desc_${displayDesc}`}
-                                defaultValue={displayDesc}
-                                onBlur={(e) => handleUpdateTransactionField(t.id, 'description', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '600', color: '#334155', outline: 'none' }}
-                              />
-                            </td>
-                            <td>
-                              <input 
-                                type="number" 
-                                step="0.01"
-                                key={`${t.id}_amount_${t.amount}`}
-                                defaultValue={Number(t.amount).toFixed(2)}
-                                onBlur={(e) => handleUpdateTransactionField(t.id, 'amount', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#991b1b', textAlign: 'right', outline: 'none' }}
-                              />
-                            </td>
-                            <td>
-                              <select
-                                value={payee}
-                                onChange={(e) => handleUpdateTransactionField(t.id, 'favorecido', e.target.value)}
-                                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.75rem', fontWeight: '800', outline: 'none', color: payee ? (favColors[payee]?.text || '#334155') : '#334155', cursor: 'pointer' }}
-                              >
-                                <option value="">--</option>
-                                {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
-                              </select>
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              <button onClick={() => handleRemoveFromClinicCosts(t.id)} style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', outline: 'none' }}>
-                                <Trash2 size={12} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.85rem', color: '#1e293b' }}>
-                    <span>TOTAL KINESIS:</span>
-                    <span>R$ {totalKinesis.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
-
+                          {globalUnmappedCosts.length === 0 && (
+                            <div style={{ textAlign: 'center', padding: '40px 16px', color: '#94a3b8' }}>
+                              <CheckCircle2 color="#10b981" size={32} style={{ margin: '0 auto 12px' }} />
+                              <p style={{ fontSize: '0.8rem', fontWeight: '800' }}>Tudo classificado!</p>
+                              <p style={{ fontSize: '0.7rem', opacity: 0.8, marginTop: '2px' }}>Todas as despesas extras foram associadas ou não existem.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Bottom summary and extra fields */}
@@ -1704,9 +1897,8 @@ export default function FinanceiroPageContent() {
                 {renderExtraField("Daniel Adic.", "Daniel Adicional", "PARTNER_ADJ")}
                 {renderExtraField("Stuart Adic.", "Stuart Adicional", "PARTNER_ADJ")}
                 {renderExtraField("Paula Adic.", "Paula Adicional", "PARTNER_ADJ")}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700', color: '#64748b', marginTop: '20px', borderTop: '1px dashed #cbd5e1', paddingTop: '10px' }}>
-                  <span>Fundo Kinesis:</span>
-                  <span style={{ whiteSpace: 'nowrap' }}>R$ 1.000,00</span>
+                <div style={{ marginTop: '20px', borderTop: '1px dashed #cbd5e1', paddingTop: '10px' }}>
+                  {renderExtraField("Aporte Fundo Kinesis", "Aporte Fundo Kinesis", "PARTNER_ADJ")}
                 </div>
               </div>
 
@@ -1878,7 +2070,7 @@ export default function FinanceiroPageContent() {
                       R$ {danielShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
-                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} - Cris: R$ {crisEarning.toFixed(2)} {danielAdj !== 0 && `+ Adj: R$ ${danielAdj.toFixed(2)}`}
+                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} - Cris: R$ {crisEarning.toFixed(2)} {danielAdj !== 0 && `+ Adj: R$ ${danielAdj.toFixed(2)}`} {danielPaid > 0 && `+ Reembolso: R$ ${danielPaid.toFixed(2)}`}
                     </div>
                   </div>
 
@@ -1888,7 +2080,7 @@ export default function FinanceiroPageContent() {
                       R$ {stuartShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
-                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {stuartAdj !== 0 && `+ Adj: R$ ${stuartAdj.toFixed(2)}`}
+                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {stuartAdj !== 0 && `+ Adj: R$ ${stuartAdj.toFixed(2)}`} {stuartPaid > 0 && `+ Reembolso: R$ ${stuartPaid.toFixed(2)}`}
                     </div>
                   </div>
 
@@ -1898,7 +2090,7 @@ export default function FinanceiroPageContent() {
                       R$ {paulaShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
-                      Fisio (20%): R$ {(saldoFinal * 0.2).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {paulaAdj !== 0 && `+ Adj: R$ ${paulaAdj.toFixed(2)}`}
+                      Fisio (20%): R$ {(saldoFinal * 0.2).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {paulaAdj !== 0 && `+ Adj: R$ ${paulaAdj.toFixed(2)}`} {paulaPaid > 0 && `+ Reembolso: R$ ${paulaPaid.toFixed(2)}`}
                     </div>
                   </div>
 

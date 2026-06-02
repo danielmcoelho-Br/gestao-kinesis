@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { transactionId, description, amount, category, bank, favorecido } = body;
+    const { transactionId, description, amount, category, bank, favorecido, isClinicEdit } = body;
 
     if (!transactionId) {
       return NextResponse.json({ error: 'ID da transação não fornecido.' }, { status: 400 });
@@ -20,33 +20,46 @@ export async function POST(req: NextRequest) {
 
     const updateData: any = {};
 
-    let currentFav = tx.description.match(/\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i)?.[1] || '';
+    const baseDescForFav = (isClinicEdit ? (tx.clinicDesc ?? tx.description) : tx.description) || '';
+    let currentFav = baseDescForFav.match(/\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i)?.[1] || '';
     if (favorecido !== undefined) {
       currentFav = favorecido ? favorecido.trim().toUpperCase() : '';
     }
 
     if (description !== undefined) {
       const cleanDesc = description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
-      updateData.description = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
+      const finalDesc = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
+      if (isClinicEdit) updateData.clinicDesc = finalDesc;
+      else updateData.description = finalDesc;
     } else if (favorecido !== undefined) {
-      const cleanDesc = tx.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
-      updateData.description = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
+      const baseDesc = (isClinicEdit ? (tx.clinicDesc ?? tx.description) : tx.description) || '';
+      const cleanDesc = baseDesc.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
+      const finalDesc = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
+      if (isClinicEdit) updateData.clinicDesc = finalDesc;
+      else updateData.description = finalDesc;
     }
 
     if (amount !== undefined) {
-      updateData.amount = Math.abs(parseFloat(amount) || 0);
+      if (isClinicEdit) updateData.clinicAmount = parseFloat(amount) || 0;
+      else updateData.amount = parseFloat(amount) || 0;
     }
 
     if (category !== undefined) {
-      updateData.category = category.toUpperCase();
+      if (isClinicEdit) updateData.clinicCat = category.toUpperCase();
+      else updateData.category = category.toUpperCase();
     }
 
     if (bank !== undefined) {
       updateData.bank = bank;
     }
 
+    if (body.isChecked !== undefined) {
+      updateData.isChecked = body.isChecked;
+    }
+
     if (tx.type === 'INCOME' && currentFav) {
-      updateData.category = currentFav;
+      if (isClinicEdit) updateData.clinicCat = currentFav;
+      else updateData.category = currentFav;
     }
 
     const updated = await prisma.transaction.update({

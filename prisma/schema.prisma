@@ -50,6 +50,14 @@ model Transaction {
   ownerId     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Override fields for Custos da Clínica
+  clinicDesc   String?
+  clinicAmount Float?
+  clinicCat    String?
+
+  // Checkbox for reconciliation
+  isChecked    Boolean  @default(false)
 }
 
 model ServicePercentage {

@@ -82,6 +82,8 @@ export async function syncProfessionalGains(year: number, month: number) {
     });
 
     if (existing) {
+      if (existing.ownerId === 'DELETED') continue;
+
       if (amount === 0) {
         // If amount is 0, set it to 0
         await prisma.transaction.update({

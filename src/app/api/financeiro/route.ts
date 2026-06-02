@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = 'force-dynamic';
 import { buildHistoricalPatterns, matchTransaction } from "@/lib/finance/pattern-matcher";
 import { syncProfessionalGains } from "@/lib/finance/professional-gains";
 
@@ -22,7 +24,11 @@ export async function GET(request: Request) {
         date: {
           gte: startDate,
           lte: endDate
-        }
+        },
+        OR: [
+          { ownerId: null },
+          { ownerId: { not: 'DELETED' } }
+        ]
       },
       orderBy: {
         date: 'asc'
@@ -51,6 +57,26 @@ export async function GET(request: Request) {
         const catUpper = (t.category || '').toUpperCase();
         if (["KINESIS", "DANIEL", "STUART", "PAULA", "PILATES", "FUNDO"].includes(catUpper)) {
           favorecido = catUpper;
+        }
+      }
+
+      // Calculate clinicFavorecido using overrides if present
+      const descFin26 = t.clinicDesc ?? t.description;
+      const matchFin26 = descFin26.match(/\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i);
+      let clinicFavorecido = matchFin26 ? matchFin26[1].toUpperCase() : '';
+
+      if (!clinicFavorecido) {
+        const amountSign = t.type === 'INCOME' ? (t.clinicAmount ?? t.amount) : -(t.clinicAmount ?? t.amount);
+        const matched = matchTransaction(descFin26, amountSign, patterns);
+        if (matched) {
+          clinicFavorecido = matched.toUpperCase();
+        }
+      }
+
+      if (!clinicFavorecido && t.type === 'INCOME') {
+        const catUpper = ((t.clinicCat ?? t.category) || '').toUpperCase();
+        if (["KINESIS", "DANIEL", "STUART", "PAULA", "PILATES", "FUNDO"].includes(catUpper)) {
+          clinicFavorecido = catUpper;
         }
       }
 
@@ -142,7 +168,8 @@ export async function GET(request: Request) {
       return {
         ...t,
         category: finalCategory,
-        favorecido: favorecido || ''
+        favorecido: favorecido || '',
+        clinicFavorecido: clinicFavorecido || ''
       };
     });
 
