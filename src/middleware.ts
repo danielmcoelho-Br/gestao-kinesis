@@ -39,7 +39,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // - Authentication API Endpoint, Login View, and Chrome Extension Sync Endpoint
   if (
     pathname === "/login" ||
     pathname.startsWith("/api/auth") ||

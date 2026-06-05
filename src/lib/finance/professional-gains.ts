@@ -42,26 +42,40 @@ export async function syncProfessionalGains(year: number, month: number) {
     "Gambá": 0,
     "Newton": 0,
     "Cris": 0,
-    "João": 0
+    "João": 0,
+    "Ausência Nula": 0,
+    "Julia (Pilates)": 0,
+    "Ausência Nula (Pilates)": 0,
+    "Imposto (Pilates)": 0
   };
 
   sessions.forEach(s => {
-    // 1. Exclude Pilates sessions
-    const isPilates = s.serviceType.toLowerCase().includes('pilates');
-    if (isPilates) return;
-
-    // 2. Exclude Ausência Nula status
+    // 1. Check status
     const status = (s.status || "").toLowerCase();
-    if (status.includes("ausência nula")) return;
+    const isAusenciaNula = status.includes("ausência nula");
 
-    // 3. Match professional
-    const normName = s.professional.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-    
+    // 2. Check if it's Pilates
+    const isPilates = (s.serviceType || "").toLowerCase().includes('pilates');
+
     let matchedKey = "";
-    for (const [key, value] of Object.entries(profMapping)) {
-      if (normName.includes(key)) {
-        matchedKey = value;
-        break;
+    if (isPilates) {
+      if (isAusenciaNula) {
+        matchedKey = "Ausência Nula (Pilates)";
+      } else {
+        const normName = s.professional.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        if (normName.includes("julia") || normName.includes("júlia")) matchedKey = "Julia (Pilates)";
+      }
+    } else {
+      if (isAusenciaNula) {
+        matchedKey = "Ausência Nula";
+      } else {
+        const normName = s.professional.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        for (const [key, value] of Object.entries(profMapping)) {
+          if (normName.includes(key)) {
+            matchedKey = value;
+            break;
+          }
+        }
       }
     }
 

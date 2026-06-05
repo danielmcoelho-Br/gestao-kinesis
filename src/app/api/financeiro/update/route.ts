@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { transactionId, description, amount, category, bank, favorecido, isClinicEdit } = body;
+    const { transactionId, description, amount, category, bank, favorecido, isClinicEdit, resetClinic } = body;
 
     if (!transactionId) {
       return NextResponse.json({ error: 'ID da transação não fornecido.' }, { status: 400 });
@@ -20,46 +20,52 @@ export async function POST(req: NextRequest) {
 
     const updateData: any = {};
 
-    const baseDescForFav = (isClinicEdit ? (tx.clinicDesc ?? tx.description) : tx.description) || '';
-    let currentFav = baseDescForFav.match(/\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i)?.[1] || '';
-    if (favorecido !== undefined) {
-      currentFav = favorecido ? favorecido.trim().toUpperCase() : '';
-    }
+    if (resetClinic) {
+      updateData.clinicCat = 'UNMAPPED';
+      updateData.clinicDesc = null;
+      updateData.clinicAmount = null;
+    } else {
+      const baseDescForFav = (isClinicEdit ? (tx.clinicDesc ?? tx.description) : tx.description) || '';
+      let currentFav = baseDescForFav.match(/\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i)?.[1] || '';
+      if (favorecido !== undefined) {
+        currentFav = favorecido ? favorecido.trim().toUpperCase() : '';
+      }
 
-    if (description !== undefined) {
-      const cleanDesc = description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
-      const finalDesc = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
-      if (isClinicEdit) updateData.clinicDesc = finalDesc;
-      else updateData.description = finalDesc;
-    } else if (favorecido !== undefined) {
-      const baseDesc = (isClinicEdit ? (tx.clinicDesc ?? tx.description) : tx.description) || '';
-      const cleanDesc = baseDesc.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
-      const finalDesc = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
-      if (isClinicEdit) updateData.clinicDesc = finalDesc;
-      else updateData.description = finalDesc;
-    }
+      if (description !== undefined) {
+        const cleanDesc = description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
+        const finalDesc = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
+        if (isClinicEdit) updateData.clinicDesc = finalDesc;
+        else updateData.description = finalDesc;
+      } else if (favorecido !== undefined) {
+        const baseDesc = (isClinicEdit ? (tx.clinicDesc ?? tx.description) : tx.description) || '';
+        const cleanDesc = baseDesc.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
+        const finalDesc = currentFav ? `${cleanDesc} (${currentFav})` : cleanDesc;
+        if (isClinicEdit) updateData.clinicDesc = finalDesc;
+        else updateData.description = finalDesc;
+      }
 
-    if (amount !== undefined) {
-      if (isClinicEdit) updateData.clinicAmount = parseFloat(amount) || 0;
-      else updateData.amount = parseFloat(amount) || 0;
-    }
+      if (amount !== undefined) {
+        if (isClinicEdit) updateData.clinicAmount = parseFloat(amount) || 0;
+        else updateData.amount = parseFloat(amount) || 0;
+      }
 
-    if (category !== undefined) {
-      if (isClinicEdit) updateData.clinicCat = category.toUpperCase();
-      else updateData.category = category.toUpperCase();
-    }
+      if (category !== undefined) {
+        if (isClinicEdit) updateData.clinicCat = category ? category.toUpperCase() : null;
+        else updateData.category = category ? category.toUpperCase() : null;
+      }
 
-    if (bank !== undefined) {
-      updateData.bank = bank;
-    }
+      if (bank !== undefined) {
+        updateData.bank = bank;
+      }
 
-    if (body.isChecked !== undefined) {
-      updateData.isChecked = body.isChecked;
-    }
+      if (body.isChecked !== undefined) {
+        updateData.isChecked = body.isChecked;
+      }
 
-    if (tx.type === 'INCOME' && currentFav) {
-      if (isClinicEdit) updateData.clinicCat = currentFav;
-      else updateData.category = currentFav;
+      if (tx.type === 'INCOME' && currentFav) {
+        if (isClinicEdit) updateData.clinicCat = currentFav;
+        else updateData.category = currentFav;
+      }
     }
 
     const updated = await prisma.transaction.update({

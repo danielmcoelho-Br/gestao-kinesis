@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
-import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet, Split, Plus, X, Trash2, RefreshCw, Undo2, Redo2, Unlink, FileText, Sparkles, CheckCircle2 } from "lucide-react";
+import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet, Split, Plus, X, Trash2, RefreshCw, Undo2, Redo2, Unlink, FileText, Sparkles, CheckCircle2, EyeOff, RotateCcw, Wallet, PieChart } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -68,14 +68,15 @@ const getFriendlyDescription = (description: string) => {
 interface ExcelItem {
   key: string;
   label: string;
-  block: 'geral' | 'secretaria' | 'kinesis' | 'cpfl_sala_01' | 'cpfl_sala_02' | 'cpfl_sala_03' | 'cpfl_sala_04' | 'cpfl_sala_05' | 'cpfl_sala_06' | 'fundo' | 'imposto';
+  block: 'geral' | 'secretaria' | 'kinesis' | 'cpfl' | 'fundo' | 'imposto';
   keywords: string[];
+  clinicCat?: string; // override category when linking
 }
 
 const EXCEL_ITEMS: ExcelItem[] = [
-  // Geral (Block A-C)
+  // Geral
   { key: 'aluguel', label: 'Aluguel + IPTU', block: 'geral', keywords: ['IMOBILIARIA', 'FORTES GUIMARAES', 'ALUGUEL'] },
-  { key: 'cpfl_adm', label: 'CPFL ADM', block: 'geral', keywords: ['CPFL'] },
+  { key: 'cpfl_adm', label: 'CPFL ADM', block: 'geral', keywords: ['CPFL ADM', 'CPFL_ADM'] },
   { key: 'guarda', label: 'Guarda', block: 'geral', keywords: ['SILVANA RIBEIRO', 'GUARDA'] },
   { key: 'claro', label: 'Claro', block: 'geral', keywords: ['CLARO'] },
   { key: 'darf_aluguel', label: 'DARF Aluguel', block: 'geral', keywords: ['DARF ALUGUEL'] },
@@ -87,27 +88,26 @@ const EXCEL_ITEMS: ExcelItem[] = [
   { key: 'ar_cond', label: 'ar condicionado', block: 'geral', keywords: ['BRUNO REIS', 'AR COND'] },
   { key: 'imposto', label: 'Imposto', block: 'geral', keywords: ['SIMPLES NACIONAL', 'DARF SIMPLES'] },
   
-  // Secretária (Block E-G)
+  // Secretária
   { key: 'leticia', label: 'Leticia ', block: 'secretaria', keywords: ['LETICIA'] },
   { key: 'sindicato', label: 'Sindicato', block: 'secretaria', keywords: ['SINDICATO', 'SIND EMPREG'] },
   { key: 'fgts', label: 'FGTS', block: 'secretaria', keywords: ['FGTS'] },
   
-  // Kinesis (Block I-K)
+  // Kinesis
   { key: 'contador', label: 'Contador', block: 'kinesis', keywords: ['LBRK', 'CONTADOR', 'CONTABILIDADE'] },
   { key: 'sistema', label: 'Sistema', block: 'kinesis', keywords: ['ARTEMIDAS', 'SISTEMA'] },
   { key: 'taxa_banco', label: 'Taxa Banco', block: 'kinesis', keywords: ['TARIFA', 'CESTA', 'PACOTE', 'TAR. AGRUPADAS'] },
   { key: 'darf_pro_labore', label: 'DARF Pró Labore', block: 'kinesis', keywords: ['DARF PRO LABORE'] },
-  { key: 'pix_adm', label: 'PIX', block: 'kinesis', keywords: ['PIX'] },
+  { key: 'pix_adm', label: 'PIX', block: 'kinesis', keywords: [] },
   { key: 'certificado_dig', label: 'Certificado Dig', block: 'kinesis', keywords: ['CERTIFICADO DIG'] },
   
-  // Específicos Fisio/Pilates (Block M-N / Q-R)
-  { key: 'cpfl_sala_01', label: 'CPFL sala 01', block: 'cpfl_sala_01', keywords: ['SALA 01', 'SALA1'] },
-  { key: 'cpfl_sala_02', label: 'CPFL sala 02', block: 'cpfl_sala_02', keywords: ['SALA 02', 'SALA2'] },
-  { key: 'cpfl_sala_03', label: 'CPFL sala 03', block: 'cpfl_sala_03', keywords: ['SALA 03', 'SALA3'] },
-  { key: 'cpfl_sala_04', label: 'CPFL sala 04', block: 'cpfl_sala_04', keywords: ['SALA 04', 'SALA4'] },
-  { key: 'cpfl_sala_05', label: 'CPFL sala 05', block: 'cpfl_sala_05', keywords: ['SALA 05', 'SALA5'] },
-  { key: 'cpfl_sala_06', label: 'CPFL sala 06', block: 'cpfl_sala_06', keywords: ['SALA 06', 'SALA6'] },
-  { key: 'fundo', label: 'Fundo', block: 'fundo', keywords: ['FUNDO'] }
+  // CPFL por Sala
+  { key: 'cpfl_sala_01', label: 'Sala 01', block: 'cpfl', keywords: ['CPFL'], clinicCat: 'CPFL_SALA_01' },
+  { key: 'cpfl_sala_02', label: 'Sala 02 (Pilates)', block: 'cpfl', keywords: ['CPFL'], clinicCat: 'CPFL_SALA_02' },
+  { key: 'cpfl_sala_03', label: 'Sala 03', block: 'cpfl', keywords: ['CPFL'], clinicCat: 'CPFL_SALA_03' },
+  { key: 'cpfl_sala_04', label: 'Sala 04', block: 'cpfl', keywords: ['CPFL'], clinicCat: 'CPFL_SALA_04' },
+  { key: 'cpfl_sala_05', label: 'Sala 05', block: 'cpfl', keywords: ['CPFL'], clinicCat: 'CPFL_SALA_05' },
+  { key: 'cpfl_sala_06', label: 'Sala 06', block: 'cpfl', keywords: ['CPFL'], clinicCat: 'CPFL_SALA_06' },
 ];
 
 export default function FinanceiroPageContent() {
@@ -116,7 +116,7 @@ export default function FinanceiroPageContent() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'date' | 'description' | 'favorecido' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [activeTab, setActiveTab] = useState<'fluxo' | 'custos'>('fluxo');
+  const [activeTab, setActiveTab] = useState<'fluxo_bb' | 'fluxo_inter' | 'custos'>('fluxo_bb');
   const [syncing, setSyncing] = useState(false);
   
   // History State for Undo/Redo
@@ -128,7 +128,8 @@ export default function FinanceiroPageContent() {
   // Search Filter state for Description column
   const [descriptionFilter, setDescriptionFilter] = useState("");
 
-
+  // Custom block lines for mapping
+  const [customBlockLines, setCustomBlockLines] = useState<{ id: string, block: string, label: string }[]>([]);
 
   // Manual Transaction Modal State
   const [showManualModal, setShowManualModal] = useState(false);
@@ -140,14 +141,22 @@ export default function FinanceiroPageContent() {
   const [manualCategory, setManualCategory] = useState("Recebimento");
   const [manualBank, setManualBank] = useState("Banco do Brasil");
 
-  const activeTransactions = activeTab === 'fluxo' 
-    ? transactions.filter((t: any) => t.bank !== 'MANUAL_CLINICA')
-    : transactions.map((t: any) => ({
+  const activeTransactions = activeTab === 'custos'
+    ? transactions.map((t: any) => ({
       ...t,
       description: t.clinicDesc ?? t.description,
       amount: t.clinicAmount ?? t.amount,
-      category: t.clinicCat ?? t.category
-    }));
+      category: t.clinicCat ?? t.category,
+      favorecido: t.clinicFavorecido || t.favorecido
+    }))
+    : transactions.filter((t: any) => {
+        if (t.bank === 'MANUAL_CLINICA' || t.category === 'PRO_EARNING' || t.bank === 'HIDDEN_ITEM') return false;
+        
+        const bankName = (t.bank || 'Banco do Brasil').toLowerCase();
+        if (activeTab === 'fluxo_bb' && bankName !== 'banco do brasil') return false;
+        if (activeTab === 'fluxo_inter' && bankName !== 'banco inter') return false;
+        return true;
+      });
 
   const loadTransactions = (showLoading = false) => {
     if (!initialized) return;
@@ -155,7 +164,10 @@ export default function FinanceiroPageContent() {
     fetch(`/api/financeiro?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}&_t=${Date.now()}`, { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
-        setTransactions(Array.isArray(data) ? data : []);
+        const uniqueData = Array.isArray(data) 
+          ? Array.from(new Map(data.map((t: any) => [t.id, t])).values()) 
+          : [];
+        setTransactions(uniqueData);
         if (showLoading) setLoading(false);
       })
       .catch(() => {
@@ -239,7 +251,7 @@ export default function FinanceiroPageContent() {
       const res = await fetch('/api/financeiro/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: id, category: 'OUTROS', isClinicEdit: true })
+        body: JSON.stringify({ transactionId: id, resetClinic: true, isClinicEdit: true })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao remover.");
@@ -260,6 +272,25 @@ export default function FinanceiroPageContent() {
       loadTransactions();
     } catch (err: any) {
       toast.error(err.message || "Erro ao remover despesa dos custos.", { id: toastId });
+    }
+  };
+
+  const handleHideFromClinicCosts = async (id: string) => {
+    if (!confirm("Deseja realmente ignorar este lançamento nos Custos da Clínica? Ele continuará registrado no Fluxo de Caixa.")) return;
+    const toastId = toast.loading("Ocultando despesa dos custos...");
+    try {
+      const res = await fetch('/api/financeiro/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: id, category: 'OUTROS', isClinicEdit: true })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao ocultar.");
+      
+      toast.success("Ocultado com sucesso!", { id: toastId });
+      loadTransactions();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao ocultar despesa.", { id: toastId });
     }
   };
 
@@ -500,6 +531,48 @@ export default function FinanceiroPageContent() {
     }
   };
 
+  const handleHideExcelItem = async (itemKey: string) => {
+    const toastId = toast.loading("Ocultando item...");
+    try {
+      const targetDate = new Date(startYear, startMonth, 1).toISOString().split('T')[0];
+      const res = await fetch('/api/financeiro/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: targetDate,
+          description: itemKey,
+          amount: 0.01,
+          type: 'EXPENSE',
+          category: 'HIDDEN',
+          bank: 'HIDDEN_ITEM',
+          favorecido: ''
+        })
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Item ocultado para este mês.", { id: toastId });
+      loadTransactions();
+    } catch {
+      toast.error("Erro ao ocultar.", { id: toastId });
+    }
+  };
+
+  const handleRestoreExcelItem = async (transactionId: string | undefined) => {
+    if (!transactionId) return;
+    const toastId = toast.loading("Restaurando...");
+    try {
+      const res = await fetch('/api/financeiro/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId })
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Restaurado com sucesso.", { id: toastId });
+      loadTransactions();
+    } catch {
+      toast.error("Erro ao restaurar.", { id: toastId });
+    }
+  };
+
   const handleToggleAllChecks = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.checked;
     const ids = sortedBankTransactions.map((t: any) => t.id);
@@ -526,9 +599,9 @@ export default function FinanceiroPageContent() {
     if (!target) return;
     
     // Parse value for type safety and format checks
-    let parsedValue = value;
+    let parsedValue: any = value;
     if (field === 'amount') {
-      parsedValue = Number(Math.abs(parseFloat(value) || 0).toFixed(2));
+      parsedValue = Number(Math.abs(parseFloat(value as string) || 0).toFixed(2));
     }
     
     const oldValue = target[field];
@@ -578,52 +651,38 @@ export default function FinanceiroPageContent() {
     }
   };
 
-  const handleCreateClinicCost = async (category: 'GERAL' | 'SECRETARIA' | 'KINESIS') => {
-    const toastId = toast.loading("Adicionando novo custo...");
+  const handleCreateSidebarManualEntry = async () => {
+    const toastId = toast.loading("Adicionando novo lançamento...");
     try {
       const targetDate = new Date(startYear, startMonth, 1).toISOString().split('T')[0];
-      const descName = `Novo Gasto ${category === 'GERAL' ? 'Geral' : category === 'SECRETARIA' ? 'Secretária' : 'Kinesis'}`;
       const res = await fetch('/api/financeiro/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: targetDate,
-          description: descName,
+          description: "Novo Gasto Manual",
           amount: 0.01,
           type: 'EXPENSE',
-          category,
-          bank: 'BANCO DO BRASIL',
-          favorecido: 'KINESIS'
+          category: 'UNMAPPED',
+          bank: 'MANUAL_CLINICA',
+          favorecido: ''
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao criar.");
-
-      // Track history
-      if (data.transaction && data.transaction.id) {
-        historyStackRef.current = [...historyStackRef.current, {
-          type: 'CREATE',
-          transactionId: data.transaction.id,
-          description: descName,
-          category,
-          amount: 0.01,
-          date: targetDate,
-          typeTx: 'EXPENSE',
-          bank: 'BANCO DO BRASIL',
-          favorecido: 'KINESIS'
-        }];
-        setHistoryStack(historyStackRef.current);
-        clientLog("Pushed CREATE to history (new cost). Stack size: " + historyStackRef.current.length);
-
-        redoStackRef.current = [];
-        setRedoStack([]);
-      }
-
-      toast.success("Novo custo criado com sucesso!", { id: toastId });
-      loadTransactions(false);
+      
+      toast.success("Adicionado! Edite os valores na lista.", { id: toastId });
+      loadTransactions();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao adicionar custo.", { id: toastId });
+      toast.error(err.message || "Erro ao adicionar lançamento.", { id: toastId });
     }
+  };
+
+  const handleAddCustomLine = (blockName: string) => {
+    setCustomBlockLines(prev => [
+      ...prev,
+      { id: Date.now().toString(), block: blockName, label: "Nova Referência" }
+    ]);
   };
 
   const handleSaveExtraField = async (cleanDesc: string, category: 'CPFL_SALA' | 'PRO_EARNING' | 'PARTNER_ADJ', value: number, existingId?: string) => {
@@ -927,31 +986,237 @@ export default function FinanceiroPageContent() {
     return sorted;
   }, [bankTransactions, descriptionFilter, sortBy, sortOrder]);
 
+  const calc = useMemo(() => {
+    const mappedTransactions = new Map<string, any>();
+    const claimedTxIds = new Set<string>();
+
+    EXCEL_ITEMS.forEach(item => {
+      if (item.clinicCat) {
+        const tx = activeTransactions.find(t =>
+          t.type === 'EXPENSE' &&
+          (t.clinicCat ?? t.category)?.toUpperCase() === item.clinicCat?.toUpperCase() &&
+          !claimedTxIds.has(t.id)
+        );
+        if (tx) {
+          mappedTransactions.set(item.key, tx);
+          claimedTxIds.add(tx.id);
+        }
+      }
+    });
+
+    EXCEL_ITEMS.forEach(item => {
+      if (!mappedTransactions.has(item.key)) {
+        const tx = activeTransactions.find(t => 
+          t.type === 'EXPENSE' && 
+          t.bank === 'MANUAL_CLINICA' &&
+          ((t.clinicDesc ?? t.description) || '').trim().toUpperCase() === item.label.trim().toUpperCase() &&
+          !claimedTxIds.has(t.id)
+        );
+        if (tx) {
+          mappedTransactions.set(item.key, tx);
+          claimedTxIds.add(tx.id);
+        }
+      }
+    });
+
+    EXCEL_ITEMS.forEach(item => {
+      if (item.clinicCat) return; 
+      if (!mappedTransactions.has(item.key)) {
+        const tx = activeTransactions.find(t => {
+          if (t.type !== 'EXPENSE' || t.bank === 'MANUAL_CLINICA' || claimedTxIds.has(t.id)) return false;
+          if (t.clinicCat === 'UNMAPPED') return false;
+          
+          const norm = ((t.clinicDesc ?? t.description) || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+          return norm === item.label.toUpperCase().trim() || item.keywords.some(kw => norm.includes(kw.toUpperCase()));
+        });
+        if (tx) {
+          mappedTransactions.set(item.key, tx);
+          claimedTxIds.add(tx.id);
+        }
+      }
+    });
+
+    const findMappedTransaction = (item: ExcelItem) => mappedTransactions.get(item.key);
+    const allMappedIds = EXCEL_ITEMS.map(i => findMappedTransaction(i)?.id).filter(Boolean);
+
+    const getTotalForBlock = (blockName: string) => {
+      const items = EXCEL_ITEMS.filter(i => i.block === blockName);
+      const hiddenItemKeys = activeTransactions
+        .filter(t => t.bank === 'HIDDEN_ITEM')
+        .map(t => (t.description || '').replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim());
+      const visibleItems = items.filter(i => !hiddenItemKeys.includes(i.key));
+      
+      const mappedSum = visibleItems.reduce((acc, item) => {
+        const tx = mappedTransactions.get(item.key);
+        return acc + (tx ? (tx.clinicAmount ?? tx.amount) : 0);
+      }, 0);
+
+      const blockCat = blockName === 'cpfl' ? null : blockName.toUpperCase();
+      const extraSum = blockCat ? activeTransactions.filter(t =>
+        t.type === 'EXPENSE' &&
+        t.clinicCat?.toUpperCase() === blockCat &&
+        !allMappedIds.includes(t.id)
+      ).reduce((acc, tx) => acc + (tx.clinicAmount ?? tx.amount), 0) : 0;
+
+      return mappedSum + extraSum;
+    };
+
+    const totalGeral = getTotalForBlock('geral');
+    const totalSecretaria = getTotalForBlock('secretaria');
+    const totalKinesis = getTotalForBlock('kinesis');
+
+    const getExtraVal = (desc: string, cat: string) => {
+      const isPilates = desc.toLowerCase().includes('(pilates)');
+      const baseDesc = desc.replace(/\s*\((pilates)\)\s*/i, '').trim().toUpperCase();
+
+      const matches = activeTransactions.filter(t => 
+        t.category.toUpperCase() === cat.toUpperCase() && 
+        (isPilates ? (t.favorecido || '').toUpperCase() === 'PILATES' : (t.favorecido || '').toUpperCase() !== 'PILATES') &&
+        t.description.toUpperCase().includes(baseDesc)
+      );
+      return matches.reduce((acc, t) => acc + t.amount, 0);
+    };
+
+    const getExtraValWithSign = (desc: string, cat: string) => {
+      const isPilates = desc.toLowerCase().includes('(pilates)');
+      const baseDesc = desc.replace(/\s*\((pilates)\)\s*/i, '').trim().toUpperCase();
+
+      const matches = activeTransactions.filter(t => 
+        t.category.toUpperCase() === cat.toUpperCase() && 
+        (isPilates ? (t.favorecido || '').toUpperCase() === 'PILATES' : (t.favorecido || '').toUpperCase() !== 'PILATES') &&
+        t.description.toUpperCase().includes(baseDesc)
+      );
+      return matches.reduce((acc, t) => acc + (t.type === 'INCOME' ? t.amount : -t.amount), 0);
+    };
+
+    const getExtraId = (desc: string, cat: string) => {
+      const isPilates = desc.toLowerCase().includes('(pilates)');
+      const baseDesc = desc.replace(/\s*\((pilates)\)\s*/i, '').trim().toUpperCase();
+
+      const found = activeTransactions.find(t => 
+        t.category.toUpperCase() === cat.toUpperCase() && 
+        (isPilates ? (t.favorecido || '').toUpperCase() === 'PILATES' : (t.favorecido || '').toUpperCase() !== 'PILATES') &&
+        t.description.toUpperCase().includes(baseDesc)
+      );
+      return found ? found.id : undefined;
+    };
+
+    const getMappedVal = (key: string) => {
+      const tx = mappedTransactions.get(key);
+      return tx ? (tx.clinicAmount ?? tx.amount) : 0;
+    };
+
+    const cpflSala01 = getMappedVal('cpfl_sala_01');
+    const cpflSala02 = getMappedVal('cpfl_sala_02');
+    const cpflSala03 = getMappedVal('cpfl_sala_03');
+    const cpflSala04 = getMappedVal('cpfl_sala_04');
+    const cpflSala05 = getMappedVal('cpfl_sala_05');
+    const cpflSala06 = getMappedVal('cpfl_sala_06');
+    const cpflSum = cpflSala01 + cpflSala03 + cpflSala04 + cpflSala05 + cpflSala06;
+
+    const getPartnerPaidExpenses = (partnerName: string) => {
+      return activeTransactions.filter(t => {
+        const cat = t.category?.toUpperCase() || '';
+        const isEligibleCat = ['GERAL', 'SECRETARIA', 'KINESIS'].includes(cat) || cat.startsWith('CPFL_SALA_');
+        return t.type === 'EXPENSE' && 
+               t.favorecido?.toUpperCase() === partnerName && 
+               isEligibleCat;
+      }).reduce((acc, t) => acc + t.amount, 0);
+    };
+
+    const danielPaid = getPartnerPaidExpenses("DANIEL");
+    const stuartPaid = getPartnerPaidExpenses("STUART");
+    const paulaPaid = getPartnerPaidExpenses("PAULA");
+
+    const fundoValItem = activeTransactions.find(t => t.category === 'PARTNER_ADJ' && t.description === 'Aporte Fundo Kinesis');
+    const fundoVal = fundoValItem ? fundoValItem.amount : 1000;
+    
+    const totalShared = (totalGeral * 0.83) + (totalSecretaria * 0.666) + (totalKinesis * 0.5) + cpflSum + fundoVal;
+
+    const juliaEarning = getExtraVal("Julia", "PRO_EARNING");
+    const gambaEarning = getExtraVal("Gambá", "PRO_EARNING");
+    const newtonEarning = getExtraVal("Newton", "PRO_EARNING");
+    const crisEarning = getExtraVal("Cris", "PRO_EARNING");
+    const joaoEarning = getExtraVal("João", "PRO_EARNING");
+    const ausenciaEarning = getExtraVal("Ausência Nula", "PRO_EARNING");
+
+    const totalArrecadado = juliaEarning + gambaEarning + newtonEarning + crisEarning + joaoEarning + ausenciaEarning;
+    const saldoFinal = totalArrecadado - totalShared;
+
+    const juliaPilates = getExtraVal("Julia (Pilates)", "PRO_EARNING");
+    const ausenciaPilates = getExtraVal("Ausência Nula (Pilates)", "PRO_EARNING");
+    const impostoPilates = getExtraVal("Imposto (Pilates)", "PRO_EARNING");
+
+    const arrecadadoPilates = (juliaPilates * 2) + ausenciaPilates;
+    const custosPilates = (totalGeral * 0.17) + (totalSecretaria * 0.333) + (totalKinesis * 0.5) + cpflSala02;
+    const saldoFinalPilates = arrecadadoPilates - juliaPilates - custosPilates - impostoPilates;
+
+    const danielAdj = getExtraValWithSign("Daniel Adicional", "PARTNER_ADJ");
+    const stuartAdj = getExtraValWithSign("Stuart Adicional", "PARTNER_ADJ");
+    const paulaAdj = getExtraValWithSign("Paula Adicional", "PARTNER_ADJ");
+
+    const danielShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) - crisEarning + danielAdj + danielPaid;
+    const stuartShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) + stuartAdj + stuartPaid;
+    const paulaShare = (saldoFinal * 0.20) + (saldoFinalPilates / 3) + paulaAdj + paulaPaid;
+
+    return {
+      totalGeral, totalSecretaria, totalKinesis, cpflSum, cpflSala02,
+      danielPaid, stuartPaid, paulaPaid,
+      totalArrecadado, totalShared, saldoFinal,
+      arrecadadoPilates, juliaPilates, ausenciaPilates, custosPilates, impostoPilates, saldoFinalPilates,
+      danielAdj, stuartAdj, paulaAdj, crisEarning,
+      danielShare, stuartShare, paulaShare,
+      getExtraVal, getExtraId, allMappedIds, findMappedTransaction, fundoVal
+    };
+  }, [activeTransactions]);
+
+  const {
+    totalGeral, totalSecretaria, totalKinesis, cpflSum, cpflSala02,
+    danielPaid, stuartPaid, paulaPaid,
+    totalArrecadado, totalShared, saldoFinal,
+    arrecadadoPilates, juliaPilates, ausenciaPilates, custosPilates, impostoPilates, saldoFinalPilates,
+    danielAdj, stuartAdj, paulaAdj, crisEarning,
+    danielShare, stuartShare, paulaShare,
+    getExtraVal, getExtraId, allMappedIds, findMappedTransaction, fundoVal
+  } = calc;
+
   const totalIncome = bankTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
   const totalExpense = bankTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
   const balance = totalIncome - totalExpense;
 
   // Calculo de totais por favorecido
   const allowedFavorecidos = ["KINESIS", "DANIEL", "STUART", "PAULA", "PILATES", "FUNDO"];
-  const favTotals: Record<string, number> = {
-    KINESIS: 0,
-    DANIEL: 0,
-    STUART: 0,
-    PAULA: 0,
-    PILATES: 0,
-    FUNDO: 0
-  };
+  const favTotals: Record<string, number> = { KINESIS: 0, DANIEL: 0, STUART: 0, PAULA: 0, PILATES: 0, FUNDO: 0 };
+  const favTotalsBB: Record<string, number> = { KINESIS: 0, DANIEL: 0, STUART: 0, PAULA: 0, PILATES: 0, FUNDO: 0 };
+  const favTotalsInter: Record<string, number> = { KINESIS: 0, DANIEL: 0, STUART: 0, PAULA: 0, PILATES: 0, FUNDO: 0 };
 
   bankTransactions.forEach((t: any) => {
+    // Para favTotals ser consistente entre as abas, precisamos ignorar PRO_EARNING, MANUAL_CLINICA e HIDDEN_ITEM
+    // que são ignorados na aba fluxo.
+    if (t.bank === 'MANUAL_CLINICA' || t.category === 'PRO_EARNING' || t.bank === 'HIDDEN_ITEM') {
+      return;
+    }
+
     const favorecido = (t.favorecido || '').toUpperCase();
     if (favorecido && allowedFavorecidos.includes(favorecido)) {
-      if (t.type === 'INCOME') {
-        favTotals[favorecido] += t.amount;
-      } else {
-        favTotals[favorecido] -= t.amount;
+      const amount = t.type === 'INCOME' ? t.amount : -t.amount;
+      
+      // We always compute the total
+      favTotals[favorecido] += amount;
+      
+      // And we compute the breakdown
+      const bankName = (t.bank || 'Banco do Brasil').toLowerCase();
+      if (bankName === 'banco do brasil') {
+        favTotalsBB[favorecido] += amount;
+      } else if (bankName === 'banco inter') {
+        favTotalsInter[favorecido] += amount;
       }
     }
   });
+
+  // A pedido do usuário, o Resumo por Favorecido reflete ESTRITAMENTE o fluxo bancário/manual.
+  // A liquidação de lucros (abater da Kinesis, somar aos sócios) será refletida apenas na visão de "Distribuição Consolidada de Sócios",
+  // pois não há movimentação bancária correspondente ainda.
 
   const favColors: Record<string, { border: string, bg: string, text: string }> = {
     KINESIS: { border: '#8b5cf6', bg: '#f5f3ff', text: '#6d28d9' },
@@ -1090,11 +1355,12 @@ export default function FinanceiroPageContent() {
       </div>
 
       {/* Resumo por Favorecido */}
+      {activeTab.startsWith('fluxo') && (
       <div style={{ marginBottom: '30px' }}>
         <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b' }}>Resumo por Favorecido</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
           {allowedFavorecidos.map(fav => {
-            const value = favTotals[fav];
+            const value = activeTab === 'fluxo_bb' ? favTotalsBB[fav] : favTotalsInter[fav];
             const isNegative = value < 0;
             const colors = favColors[fav] || { border: '#cbd5e1', bg: '#f8fafc', text: '#475569' };
             return (
@@ -1119,11 +1385,12 @@ export default function FinanceiroPageContent() {
           })}
         </div>
       </div>
+      )}
 
       {/* Tab Switcher */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
         <button 
-          onClick={() => setActiveTab('fluxo')}
+          onClick={() => setActiveTab('fluxo_bb')}
           style={{
             padding: '10px 20px',
             borderRadius: '8px',
@@ -1132,12 +1399,29 @@ export default function FinanceiroPageContent() {
             cursor: 'pointer',
             transition: 'all 0.2s',
             border: '1px solid #cbd5e1',
-            background: activeTab === 'fluxo' ? 'var(--primary)' : 'white',
-            color: activeTab === 'fluxo' ? 'white' : '#475569',
-            boxShadow: activeTab === 'fluxo' ? '0 4px 6px -1px rgba(99, 102, 241, 0.2)' : 'none'
+            background: activeTab === 'fluxo_bb' ? 'var(--primary)' : 'white',
+            color: activeTab === 'fluxo_bb' ? 'white' : '#475569',
+            boxShadow: activeTab === 'fluxo_bb' ? '0 4px 6px -1px rgba(99, 102, 241, 0.2)' : 'none'
           }}
         >
-          Fluxo de Caixa (Banco)
+          Fluxo de Caixa (BB)
+        </button>
+        <button 
+          onClick={() => setActiveTab('fluxo_inter')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            fontWeight: '800',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            border: '1px solid #cbd5e1',
+            background: activeTab === 'fluxo_inter' ? 'var(--primary)' : 'white',
+            color: activeTab === 'fluxo_inter' ? 'white' : '#475569',
+            boxShadow: activeTab === 'fluxo_inter' ? '0 4px 6px -1px rgba(99, 102, 241, 0.2)' : 'none'
+          }}
+        >
+          Fluxo de Caixa (Inter)
         </button>
         <button 
           onClick={() => setActiveTab('custos')}
@@ -1158,12 +1442,76 @@ export default function FinanceiroPageContent() {
         </button>
       </div>
 
-      {activeTab === 'fluxo' ? (
+      {activeTab === 'custos' && (() => {
+        const liquidatedFavTotals = { ...favTotals };
+        const lucroFisioDaniel = (saldoFinal * 0.40) - crisEarning + danielAdj + danielPaid;
+        const lucroFisioStuart = (saldoFinal * 0.40) + stuartAdj + stuartPaid;
+        const lucroFisioPaula = (saldoFinal * 0.20) + paulaAdj + paulaPaid;
+
+        liquidatedFavTotals['KINESIS'] -= (lucroFisioDaniel + lucroFisioStuart + lucroFisioPaula);
+        liquidatedFavTotals['PILATES'] -= saldoFinalPilates;
+        liquidatedFavTotals['PILATES'] -= custosPilates;
+        liquidatedFavTotals['KINESIS'] += custosPilates;
+        liquidatedFavTotals['DANIEL'] += danielShare;
+        liquidatedFavTotals['STUART'] += stuartShare;
+        liquidatedFavTotals['PAULA'] += paulaShare;
+
+        return (
+          <div style={{ marginBottom: '30px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Wallet size={20} color="#8b5cf6" /> Fechamento de Caixa (Após Liquidação)
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
+              {allowedFavorecidos.map(fav => {
+                const value = liquidatedFavTotals[fav] || 0;
+                const isNegative = value < 0;
+                const colors = favColors[fav] || { border: '#cbd5e1', bg: '#f8fafc', text: '#475569' };
+                return (
+                  <div key={fav} className="card" style={{ 
+                    padding: '16px', 
+                    borderLeft: `4px solid ${colors.border}`,
+                    backgroundColor: '#ffffff',
+                    borderRadius: '8px',
+                    margin: 0
+                  }}>
+                    <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', marginTop: 0 }}>{fav}</p>
+                    <h4 style={{ 
+                      fontSize: '1.05rem', 
+                      fontWeight: '800', 
+                      color: value === 0 ? '#475569' : isNegative ? '#dc2626' : '#16a34a',
+                      margin: 0
+                    }}>
+                      {isNegative ? '-' : ''}R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h4>
+                    
+                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                        <span>BB:</span>
+                        <span style={{ fontWeight: '600' }}>
+                          {favTotalsBB[fav] < 0 ? '-' : ''}R$ {Math.abs(favTotalsBB[fav] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                        <span>Inter:</span>
+                        <span style={{ fontWeight: '600' }}>
+                          {favTotalsInter[fav] < 0 ? '-' : ''}R$ {Math.abs(favTotalsInter[fav] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {activeTab.startsWith('fluxo') ? (
         <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <CreditCard color="var(--primary)" size={24} />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>Fluxo de Caixa (Banco)</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>Fluxo de Caixa ({activeTab === 'fluxo_bb' ? 'Banco do Brasil' : 'Banco Inter'})</h3>
             </div>
             
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -1406,106 +1754,6 @@ export default function FinanceiroPageContent() {
           </div>
         </div>
       ) : (() => {
-        // Clinic Costs Filter and Sum Calculations
-        const geralCosts = activeTransactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'GERAL');
-        const secretariaCosts = activeTransactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'SECRETARIA');
-        const kinesisCosts = activeTransactions.filter(t => t.type === 'EXPENSE' && t.category.toUpperCase() === 'KINESIS');
-
-        const totalGeral = geralCosts.reduce((acc, t) => acc + t.amount, 0);
-        const totalSecretaria = secretariaCosts.reduce((acc, t) => acc + t.amount, 0);
-        const totalKinesis = kinesisCosts.reduce((acc, t) => acc + t.amount, 0);
-
-        const getExtraVal = (desc: string, cat: string) => {
-          const found = activeTransactions.find(t => 
-            t.category.toUpperCase() === cat.toUpperCase() && 
-            (
-              t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
-              t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim().toUpperCase() === desc.trim().toUpperCase()
-            )
-          );
-          return found ? found.amount : 0;
-        };
-
-        const getExtraValWithSign = (desc: string, cat: string) => {
-          const found = activeTransactions.find(t => 
-            t.category.toUpperCase() === cat.toUpperCase() && 
-            (
-              t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
-              t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim().toUpperCase() === desc.trim().toUpperCase()
-            )
-          );
-          if (!found) return 0;
-          return found.type === 'INCOME' ? found.amount : -found.amount;
-        };
-
-        const getExtraId = (desc: string, cat: string) => {
-          const found = activeTransactions.find(t => 
-            t.category.toUpperCase() === cat.toUpperCase() && 
-            (
-              t.description.trim().toUpperCase() === desc.trim().toUpperCase() ||
-              t.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim().toUpperCase() === desc.trim().toUpperCase()
-            )
-          );
-          return found ? found.id : undefined;
-        };
-
-        const cpflSala01 = getExtraVal("CPFL Sala 01", "CPFL_SALA");
-        const cpflSala02 = getExtraVal("CPFL Sala 02", "CPFL_SALA");
-        const cpflSala03 = getExtraVal("CPFL Sala 03", "CPFL_SALA");
-        const cpflSala04 = getExtraVal("CPFL Sala 04", "CPFL_SALA");
-        const cpflSala05 = getExtraVal("CPFL Sala 05", "CPFL_SALA");
-        const cpflSala06 = getExtraVal("CPFL Sala 06", "CPFL_SALA");
-        const cpflSum = cpflSala01 + cpflSala03 + cpflSala04 + cpflSala05 + cpflSala06;
-
-        // Paid by partners directly (reimbursements)
-        const getPartnerPaidExpenses = (partnerName: string) => {
-          return activeTransactions.filter(t => 
-            t.type === 'EXPENSE' && 
-            t.favorecido?.toUpperCase() === partnerName && 
-            ['GERAL', 'SECRETARIA', 'KINESIS', 'CPFL_SALA'].includes(t.category?.toUpperCase() || '')
-          ).reduce((acc, t) => acc + t.amount, 0);
-        };
-
-        const danielPaid = getPartnerPaidExpenses("DANIEL");
-        const stuartPaid = getPartnerPaidExpenses("STUART");
-        const paulaPaid = getPartnerPaidExpenses("PAULA");
-
-        // Fundo Kinesis
-        const fundoValItem = activeTransactions.find(t => t.category === 'PARTNER_ADJ' && t.description === 'Aporte Fundo Kinesis');
-        const fundoVal = fundoValItem ? fundoValItem.amount : 1000;
-        
-        // Fisioterapia calculations
-        const totalShared = (totalGeral * 0.83) + (totalSecretaria * 0.666) + (totalKinesis * 0.5) + cpflSum + fundoVal;
-
-        const juliaEarning = getExtraVal("Julia", "PRO_EARNING");
-        const gambaEarning = getExtraVal("Gambá", "PRO_EARNING");
-        const newtonEarning = getExtraVal("Newton", "PRO_EARNING");
-        const crisEarning = getExtraVal("Cris", "PRO_EARNING");
-        const joaoEarning = getExtraVal("João", "PRO_EARNING");
-        const ausenciaEarning = getExtraVal("Ausência Nula", "PRO_EARNING");
-
-        const totalArrecadado = juliaEarning + gambaEarning + newtonEarning + crisEarning + joaoEarning + ausenciaEarning;
-        const saldoFinal = totalArrecadado - totalShared;
-
-        // Pilates calculations
-        const juliaPilates = getExtraVal("Julia (Pilates)", "PRO_EARNING");
-        const paulaPilates = getExtraVal("Paula (Pilates)", "PRO_EARNING");
-        const ausenciaPilates = getExtraVal("Ausência Nula (Pilates)", "PRO_EARNING");
-        const impostoPilates = getExtraVal("Imposto (Pilates)", "PRO_EARNING");
-
-        const arrecadadoPilates = (juliaPilates * 2) + paulaPilates + ausenciaPilates;
-        const custosPilates = (totalGeral * 0.17) + (totalSecretaria * 0.333) + (totalKinesis * 0.5) + cpflSala02;
-        const saldoFinalPilates = arrecadadoPilates - juliaPilates - paulaPilates - custosPilates - impostoPilates;
-
-        // Adjustments and Partner Splits
-        const danielAdj = getExtraValWithSign("Daniel Adicional", "PARTNER_ADJ");
-        const stuartAdj = getExtraValWithSign("Stuart Adicional", "PARTNER_ADJ");
-        const paulaAdj = getExtraValWithSign("Paula Adicional", "PARTNER_ADJ");
-
-        const danielShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) - crisEarning + danielAdj + danielPaid;
-        const stuartShare = (saldoFinal * 0.40) + (saldoFinalPilates / 3) + stuartAdj + stuartPaid;
-        const paulaShare = (saldoFinal * 0.20) + (saldoFinalPilates / 3) + paulaAdj + paulaPaid;
-
         const renderExtraField = (label: string, cleanDesc: string, category: 'CPFL_SALA' | 'PRO_EARNING' | 'PARTNER_ADJ') => {
           const value = getExtraVal(cleanDesc, category);
           const existingId = getExtraId(cleanDesc, category);
@@ -1513,30 +1761,33 @@ export default function FinanceiroPageContent() {
           return (
             <div key={cleanDesc} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>{label}</span>
-              <input 
-                type="number" 
-                step="0.01"
-                key={`${cleanDesc}_${value}`}
-                defaultValue={value ? Number(value).toFixed(2) : ''}
-                placeholder="0,00"
-                onBlur={async (e) => {
-                  const val = Number((parseFloat(e.target.value) || 0).toFixed(2));
-                  if (val === value) return;
-                  await handleSaveExtraField(cleanDesc, category, val, existingId);
-                }}
-                style={{
-                  width: '105px',
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '0.8rem',
-                  fontWeight: '800',
-                  textAlign: 'right',
-                  outline: 'none',
-                  background: '#ffffff',
-                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-                }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {category === 'PRO_EARNING' && <span style={{ fontWeight: '800', color: '#475569', fontSize: '0.8rem' }}>R$</span>}
+                <input 
+                  type="number" 
+                  step="0.01"
+                  key={`${cleanDesc}_${value}`}
+                  defaultValue={value ? Number(value).toFixed(2) : ''}
+                  placeholder="0,00"
+                  onBlur={async (e) => {
+                    const val = Number((parseFloat(e.target.value) || 0).toFixed(2));
+                    if (val === value) return;
+                    await handleSaveExtraField(cleanDesc, category, val, existingId);
+                  }}
+                  style={{
+                    width: '105px',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.8rem',
+                    fontWeight: '800',
+                    textAlign: 'right',
+                    outline: 'none',
+                    background: '#ffffff',
+                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                  }}
+                />
+              </div>
             </div>
           );
         };
@@ -1558,20 +1809,38 @@ export default function FinanceiroPageContent() {
             <div style={{ display: 'flex', gap: '24px', position: 'relative', marginBottom: '30px', alignItems: 'flex-start' }}>
               
               {(() => {
-                const findMappedTransaction = (item: ExcelItem) => {
-                  return activeTransactions.find(t => 
-                    t.type === 'EXPENSE' && 
-                    getFriendlyDescription(t.description).toUpperCase() === item.label.toUpperCase()
-                  );
-                };
-
-                const allMappedIds = EXCEL_ITEMS.map(i => findMappedTransaction(i)?.id).filter(Boolean);
                 const blockCategories = ['GERAL', 'SECRETARIA', 'KINESIS'];
+
+                const allExtraMappedIds = activeTransactions.filter(t => 
+                  t.type === 'EXPENSE' &&
+                  t.clinicCat && 
+                  blockCategories.includes(t.clinicCat.toUpperCase()) &&
+                  !allMappedIds.includes(t.id)
+                ).map(t => t.id);
+
+                // Unmapped = bank transactions in these categories that haven't been linked
                 const globalUnmappedCosts = activeTransactions.filter(t => 
                    t.type === 'EXPENSE' && 
-                   blockCategories.includes(t.category?.toUpperCase() || '') &&
-                   !allMappedIds.includes(t.id)
+                   (
+                     blockCategories.includes((t.clinicCat ?? t.category)?.toUpperCase() || '') ||
+                     (t.clinicCat ?? t.category)?.toUpperCase() === 'UNMAPPED' ||
+                     (t.clinicCat ?? t.category)?.toUpperCase().startsWith('CPFL_SALA')
+                   ) &&
+                   !allMappedIds.includes(t.id) &&
+                   !allExtraMappedIds.includes(t.id)
                 );
+
+                // Also pool CPFL transactions (category CPFL_SALA_*) that are unlinked
+                const cpflItems = EXCEL_ITEMS.filter(i => i.block === 'cpfl');
+                const mappedCpflIds = cpflItems.map(i => findMappedTransaction(i)?.id).filter(Boolean);
+                const unmappedCpflCosts = activeTransactions.filter(t =>
+                  t.type === 'EXPENSE' &&
+                  ['CPFL_SALA_01','CPFL_SALA_02','CPFL_SALA_03','CPFL_SALA_04','CPFL_SALA_05','CPFL_SALA_06','CPFL_SALA'].some(c => (t.clinicCat ?? t.category)?.toUpperCase() === c) &&
+                  t.bank !== 'MANUAL_CLINICA' &&
+                  !mappedCpflIds.includes(t.id)
+                );
+                // Combined pool for dropdowns
+                const allUnmappedForDropdown = [...globalUnmappedCosts, ...unmappedCpflCosts];
 
                 const renderDossierRow = (item: ExcelItem) => {
                   const transaction = findMappedTransaction(item);
@@ -1586,13 +1855,13 @@ export default function FinanceiroPageContent() {
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
                             <input 
                               type="text" 
-                              defaultValue={transaction.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '')}
+                              defaultValue={((transaction.clinicDesc ?? transaction.description) || '').replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '')}
                               onBlur={(e) => handleUpdateTransactionField(transaction.id, 'description', e.target.value)}
                               style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8rem', fontWeight: '800', color: '#0f172a', outline: 'none' }}
                             />
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
                               <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
-                                Data: {transaction.date.split('-').reverse().slice(0,2).join('/')}
+                                Data: {(transaction.date || '').split('T')[0].split('-').reverse().slice(0,2).join('/')}
                               </span>
                               <select
                                 value={transaction.favorecido || ''}
@@ -1608,13 +1877,9 @@ export default function FinanceiroPageContent() {
                         <td style={{ padding: '12px 16px', textAlign: 'right', borderBottom: '1px solid #e2e8f0' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
                             <span style={{ fontWeight: '800', color: '#15803d', fontSize: '0.85rem' }}>R$</span>
-                            <input 
-                              type="number" 
-                              step="0.01"
-                              defaultValue={Number(transaction.amount).toFixed(2)}
-                              onBlur={(e) => handleUpdateTransactionField(transaction.id, 'amount', e.target.value)}
-                              style={{ border: 'none', background: 'transparent', width: '80px', fontSize: '0.85rem', fontWeight: '800', color: '#15803d', textAlign: 'right', outline: 'none' }}
-                            />
+                            <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#15803d' }}>
+                              {Number(transaction.clinicAmount ?? transaction.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </div>
                         </td>
                         <td style={{ padding: '12px 16px', textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
@@ -1639,6 +1904,7 @@ export default function FinanceiroPageContent() {
                     );
                   }
 
+                  // Not yet linked
                   return (
                     <tr key={item.key} style={{ background: '#ffffff' }}>
                       <td style={{ fontWeight: '700', fontSize: '0.85rem', color: '#334155', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
@@ -1648,27 +1914,32 @@ export default function FinanceiroPageContent() {
                         <select
                           onChange={async (e) => {
                             const txId = e.target.value;
-                            if (txId) {
-                              const toastId = toast.loading('Vinculando...');
-                              try {
-                                await fetch('/api/financeiro', {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ id: txId, field: 'description', value: item.label })
-                                });
-                                toast.success('Vinculado com sucesso!', { id: toastId });
-                                loadTransactions();
-                              } catch(err) {
-                                toast.error('Erro ao vincular', { id: toastId });
-                              }
+                            if (!txId) return;
+                            const toastId = toast.loading('Vinculando...');
+                            try {
+                              const targetCat = item.clinicCat ?? (item.block === 'geral' ? 'GERAL' : item.block === 'secretaria' ? 'SECRETARIA' : item.block === 'kinesis' ? 'KINESIS' : 'GERAL');
+                              await fetch('/api/financeiro/update', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  transactionId: txId,
+                                  isClinicEdit: true,
+                                  description: item.label,
+                                  category: targetCat
+                                })
+                              });
+                              toast.success('Vinculado com sucesso!', { id: toastId });
+                              loadTransactions();
+                            } catch(err) {
+                              toast.error('Erro ao vincular', { id: toastId });
                             }
                           }}
                           style={{ width: '100%', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', color: '#334155', background: '#f8fafc', cursor: 'pointer' }}
                         >
                           <option value="">-- Buscar Lançamento --</option>
-                          {globalUnmappedCosts.map(t => (
+                          {allUnmappedForDropdown.map(t => (
                             <option key={t.id} value={t.id}>
-                              ({t.date.split('-').reverse().slice(0,2).join('/')}) - {t.description.substring(0, 30)}... (R$ {Math.abs(t.amount).toFixed(2)})
+                              ({(t.date || '').split('T')[0].split('-').reverse().slice(0,2).join('/')}) {((t.clinicDesc ?? t.description) || '').substring(0, 28)}... R$ {Math.abs((t.clinicAmount ?? t.amount) || 0).toFixed(2)}
                             </option>
                           ))}
                         </select>
@@ -1677,18 +1948,18 @@ export default function FinanceiroPageContent() {
                         <input 
                           type="number"
                           step="0.01"
-                          placeholder="0,00 (Manual)"
+                          placeholder="0,00"
                           onBlur={async (e) => {
                              const val = Number((parseFloat(e.target.value) || 0).toFixed(2));
                              if (val > 0) {
-                               const cat = ['geral', 'secretaria', 'kinesis'].includes(item.block) ? item.block.toUpperCase() : 'GERAL';
+                               const cat = item.clinicCat ?? (['geral', 'secretaria', 'kinesis'].includes(item.block) ? item.block.toUpperCase() : 'GERAL');
                                const toastId = toast.loading('Adicionando...');
                                try {
                                  await fetch('/api/financeiro/manual', {
                                    method: 'POST',
                                    headers: { 'Content-Type': 'application/json' },
                                    body: JSON.stringify({
-                                     date: new Date(startYear, startMonth - 1, 15).toISOString().split('T')[0],
+                                     date: new Date(startYear, startMonth, 1).toISOString().split('T')[0],
                                      description: item.label,
                                      amount: val,
                                      type: 'EXPENSE',
@@ -1696,7 +1967,7 @@ export default function FinanceiroPageContent() {
                                      bank: 'MANUAL_CLINICA'
                                    })
                                  });
-                                 toast.success('Adicionado com sucesso!', { id: toastId });
+                                 toast.success('Adicionado!', { id: toastId });
                                  e.target.value = '';
                                  loadTransactions();
                                } catch (err) {
@@ -1707,13 +1978,34 @@ export default function FinanceiroPageContent() {
                           style={{ width: '100px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: '800', textAlign: 'right', outline: 'none' }}
                         />
                       </td>
-                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}></td>
-                    </tr>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
+                          <button 
+                            onClick={() => handleHideExcelItem(item.key)} 
+                            title="Excluir este item da lista neste mês"
+                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid #fee2e2', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
                   );
                 };
 
-                const renderBlock = (title: string, blockName: 'geral' | 'secretaria' | 'kinesis', total: number) => {
+                const renderBlock = (title: string, blockName: 'geral' | 'secretaria' | 'kinesis' | 'cpfl', total: number, showAddButton = true) => {
                   const items = EXCEL_ITEMS.filter(i => i.block === blockName);
+                  
+                  const hiddenItemKeys = activeTransactions
+                    .filter(t => t.bank === 'HIDDEN_ITEM')
+                    .map(t => (t.description || '').replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim());
+                    
+                  const visibleItems = items.filter(i => !hiddenItemKeys.includes(i.key));
+                  const hiddenItems = items.filter(i => hiddenItemKeys.includes(i.key));
+
+                  const blockCat = blockName === 'cpfl' ? null : blockName.toUpperCase();
+                  const extraItems = blockCat ? activeTransactions.filter(t =>
+                    t.type === 'EXPENSE' &&
+                    t.clinicCat?.toUpperCase() === blockCat &&
+                    !allMappedIds.includes(t.id)
+                  ) : [];
 
                   return (
                     <div className="card" style={{ padding: '0', overflow: 'hidden', marginBottom: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
@@ -1721,27 +2013,160 @@ export default function FinanceiroPageContent() {
                         <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <FileText size={16} color="var(--primary)" /> {title}
                         </h3>
-                        <button 
-                          onClick={() => handleCreateClinicCost(blockName.toUpperCase() as any)}
-                          className="btn btn-secondary" 
-                          style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
-                          <Plus size={14} /> Novo Adicional
-                        </button>
+                        {showAddButton && blockName !== 'cpfl' && (
+                          <button 
+                            onClick={() => handleAddCustomLine(blockName)}
+                            className="btn btn-secondary" 
+                            style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '800' }}>
+                            <Plus size={14} /> Adicionar Nova Linha
+                          </button>
+                        )}
                       </div>
                       <div style={{ overflowX: 'auto' }}>
                         <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                           <thead>
                             <tr>
-                              <th style={{ padding: '12px 16px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Item Excel</th>
+                              <th style={{ padding: '12px 16px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Item</th>
                               <th style={{ padding: '12px 16px', minWidth: '150px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Lançamento Vinculado</th>
                               <th style={{ padding: '12px 16px', textAlign: 'right', width: '130px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Valor (R$)</th>
                               <th style={{ padding: '12px 16px', textAlign: 'center', width: '80px', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '800', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>Ações</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {items.map(item => renderDossierRow(item))}
+                            {visibleItems.map(item => renderDossierRow(item))}
+                            {/* Manual extras not in EXCEL_ITEMS rendered inline correctly using tx */}
+                            {extraItems.map((tx, idx) => (
+                              <tr key={`${tx.id}-${idx}`} style={{ background: '#f0fdf4' }}>
+                                <td style={{ fontWeight: '700', fontSize: '0.85rem', color: '#334155', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                                  <input
+                                    type="text"
+                                    defaultValue={((tx.clinicDesc ?? tx.description) || '').replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '')}
+                                    onBlur={(e) => handleUpdateTransactionField(tx.id, 'description', e.target.value)}
+                                    style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.85rem', fontWeight: '700', color: '#334155', outline: 'none' }}
+                                  />
+                                </td>
+                                <td style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                                      Data: {(tx.date || '').split('T')[0].split('-').reverse().slice(0,2).join('/')}
+                                    </span>
+                                    <select
+                                      value={tx.favorecido || ''}
+                                      onChange={(e) => handleUpdateTransactionField(tx.id, 'favorecido', e.target.value)}
+                                      style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', padding: '2px 6px', fontSize: '0.65rem', fontWeight: '800', outline: 'none', color: tx.favorecido ? (favColors[tx.favorecido]?.text || '#166534') : '#166534', cursor: 'pointer' }}
+                                    >
+                                      <option value="">-- Pago por --</option>
+                                      {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
+                                    </select>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'right', borderBottom: '1px solid #e2e8f0' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                                    <span style={{ fontWeight: '800', color: '#15803d', fontSize: '0.85rem' }}>R$</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      defaultValue={Number(tx.clinicAmount ?? tx.amount).toFixed(2)}
+                                      onBlur={(e) => handleUpdateTransactionField(tx.id, 'amount', e.target.value)}
+                                      style={{ border: 'none', background: 'transparent', width: '80px', fontSize: '0.85rem', fontWeight: '800', color: '#15803d', textAlign: 'right', outline: 'none' }}
+                                    />
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
+                                  <button
+                                    onClick={() => handleRemoveFromClinicCosts(tx.id)}
+                                    title="Desvincular Lançamento"
+                                    style={{ padding: '6px', borderRadius: '6px', border: '1px solid #fee2e2', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Unlink size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+
+                            {/* Temporary Empty Slots */}
+                            {customBlockLines.filter(c => c.block === blockName).map(customLine => (
+                              <tr key={customLine.id} style={{ background: '#ffffff' }}>
+                                <td style={{ fontWeight: '700', fontSize: '0.85rem', color: '#334155', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                                  <input 
+                                    type="text" 
+                                    defaultValue={customLine.label}
+                                    onBlur={(e) => {
+                                      setCustomBlockLines(prev => prev.map(c => c.id === customLine.id ? { ...c, label: e.target.value } : c));
+                                    }}
+                                    style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.85rem', fontWeight: '700', color: '#334155', outline: 'none', borderBottom: '1px dashed #cbd5e1' }}
+                                  />
+                                </td>
+                                <td style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                                  <select
+                                    onChange={async (e) => {
+                                      const txId = e.target.value;
+                                      if (!txId) return;
+                                      const toastId = toast.loading('Vinculando...');
+                                      try {
+                                        const targetCat = blockCat || 'GERAL';
+                                        await fetch('/api/financeiro/update', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            transactionId: txId,
+                                            isClinicEdit: true,
+                                            description: customLine.label,
+                                            category: targetCat
+                                          })
+                                        });
+                                        toast.success('Vinculado com sucesso!', { id: toastId });
+                                        setCustomBlockLines(prev => prev.filter(c => c.id !== customLine.id));
+                                        loadTransactions();
+                                      } catch(err) {
+                                        toast.error('Erro ao vincular', { id: toastId });
+                                      }
+                                    }}
+                                    style={{ width: '100%', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', color: '#334155', background: '#f8fafc', cursor: 'pointer' }}
+                                  >
+                                    <option value="">-- Buscar Lançamento --</option>
+                                    {allUnmappedForDropdown.map((t, idx) => (
+                                      <option key={`${t.id}-${idx}`} value={t.id}>
+                                        ({(t.date || '').split('T')[0].split('-').reverse().slice(0,2).join('/')}) {((t.clinicDesc ?? t.description) || '').substring(0, 28)}... R$ {Math.abs((t.clinicAmount ?? t.amount) || 0).toFixed(2)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
+                                  <button 
+                                    onClick={() => setCustomBlockLines(prev => prev.filter(c => c.id !== customLine.id))} 
+                                    title="Remover linha"
+                                    style={{ padding: '6px', borderRadius: '6px', border: '1px solid #fee2e2', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                                <td style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}></td>
+                              </tr>
+                            ))}
                           </tbody>
                         </table>
+                        
+                        {hiddenItems.length > 0 && (
+                          <div style={{ padding: '8px 20px', fontSize: '0.75rem', color: '#64748b', display: 'flex', gap: '8px', alignItems: 'center', background: '#f8fafc' }}>
+                            <Trash2 size={14} />
+                            <span style={{ fontWeight: '800' }}>Itens excluídos neste mês:</span>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              {hiddenItems.map(hi => {
+                                const hiddenTx = activeTransactions.find(t => t.bank === 'HIDDEN_ITEM' && t.description === hi.key);
+                                return (
+                                  <button 
+                                    key={hi.key}
+                                    onClick={() => handleRestoreExcelItem(hiddenTx?.id)}
+                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '2px 6px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}
+                                    title="Restaurar item para a tabela"
+                                  >
+                                    {hi.label} <RotateCcw size={10} color="#3b82f6" />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '0.9rem', color: '#0f172a', background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
                           <span>TOTAL {title.toUpperCase()}:</span>
                           <span>R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -1751,13 +2176,16 @@ export default function FinanceiroPageContent() {
                   );
                 };
 
+
+
                 return (
-                  <>
-                    {/* LEFT SIDE: BLOCKS */}
+                <>
+                  {/* Distribuição Consolidada */}
                     <div style={{ flex: '7', display: 'flex', flexDirection: 'column' }}>
                       {renderBlock("Gastos Gerais", "geral", totalGeral)}
                       {renderBlock("Gastos Secretária", "secretaria", totalSecretaria)}
                       {renderBlock("Gastos Kinesis", "kinesis", totalKinesis)}
+                      {renderBlock("CPFL por Sala", "cpfl", cpflSum + cpflSala02, false)}
                     </div>
 
                     {/* RIGHT SIDE: UNMAPPED TRANSACTIONS BOX (Sticky Sidebar) */}
@@ -1783,9 +2211,16 @@ export default function FinanceiroPageContent() {
                           <h3 style={{ fontSize: '0.95rem', fontWeight: '900', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <Sparkles size={16} color="#eab308" /> Lançamentos Não Relacionados
                           </h3>
-                          <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.75rem', fontWeight: '800', padding: '2px 8px', borderRadius: '12px' }}>
-                            {globalUnmappedCosts.length} itens
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.75rem', fontWeight: '800', padding: '2px 8px', borderRadius: '12px' }}>
+                              {globalUnmappedCosts.length} itens
+                            </span>
+                            <button 
+                              onClick={handleCreateSidebarManualEntry}
+                              style={{ padding: '4px 8px', borderRadius: '6px', background: '#e0f2fe', color: '#0284c7', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Plus size={12} /> Novo
+                            </button>
+                          </div>
                         </div>
 
                         {/* Scrollable unmapped list */}
@@ -1810,19 +2245,26 @@ export default function FinanceiroPageContent() {
                               position: 'relative'
                             }}>
                               <button 
-                                onClick={() => handleRemoveFromClinicCosts(tx.id)} 
+                                onClick={() => handleHideFromClinicCosts(tx.id)} 
                                 style={{ position: 'absolute', top: '12px', right: '14px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
                                 <Trash2 size={14} />
                               </button>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '20px' }}>
-                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b' }}>{tx.date.split('-').reverse().slice(0,2).join('/')}</span>
-                                <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#b91c1c', whiteSpace: 'nowrap' }}>
-                                  R$ {Math.abs(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
+                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b' }}>{(tx.date || '').split('T')[0].split('-').reverse().slice(0,2).join('/')}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#b91c1c' }}>R$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    defaultValue={Math.abs(tx.clinicAmount ?? tx.amount).toFixed(2)}
+                                    onBlur={(e) => handleUpdateTransactionField(tx.id, 'amount', e.target.value)}
+                                    style={{ border: 'none', background: 'transparent', width: '70px', fontSize: '0.85rem', fontWeight: '950', color: '#b91c1c', textAlign: 'right', outline: 'none' }}
+                                  />
+                                </div>
                               </div>
                               <input 
                                 type="text"
-                                defaultValue={tx.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '')}
+                                defaultValue={(tx.description || '').replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '')}
                                 onBlur={(e) => handleUpdateTransactionField(tx.id, 'description', e.target.value)}
                                 style={{ fontSize: '0.8rem', fontWeight: '750', color: '#1e293b', background: 'transparent', border: 'none', outline: 'none', padding: 0, width: '100%', marginTop: '2px' }}
                               />
@@ -1853,23 +2295,7 @@ export default function FinanceiroPageContent() {
             </div>
 
             {/* Bottom summary and extra fields */}
-            {/* Bottom summary and extra fields */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '25px' }}>
-              
-              {/* CPFL card */}
-              <div className="card" style={{ padding: '20px' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>CPFL por Sala</h3>
-                {renderExtraField("Sala 01", "CPFL Sala 01", "CPFL_SALA")}
-                {renderExtraField("Sala 02 (Pilates)", "CPFL Sala 02", "CPFL_SALA")}
-                {renderExtraField("Sala 03", "CPFL Sala 03", "CPFL_SALA")}
-                {renderExtraField("Sala 04", "CPFL Sala 04", "CPFL_SALA")}
-                {renderExtraField("Sala 05", "CPFL Sala 05", "CPFL_SALA")}
-                {renderExtraField("Sala 06", "CPFL Sala 06", "CPFL_SALA")}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.8rem', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '12px', color: '#1e293b' }}>
-                  <span>Total CPFL:</span>
-                  <span style={{ whiteSpace: 'nowrap' }}>R$ {(cpflSum + cpflSala02).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '25px' }}>
 
               {/* Ganhos card */}
               <div className="card" style={{ padding: '20px' }}>
@@ -1880,15 +2306,22 @@ export default function FinanceiroPageContent() {
                 {renderExtraField("Cris", "Cris", "PRO_EARNING")}
                 {renderExtraField("João", "João", "PRO_EARNING")}
                 {renderExtraField("Ausência Nula", "Ausência Nula", "PRO_EARNING")}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '2px solid #e2e8f0', fontWeight: '900', color: '#0f172a', fontSize: '0.85rem' }}>
+                  <span>TOTAL:</span>
+                  <span>R$ {totalArrecadado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
               </div>
 
               {/* Parâmetros do Pilates card */}
               <div className="card" style={{ padding: '20px' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Parâmetros do Pilates</h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Ganhos Pilates</h3>
                 {renderExtraField("Julia (Pilates)", "Julia (Pilates)", "PRO_EARNING")}
-                {renderExtraField("Paula (Pilates)", "Paula (Pilates)", "PRO_EARNING")}
                 {renderExtraField("Ausência Nula (P)", "Ausência Nula (Pilates)", "PRO_EARNING")}
                 {renderExtraField("Imposto (Pilates)", "Imposto (Pilates)", "PRO_EARNING")}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '2px solid #e2e8f0', fontWeight: '900', color: '#0f172a', fontSize: '0.85rem' }}>
+                  <span>TOTAL:</span>
+                  <span>R$ {(juliaPilates + ausenciaPilates + impostoPilates).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
               </div>
 
               {/* Ajustes card */}
@@ -2028,16 +2461,12 @@ export default function FinanceiroPageContent() {
                       <span style={{ color: '#b91c1c', whiteSpace: 'nowrap' }}>- R$ {custosPilates.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
-                      <span>Repasses Profissionais (Julia + Paula):</span>
-                      <span style={{ color: '#b91c1c', whiteSpace: 'nowrap' }}>- R$ {(juliaPilates + paulaPilates).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span>Lucro Bruto:</span>
+                      <span style={{ color: '#15803d', whiteSpace: 'nowrap' }}>+ R$ {(juliaPilates + ausenciaPilates).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
                       <span>Imposto Pilates:</span>
                       <span style={{ color: '#b91c1c', whiteSpace: 'nowrap' }}>- R$ {impostoPilates.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0f172a' }}>
-                      <span>Faturamento Pilates Arrecadado:</span>
-                      <span style={{ color: '#15803d', whiteSpace: 'nowrap' }}>+ R$ {arrecadadoPilates.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px double #cbd5e1', paddingTop: '6px', fontWeight: '900', color: '#0f172a', fontSize: '0.8rem' }}>
                       <span>LUCRO LÍQUIDO PILATES:</span>
@@ -2069,8 +2498,16 @@ export default function FinanceiroPageContent() {
                     <div style={{ fontSize: '1.25rem', fontWeight: '950', color: danielShare >= 0 ? '#166534' : '#991b1b', marginTop: '4px', whiteSpace: 'nowrap' }}>
                       R$ {danielShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
-                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} - Cris: R$ {crisEarning.toFixed(2)} {danielAdj !== 0 && `+ Adj: R$ ${danielAdj.toFixed(2)}`} {danielPaid > 0 && `+ Reembolso: R$ ${danielPaid.toFixed(2)}`}
+                    <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Fisioterapia (40%):</span> <span style={{fontWeight: '700'}}>R$ {(saldoFinal * 0.4).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Pilates (33%):</span> <span style={{fontWeight: '700'}}>R$ {(saldoFinalPilates / 3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Reembolso:</span> <span style={{fontWeight: '700'}}>R$ {danielPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Ajustes:</span> <span style={{fontWeight: '700'}}>R$ {(danielAdj - crisEarning).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '6px', marginTop: '6px', color: '#64748b' }}><span>Saldo prévio na conta:</span> <span style={{fontWeight: '700'}}>R$ {(favTotals['DANIEL'] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontSize: '0.85rem', marginTop: '2px', backgroundColor: '#f8fafc', padding: '4px', borderRadius: '4px' }}>
+                        <span style={{fontWeight: '800'}}>SALDO TOTAL DO MÊS:</span> 
+                        <span style={{fontWeight: '900'}}>R$ {(danielShare + (favTotals['DANIEL'] || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -2079,8 +2516,16 @@ export default function FinanceiroPageContent() {
                     <div style={{ fontSize: '1.25rem', fontWeight: '950', color: stuartShare >= 0 ? '#1d4ed8' : '#991b1b', marginTop: '4px', whiteSpace: 'nowrap' }}>
                       R$ {stuartShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
-                      Fisio (40%): R$ {(saldoFinal * 0.4).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {stuartAdj !== 0 && `+ Adj: R$ ${stuartAdj.toFixed(2)}`} {stuartPaid > 0 && `+ Reembolso: R$ ${stuartPaid.toFixed(2)}`}
+                    <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Fisioterapia (40%):</span> <span style={{fontWeight: '700'}}>R$ {(saldoFinal * 0.4).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Pilates (33%):</span> <span style={{fontWeight: '700'}}>R$ {(saldoFinalPilates / 3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Reembolso:</span> <span style={{fontWeight: '700'}}>R$ {stuartPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Ajustes:</span> <span style={{fontWeight: '700'}}>R$ {stuartAdj.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '6px', marginTop: '6px', color: '#64748b' }}><span>Saldo prévio na conta:</span> <span style={{fontWeight: '700'}}>R$ {(favTotals['STUART'] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontSize: '0.85rem', marginTop: '2px', backgroundColor: '#f8fafc', padding: '4px', borderRadius: '4px' }}>
+                        <span style={{fontWeight: '800'}}>SALDO TOTAL DO MÊS:</span> 
+                        <span style={{fontWeight: '900'}}>R$ {(stuartShare + (favTotals['STUART'] || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -2089,8 +2534,16 @@ export default function FinanceiroPageContent() {
                     <div style={{ fontSize: '1.25rem', fontWeight: '950', color: paulaShare >= 0 ? '#be185d' : '#991b1b', marginTop: '4px', whiteSpace: 'nowrap' }}>
                       R$ {paulaShare.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
-                      Fisio (20%): R$ {(saldoFinal * 0.2).toFixed(2)} + Pilates (1/3): R$ {(saldoFinalPilates / 3).toFixed(2)} {paulaAdj !== 0 && `+ Adj: R$ ${paulaAdj.toFixed(2)}`} {paulaPaid > 0 && `+ Reembolso: R$ ${paulaPaid.toFixed(2)}`}
+                    <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Fisioterapia (20%):</span> <span style={{fontWeight: '700'}}>R$ {(saldoFinal * 0.2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Pilates (33%):</span> <span style={{fontWeight: '700'}}>R$ {(saldoFinalPilates / 3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Reembolso:</span> <span style={{fontWeight: '700'}}>R$ {paulaPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Ajustes:</span> <span style={{fontWeight: '700'}}>R$ {paulaAdj.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '6px', marginTop: '6px', color: '#64748b' }}><span>Saldo prévio na conta:</span> <span style={{fontWeight: '700'}}>R$ {(favTotals['PAULA'] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', fontSize: '0.85rem', marginTop: '2px', backgroundColor: '#f8fafc', padding: '4px', borderRadius: '4px' }}>
+                        <span style={{fontWeight: '800'}}>SALDO TOTAL DO MÊS:</span> 
+                        <span style={{fontWeight: '900'}}>R$ {(paulaShare + (favTotals['PAULA'] || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
                     </div>
                   </div>
 

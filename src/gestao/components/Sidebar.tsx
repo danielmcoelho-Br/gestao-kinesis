@@ -25,6 +25,7 @@ export function Sidebar() {
   const [lStartYear, setLStartYear] = useState(startYear);
   const [lEndMonth, setLEndMonth] = useState(endMonth);
   const [lEndYear, setLEndYear] = useState(endYear);
+  const [isPeriodExpanded, setIsPeriodExpanded] = useState(() => startMonth !== endMonth || startYear !== endYear);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -76,31 +77,68 @@ export function Sidebar() {
       ) : (
         <div className="sidebar-content">
           <div className="period-card">
-            <p className="section-title">Período</p>
-            
-            <div className="selector-group">
-              <label>INÍCIO</label>
-              <div className="select-row">
-                <select value={lStartMonth} onChange={(e) => setLStartMonth(parseInt(e.target.value))}>
-                  {months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
-                </select>
-                <select value={lStartYear} onChange={(e) => setLStartYear(parseInt(e.target.value))}>
-                  {Array.from({ length: 5 }, (_, i) => 2026 - i).map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-            </div>
+            {!isPeriodExpanded ? (
+              <>
+                <p className="section-title" style={{ marginBottom: '8px' }}>SELECIONAR MÊS</p>
+                <div className="selector-group" style={{ marginBottom: '4px' }}>
+                  <div className="select-row">
+                    <select value={lStartMonth} onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setLStartMonth(val);
+                      setLEndMonth(val);
+                    }}>
+                      {months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
+                    </select>
+                    <select value={lStartYear} onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setLStartYear(val);
+                      setLEndYear(val);
+                    }}>
+                      {Array.from({ length: 5 }, (_, i) => 2026 - i).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="section-title" style={{ marginBottom: '8px' }}>PERÍODO</p>
+                <div className="selector-group">
+                  <label>INÍCIO</label>
+                  <div className="select-row">
+                    <select value={lStartMonth} onChange={(e) => setLStartMonth(parseInt(e.target.value))}>
+                      {months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
+                    </select>
+                    <select value={lStartYear} onChange={(e) => setLStartYear(parseInt(e.target.value))}>
+                      {Array.from({ length: 5 }, (_, i) => 2026 - i).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                </div>
 
-            <div className="selector-group">
-              <label>FIM</label>
-              <div className="select-row">
-                <select value={lEndMonth} onChange={(e) => setLEndMonth(parseInt(e.target.value))}>
-                  {months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
-                </select>
-                <select value={lEndYear} onChange={(e) => setLEndYear(parseInt(e.target.value))}>
-                  {Array.from({ length: 5 }, (_, i) => 2026 - i).map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-            </div>
+                <div className="selector-group" style={{ marginTop: '10px', marginBottom: '4px' }}>
+                  <label>FIM</label>
+                  <div className="select-row">
+                    <select value={lEndMonth} onChange={(e) => setLEndMonth(parseInt(e.target.value))}>
+                      {months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}
+                    </select>
+                    <select value={lEndYear} onChange={(e) => setLEndYear(parseInt(e.target.value))}>
+                      {Array.from({ length: 5 }, (_, i) => 2026 - i).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <button 
+              onClick={() => setIsPeriodExpanded(!isPeriodExpanded)}
+              style={{ 
+                background: 'none', border: 'none', padding: 0, 
+                color: '#64748b', fontSize: '0.65rem', 
+                fontWeight: '800', cursor: 'pointer', 
+                marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '4px'
+              }}
+            >
+              {isPeriodExpanded ? '▲ MENOS OPÇÕES' : '▼ PERÍODO'}
+            </button>
 
             <button onClick={handleApply} disabled={!hasChanges} className={`filter-btn ${hasChanges ? 'active' : ''}`}>
               {hasChanges ? <Filter size={14} /> : <Check size={14} />}

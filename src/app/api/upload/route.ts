@@ -567,20 +567,41 @@ export async function POST(request: Request) {
       }
     }
     else if (fileTypeSent === "BANCO_INTER") {
-      // Placeholder para Banco Inter
+      let importedCount = 0;
+      const transactions = parseInter(text);
+      
+      const transactionsToCreate: any[] = [];
+      for (const t of transactions) {
+        transactionsToCreate.push({
+          date: t.date,
+          description: t.description,
+          amount: t.amount,
+          type: t.type,
+          category: t.type === 'INCOME' ? 'Recebimento' : 'Despesa',
+          bank: 'Banco Inter'
+        });
+        importedCount++;
+      }
+
+      if (transactionsToCreate.length > 0) {
+        await prisma.transaction.createMany({
+          data: transactionsToCreate
+        });
+      }
+
       await prisma.importLog.create({
         data: {
           fileName: safeFileName,
           fileType: "BANCO_INTER",
           month,
           year,
-          totalRecords: 0,
-          summary: JSON.stringify({ message: "Arquivo recebido. Processamento automático em breve." }),
+          totalRecords: importedCount,
+          summary: JSON.stringify({ total: importedCount }),
           rawText: text,
           filePath: fileName
         }
       });
-      return NextResponse.json({ success: true, message: "Extrato Banco Inter recebido!" });
+      return NextResponse.json({ success: true, importedCount, message: `${importedCount} transações bancárias importadas do Banco Inter!` });
     }
     else if (fileTypeSent === "COBRANCAS") {
       const parsedBillingSessions: any[] = [];
@@ -1048,4 +1069,56 @@ function parseBB(text: string) {
   commitCurrentTx();
 
   return transactions;
+}
+
+function parseInter(csvText: string) {
+  try {
+    const lines = csvText.split('\n');
+    let startIdx = 0;
+    
+    // Encontrar o cabeçalho
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('Data Lançamento;Histórico;Descrição;Valor;Saldo')) {
+        startIdx = i + 1;
+        break;
+      }
+    }
+
+    const transactions = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const cols = line.split(';');
+      if (cols.length >= 4) {
+        const dateStr = cols[0].trim();
+        const historico = cols[1].trim();
+        const descricao = cols[2].trim();
+        const valorStr = cols[3].trim();
+        
+        if (!dateStr || !valorStr) continue;
+
+        let cleanedValor = valorStr.replace(/\./g, '').replace(',', '.');
+        let amount = parseFloat(cleanedValor);
+        if (isNaN(amount)) continue;
+
+        const dateParts = dateStr.split('/');
+        if (dateParts.length === 3) {
+          const transDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T12:00:00`);
+          const fullDesc = historico ? `${historico} - ${descricao}` : descricao;
+          
+          transactions.push({
+            date: transDate,
+            description: fullDesc,
+            amount: Math.abs(amount),
+            type: amount < 0 ? "EXPENSE" : "INCOME"
+          });
+        }
+      }
+    }
+    return transactions;
+  } catch (error) {
+    console.error("Erro no parseInter:", error);
+    return [];
+  }
 }

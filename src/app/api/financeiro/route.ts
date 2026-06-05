@@ -89,7 +89,7 @@ export async function GET(request: Request) {
       const specificCategories = [
         'secretaria', 'kinesis', 'pro_earning', 'partner_adj', 'fundo',
         'cpfl_sala_01', 'cpfl_sala_02', 'cpfl_sala_03', 'cpfl_sala_04', 'cpfl_sala_05', 'cpfl_sala_06',
-        'outros'
+        'outros', 'hidden'
       ];
 
       // Align 'fundo' category and payee

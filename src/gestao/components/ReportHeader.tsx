@@ -1,5 +1,6 @@
 "use client";
 
+import React from 'react';
 import { usePeriod } from "@/gestao/context/PeriodContext";
 
 const monthsNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -7,6 +8,12 @@ const monthsNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
 export function ReportHeader({ title = "Relatório de Gestão Clínica" }) {
   const { startMonth, startYear, endMonth, endYear } = usePeriod();
   const now = new Date();
+
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="print-only-header" style={{ display: 'none', width: '100%', marginBottom: '40px', borderBottom: '2px solid var(--primary)', paddingBottom: '20px' }}>
@@ -22,7 +29,7 @@ export function ReportHeader({ title = "Relatório de Gestão Clínica" }) {
             { (startMonth !== endMonth || startYear !== endYear) && ` até ${monthsNames[endMonth]} ${endYear}` }
           </p>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            Gerado em: {now.toLocaleDateString('pt-BR')} às {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            Gerado em: {mounted ? `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
           </p>
         </div>
       </div>
