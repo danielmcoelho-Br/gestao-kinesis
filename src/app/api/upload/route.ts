@@ -52,9 +52,19 @@ export async function POST(request: Request) {
     // Extrair dados (PDF ou Excel)
     let text = "";
     let excelData: any[] = [];
-    const isExcel = safeFileName.endsWith(".xlsx") || safeFileName.endsWith(".xls") || safeFileName.endsWith(".csv");
+    const fileTypeSent = data.get("type") as string;
+    
+    // Tratamento especial para Inter CSV: ler como texto puro para o parser já existente
+    const isInterCsv = fileTypeSent === "BANCO_INTER" && safeFileName.endsWith(".csv");
+    const isExcel = !isInterCsv && (safeFileName.endsWith(".xlsx") || safeFileName.endsWith(".xls") || safeFileName.endsWith(".csv"));
 
-    if (isExcel) {
+    if (isInterCsv) {
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+      } catch {
+        text = new TextDecoder("iso-8859-1").decode(buffer);
+      }
+    } else if (isExcel) {
       const workbook = XLSX.read(buffer, { type: "buffer" });
       const firstSheet = workbook.SheetNames[0];
       const sheet = workbook.Sheets[firstSheet];
@@ -81,8 +91,6 @@ export async function POST(request: Request) {
       }
     }
     
-    const fileTypeSent = data.get("type") as string;
-
     // Processamento por tipo
     if (fileTypeSent === "SEUFISIO" || text.includes("Atendimentos gerais")) {
       const professionals = await prisma.professional.findMany({

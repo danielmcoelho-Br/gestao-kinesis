@@ -1516,7 +1516,10 @@ export default function FinanceiroPageContent() {
             
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
-                onClick={() => setShowManualModal(true)}
+                onClick={() => {
+                  setManualBank(activeTab === 'fluxo_inter' ? 'Banco Inter' : 'Banco do Brasil');
+                  setShowManualModal(true);
+                }}
                 className="btn"
                 style={{ 
                   display: 'flex', 
