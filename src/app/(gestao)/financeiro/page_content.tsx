@@ -141,14 +141,18 @@ export default function FinanceiroPageContent() {
   const [manualCategory, setManualCategory] = useState("Recebimento");
   const [manualBank, setManualBank] = useState("Banco do Brasil");
 
-  const activeTransactions = activeTab === 'custos'
-    ? transactions.map((t: any) => ({
+  const allMappedTransactions = useMemo(() => {
+    return transactions.map((t: any) => ({
       ...t,
       description: t.clinicDesc ?? t.description,
       amount: t.clinicAmount ?? t.amount,
       category: t.clinicCat ?? t.category,
       favorecido: t.clinicFavorecido || t.favorecido
-    }))
+    }));
+  }, [transactions]);
+
+  const activeTransactions = activeTab === 'custos'
+    ? allMappedTransactions
     : transactions.filter((t: any) => {
         if (t.bank === 'MANUAL_CLINICA' || t.category === 'PRO_EARNING' || t.bank === 'HIDDEN_ITEM') return false;
         
@@ -663,7 +667,7 @@ export default function FinanceiroPageContent() {
           description: "Novo Gasto Manual",
           amount: 0.01,
           type: 'EXPENSE',
-          category: 'UNMAPPED',
+          category: 'GERAL',
           bank: 'MANUAL_CLINICA',
           favorecido: ''
         })
@@ -951,7 +955,11 @@ export default function FinanceiroPageContent() {
   };
 
   const bankTransactions = activeTransactions.filter((t: any) => {
-    // Exibir TODAS as transações no painel de Custos para não esconder nada indevidamente
+    // Excluir transações 'UNMAPPED' sob custos para evitar discrepâncias entre o saldo do período e os favorecidos
+    if (activeTab === 'custos') {
+      const cat = (t.clinicCat ?? t.category)?.toUpperCase();
+      if (cat === 'UNMAPPED') return false;
+    }
     return true;
   });
 
@@ -992,7 +1000,7 @@ export default function FinanceiroPageContent() {
 
     EXCEL_ITEMS.forEach(item => {
       if (item.clinicCat) {
-        const tx = activeTransactions.find(t =>
+        const tx = allMappedTransactions.find(t =>
           t.type === 'EXPENSE' &&
           (t.clinicCat ?? t.category)?.toUpperCase() === item.clinicCat?.toUpperCase() &&
           !claimedTxIds.has(t.id)
@@ -1006,7 +1014,7 @@ export default function FinanceiroPageContent() {
 
     EXCEL_ITEMS.forEach(item => {
       if (!mappedTransactions.has(item.key)) {
-        const tx = activeTransactions.find(t => 
+        const tx = allMappedTransactions.find(t => 
           t.type === 'EXPENSE' && 
           t.bank === 'MANUAL_CLINICA' &&
           ((t.clinicDesc ?? t.description) || '').trim().toUpperCase() === item.label.trim().toUpperCase() &&
@@ -1022,7 +1030,7 @@ export default function FinanceiroPageContent() {
     EXCEL_ITEMS.forEach(item => {
       if (item.clinicCat) return; 
       if (!mappedTransactions.has(item.key)) {
-        const tx = activeTransactions.find(t => {
+        const tx = allMappedTransactions.find(t => {
           if (t.type !== 'EXPENSE' || t.bank === 'MANUAL_CLINICA' || claimedTxIds.has(t.id)) return false;
           if (t.clinicCat === 'UNMAPPED') return false;
           
@@ -1041,7 +1049,7 @@ export default function FinanceiroPageContent() {
 
     const getTotalForBlock = (blockName: string) => {
       const items = EXCEL_ITEMS.filter(i => i.block === blockName);
-      const hiddenItemKeys = activeTransactions
+      const hiddenItemKeys = allMappedTransactions
         .filter(t => t.bank === 'HIDDEN_ITEM')
         .map(t => (t.description || '').replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim());
       const visibleItems = items.filter(i => !hiddenItemKeys.includes(i.key));
@@ -1052,7 +1060,7 @@ export default function FinanceiroPageContent() {
       }, 0);
 
       const blockCat = blockName === 'cpfl' ? null : blockName.toUpperCase();
-      const extraSum = blockCat ? activeTransactions.filter(t =>
+      const extraSum = blockCat ? allMappedTransactions.filter(t =>
         t.type === 'EXPENSE' &&
         t.clinicCat?.toUpperCase() === blockCat &&
         !allMappedIds.includes(t.id)
@@ -1069,7 +1077,7 @@ export default function FinanceiroPageContent() {
       const isPilates = desc.toLowerCase().includes('(pilates)');
       const baseDesc = desc.replace(/\s*\((pilates)\)\s*/i, '').trim().toUpperCase();
 
-      const matches = activeTransactions.filter(t => 
+      const matches = allMappedTransactions.filter(t => 
         t.category.toUpperCase() === cat.toUpperCase() && 
         (isPilates ? (t.favorecido || '').toUpperCase() === 'PILATES' : (t.favorecido || '').toUpperCase() !== 'PILATES') &&
         t.description.toUpperCase().includes(baseDesc)
@@ -1081,7 +1089,7 @@ export default function FinanceiroPageContent() {
       const isPilates = desc.toLowerCase().includes('(pilates)');
       const baseDesc = desc.replace(/\s*\((pilates)\)\s*/i, '').trim().toUpperCase();
 
-      const matches = activeTransactions.filter(t => 
+      const matches = allMappedTransactions.filter(t => 
         t.category.toUpperCase() === cat.toUpperCase() && 
         (isPilates ? (t.favorecido || '').toUpperCase() === 'PILATES' : (t.favorecido || '').toUpperCase() !== 'PILATES') &&
         t.description.toUpperCase().includes(baseDesc)
@@ -1093,7 +1101,7 @@ export default function FinanceiroPageContent() {
       const isPilates = desc.toLowerCase().includes('(pilates)');
       const baseDesc = desc.replace(/\s*\((pilates)\)\s*/i, '').trim().toUpperCase();
 
-      const found = activeTransactions.find(t => 
+      const found = allMappedTransactions.find(t => 
         t.category.toUpperCase() === cat.toUpperCase() && 
         (isPilates ? (t.favorecido || '').toUpperCase() === 'PILATES' : (t.favorecido || '').toUpperCase() !== 'PILATES') &&
         t.description.toUpperCase().includes(baseDesc)
@@ -1115,7 +1123,7 @@ export default function FinanceiroPageContent() {
     const cpflSum = cpflSala01 + cpflSala03 + cpflSala04 + cpflSala05 + cpflSala06;
 
     const getPartnerPaidExpenses = (partnerName: string) => {
-      return activeTransactions.filter(t => {
+      return allMappedTransactions.filter(t => {
         const cat = t.category?.toUpperCase() || '';
         const isEligibleCat = ['GERAL', 'SECRETARIA', 'KINESIS'].includes(cat) || cat.startsWith('CPFL_SALA_');
         return t.type === 'EXPENSE' && 
@@ -1128,7 +1136,7 @@ export default function FinanceiroPageContent() {
     const stuartPaid = getPartnerPaidExpenses("STUART");
     const paulaPaid = getPartnerPaidExpenses("PAULA");
 
-    const fundoValItem = activeTransactions.find(t => t.category === 'PARTNER_ADJ' && t.description === 'Aporte Fundo Kinesis');
+    const fundoValItem = allMappedTransactions.find(t => t.category === 'PARTNER_ADJ' && t.description === 'Aporte Fundo Kinesis');
     const fundoVal = fundoValItem ? fundoValItem.amount : 1000;
     
     const totalShared = (totalGeral * 0.83) + (totalSecretaria * 0.666) + (totalKinesis * 0.5) + cpflSum + fundoVal;
@@ -1168,7 +1176,7 @@ export default function FinanceiroPageContent() {
       danielShare, stuartShare, paulaShare,
       getExtraVal, getExtraId, allMappedIds, findMappedTransaction, fundoVal
     };
-  }, [activeTransactions]);
+  }, [allMappedTransactions]);
 
   const {
     totalGeral, totalSecretaria, totalKinesis, cpflSum, cpflSala02,
@@ -1190,7 +1198,7 @@ export default function FinanceiroPageContent() {
   const favTotalsBB: Record<string, number> = { KINESIS: 0, DANIEL: 0, STUART: 0, PAULA: 0, PILATES: 0, FUNDO: 0 };
   const favTotalsInter: Record<string, number> = { KINESIS: 0, DANIEL: 0, STUART: 0, PAULA: 0, PILATES: 0, FUNDO: 0 };
 
-  bankTransactions.forEach((t: any) => {
+  allMappedTransactions.forEach((t: any) => {
     // Para favTotals ser consistente entre as abas, precisamos ignorar PRO_EARNING, MANUAL_CLINICA e HIDDEN_ITEM
     // que são ignorados na aba fluxo.
     if (t.bank === 'MANUAL_CLINICA' || t.category === 'PRO_EARNING' || t.bank === 'HIDDEN_ITEM') {
@@ -1214,9 +1222,86 @@ export default function FinanceiroPageContent() {
     }
   });
 
-  // A pedido do usuário, o Resumo por Favorecido reflete ESTRITAMENTE o fluxo bancário/manual.
-  // A liquidação de lucros (abater da Kinesis, somar aos sócios) será refletida apenas na visão de "Distribuição Consolidada de Sócios",
-  // pois não há movimentação bancária correspondente ainda.
+  // A liquidação de lucros (abater da Kinesis, somar aos sócios)
+  // reflete-se tanto no Fechamento de Caixa quanto nas abas individuais de Fluxo,
+  // garantindo que "todas as abas falem a mesma linguagem".
+  const liquidatedFavTotals = { ...favTotals };
+  const liquidatedFavTotalsBB = { ...favTotalsBB };
+  const liquidatedFavTotalsInter = { ...favTotalsInter };
+
+  const getPaidByBank = (partnerName: string) => {
+    let bb = 0;
+    let inter = 0;
+    allMappedTransactions.forEach((t: any) => {
+      const cat = t.category?.toUpperCase() || '';
+      const isEligibleCat = ['GERAL', 'SECRETARIA', 'KINESIS'].includes(cat) || cat.startsWith('CPFL_SALA_');
+      if (t.type === 'EXPENSE' && t.favorecido?.toUpperCase() === partnerName && isEligibleCat) {
+        const bankName = (t.bank || 'Banco do Brasil').toLowerCase();
+        if (bankName === 'banco do brasil') bb += t.amount;
+        else if (bankName === 'banco inter') inter += t.amount;
+      }
+    });
+    return { bb, inter };
+  };
+
+  const danielReimb = getPaidByBank("DANIEL");
+  const stuartReimb = getPaidByBank("STUART");
+  const paulaReimb = getPaidByBank("PAULA");
+
+  // Lucros da Fisioterapia e Ajustes -> Vão para o BB
+  const danielFisioAndAdj = (saldoFinal * 0.40) - crisEarning + danielAdj;
+  const stuartFisioAndAdj = (saldoFinal * 0.40) + stuartAdj;
+  const paulaFisioAndAdj = (saldoFinal * 0.20) + paulaAdj;
+  const totalLucroFisioAndAdj = danielFisioAndAdj + stuartFisioAndAdj + paulaFisioAndAdj;
+
+  // Lucros do Pilates -> Vão para o Inter
+  const danielPilates = (saldoFinalPilates / 3);
+  const stuartPilates = (saldoFinalPilates / 3);
+  const paulaPilates = (saldoFinalPilates / 3);
+
+  // KINESIS deductions
+  liquidatedFavTotalsBB['KINESIS'] -= (totalLucroFisioAndAdj + danielPaid + stuartPaid + paulaPaid);
+
+  // PILATES deductions
+  liquidatedFavTotalsInter['PILATES'] -= (saldoFinalPilates + custosPilates);
+  liquidatedFavTotalsInter['KINESIS'] += custosPilates;
+
+  // DANIEL additions
+  liquidatedFavTotalsBB['DANIEL'] += (danielFisioAndAdj + danielPaid);
+  liquidatedFavTotalsInter['DANIEL'] += danielPilates;
+
+  // STUART additions
+  liquidatedFavTotalsBB['STUART'] += (stuartFisioAndAdj + stuartPaid);
+  liquidatedFavTotalsInter['STUART'] += stuartPilates;
+
+  // PAULA additions
+  liquidatedFavTotalsBB['PAULA'] += (paulaFisioAndAdj + paulaPaid);
+  liquidatedFavTotalsInter['PAULA'] += paulaPilates;
+
+  // FUNDO adjustments
+  liquidatedFavTotalsBB['FUNDO'] += fundoVal;
+  liquidatedFavTotalsBB['KINESIS'] -= fundoVal;
+
+  // Adjust Kinesis liquidated balances for any overridden transactions to match physical bank statement reality
+  transactions.forEach((t: any) => {
+    if (t.clinicAmount !== null && t.clinicAmount !== undefined && t.clinicAmount !== t.amount) {
+      const diff = t.amount - t.clinicAmount;
+      const sign = t.type === 'INCOME' ? 1 : -1;
+      const adjValue = diff * sign;
+      
+      const bankName = (t.bank || 'Banco do Brasil').toLowerCase();
+      if (bankName === 'banco do brasil') {
+        liquidatedFavTotalsBB['KINESIS'] += adjValue;
+      } else if (bankName === 'banco inter') {
+        liquidatedFavTotalsInter['KINESIS'] += adjValue;
+      }
+    }
+  });
+
+  // Force global totals to be the sum of BB and Inter for all accounts
+  allowedFavorecidos.forEach(fav => {
+    liquidatedFavTotals[fav] = (liquidatedFavTotalsBB[fav] || 0) + (liquidatedFavTotalsInter[fav] || 0);
+  });
 
   const favColors: Record<string, { border: string, bg: string, text: string }> = {
     KINESIS: { border: '#8b5cf6', bg: '#f5f3ff', text: '#6d28d9' },
@@ -1360,7 +1445,13 @@ export default function FinanceiroPageContent() {
         <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b' }}>Resumo por Favorecido</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
           {allowedFavorecidos.map(fav => {
-            const value = activeTab === 'fluxo_bb' ? favTotalsBB[fav] : favTotalsInter[fav];
+            const rawTotals = activeTab === 'fluxo_bb' ? favTotalsBB : favTotalsInter;
+            const liquidatedTotals = activeTab === 'fluxo_bb' ? liquidatedFavTotalsBB : liquidatedFavTotalsInter;
+
+            const value = liquidatedTotals[fav] || 0;
+            const saldoConta = rawTotals[fav] || 0;
+            const participacao = value - saldoConta;
+
             const isNegative = value < 0;
             const colors = favColors[fav] || { border: '#cbd5e1', bg: '#f8fafc', text: '#475569' };
             return (
@@ -1380,6 +1471,21 @@ export default function FinanceiroPageContent() {
                 }}>
                   {isNegative ? '-' : ''}R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </h4>
+
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                    <span>Saldo em conta:</span>
+                    <span style={{ fontWeight: '600', color: '#475569' }}>
+                      {saldoConta < 0 ? '-' : ''}R$ {Math.abs(saldoConta).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                    <span>Participação:</span>
+                    <span style={{ fontWeight: '600', color: participacao === 0 ? '#64748b' : participacao < 0 ? '#dc2626' : '#16a34a' }}>
+                      {participacao < 0 ? '-' : participacao > 0 ? '+' : ''}R$ {Math.abs(participacao).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -1442,69 +1548,54 @@ export default function FinanceiroPageContent() {
         </button>
       </div>
 
-      {activeTab === 'custos' && (() => {
-        const liquidatedFavTotals = { ...favTotals };
-        const lucroFisioDaniel = (saldoFinal * 0.40) - crisEarning + danielAdj + danielPaid;
-        const lucroFisioStuart = (saldoFinal * 0.40) + stuartAdj + stuartPaid;
-        const lucroFisioPaula = (saldoFinal * 0.20) + paulaAdj + paulaPaid;
-
-        liquidatedFavTotals['KINESIS'] -= (lucroFisioDaniel + lucroFisioStuart + lucroFisioPaula);
-        liquidatedFavTotals['PILATES'] -= saldoFinalPilates;
-        liquidatedFavTotals['PILATES'] -= custosPilates;
-        liquidatedFavTotals['KINESIS'] += custosPilates;
-        liquidatedFavTotals['DANIEL'] += danielShare;
-        liquidatedFavTotals['STUART'] += stuartShare;
-        liquidatedFavTotals['PAULA'] += paulaShare;
-
-        return (
-          <div style={{ marginBottom: '30px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Wallet size={20} color="#8b5cf6" /> Fechamento de Caixa (Após Liquidação)
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
-              {allowedFavorecidos.map(fav => {
-                const value = liquidatedFavTotals[fav] || 0;
-                const isNegative = value < 0;
-                const colors = favColors[fav] || { border: '#cbd5e1', bg: '#f8fafc', text: '#475569' };
-                return (
-                  <div key={fav} className="card" style={{ 
-                    padding: '16px', 
-                    borderLeft: `4px solid ${colors.border}`,
-                    backgroundColor: '#ffffff',
-                    borderRadius: '8px',
+      {activeTab === 'custos' && (
+        <div style={{ marginBottom: '30px' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Wallet size={20} color="#8b5cf6" /> Fechamento de Caixa (Após Liquidação)
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
+            {allowedFavorecidos.map(fav => {
+              const value = liquidatedFavTotals[fav] || 0;
+              const isNegative = value < 0;
+              const colors = favColors[fav] || { border: '#cbd5e1', bg: '#f8fafc', text: '#475569' };
+              return (
+                <div key={fav} className="card" style={{ 
+                  padding: '16px', 
+                  borderLeft: `4px solid ${colors.border}`,
+                  backgroundColor: '#ffffff',
+                  borderRadius: '8px',
+                  margin: 0
+                }}>
+                  <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', marginTop: 0 }}>{fav}</p>
+                  <h4 style={{ 
+                    fontSize: '1.05rem', 
+                    fontWeight: '800', 
+                    color: value === 0 ? '#475569' : isNegative ? '#dc2626' : '#16a34a',
                     margin: 0
                   }}>
-                    <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', marginTop: 0 }}>{fav}</p>
-                    <h4 style={{ 
-                      fontSize: '1.05rem', 
-                      fontWeight: '800', 
-                      color: value === 0 ? '#475569' : isNegative ? '#dc2626' : '#16a34a',
-                      margin: 0
-                    }}>
-                      {isNegative ? '-' : ''}R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </h4>
-                    
-                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
-                        <span>BB:</span>
-                        <span style={{ fontWeight: '600' }}>
-                          {favTotalsBB[fav] < 0 ? '-' : ''}R$ {Math.abs(favTotalsBB[fav] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
-                        <span>Inter:</span>
-                        <span style={{ fontWeight: '600' }}>
-                          {favTotalsInter[fav] < 0 ? '-' : ''}R$ {Math.abs(favTotalsInter[fav] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
+                    {isNegative ? '-' : ''}R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </h4>
+                  
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                      <span>BB:</span>
+                      <span style={{ fontWeight: '600' }}>
+                        {liquidatedFavTotalsBB[fav] < 0 ? '-' : ''}R$ {Math.abs(liquidatedFavTotalsBB[fav] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                      <span>Inter:</span>
+                      <span style={{ fontWeight: '600' }}>
+                        {liquidatedFavTotalsInter[fav] < 0 ? '-' : ''}R$ {Math.abs(liquidatedFavTotalsInter[fav] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {activeTab.startsWith('fluxo') ? (
         <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
@@ -2235,23 +2326,30 @@ export default function FinanceiroPageContent() {
                           gap: '12px',
                           paddingRight: '4px' 
                         }}>
-                          {globalUnmappedCosts.map(tx => (
-                            <div key={tx.id} style={{ 
-                              background: '#f8fafc', 
-                              border: '1.5px solid #e2e8f0', 
-                              borderRadius: '12px', 
-                              padding: '12px 14px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '4px',
-                              transition: 'all 0.2s',
-                              position: 'relative'
-                            }}>
-                              <button 
-                                onClick={() => handleHideFromClinicCosts(tx.id)} 
-                                style={{ position: 'absolute', top: '12px', right: '14px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                                <Trash2 size={14} />
-                              </button>
+                          {globalUnmappedCosts.map(tx => {
+                            const isUnmapped = (tx.clinicCat ?? tx.category)?.toUpperCase() === 'UNMAPPED';
+                            return (
+                              <div key={tx.id} style={{ 
+                                background: isUnmapped ? '#fff1f2' : '#f8fafc', 
+                                border: isUnmapped ? '1.5px solid #fecaca' : '1.5px solid #e2e8f0', 
+                                borderRadius: '12px', 
+                                padding: '12px 14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                transition: 'all 0.2s',
+                                position: 'relative'
+                              }}>
+                                <button 
+                                  onClick={() => handleHideFromClinicCosts(tx.id)} 
+                                  style={{ position: 'absolute', top: '12px', right: '14px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                                  <Trash2 size={14} />
+                                </button>
+                                {isUnmapped && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#dc2626', background: '#fee2e2', padding: '2px 6px', borderRadius: '4px', width: 'fit-content', marginBottom: '2px' }}>
+                                    ⚠️ Sem Categoria (Não afeta partilha)
+                                  </span>
+                                )}
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '20px' }}>
                                 <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b' }}>{(tx.date || '').split('T')[0].split('-').reverse().slice(0,2).join('/')}</span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2280,7 +2378,8 @@ export default function FinanceiroPageContent() {
                                 {allowedFavorecidos.map(f => <option key={f} value={f}>{f}</option>)}
                               </select>
                             </div>
-                          ))}
+                          );
+                        })}
 
                           {globalUnmappedCosts.length === 0 && (
                             <div style={{ textAlign: 'center', padding: '40px 16px', color: '#94a3b8' }}>

@@ -59,7 +59,11 @@ export async function POST(req: NextRequest) {
 
     const cleanDescriptionPrefixes = (desc: string) => {
       let cleaned = desc.replace(/-/g, ' ');
-      const prefixes = ['PIX RECEBIDO', 'PIX', 'TED', 'DOC', 'TRANSF', 'PAGAMENTO', 'DEPOSITO', 'RECEBIMENTO', 'RECEBIDO', 'CUSTEIO'];
+      const prefixes = [
+        'PIX RECEBIDO', 'PIX', 'TED', 'DOC', 'TRANSF', 'PAGAMENTO', 'DEPOSITO', 
+        'RECEBIMENTO', 'RECEBIDO', 'CUSTEIO', 'TRANSFERENCIA', 'RECEBIDA',
+        'CREDITO', 'ORDEM', 'PAG'
+      ];
       prefixes.forEach(p => {
         cleaned = cleaned.replace(new RegExp(`\\b${p}\\b`, 'g'), ' ');
       });
@@ -72,12 +76,16 @@ export async function POST(req: NextRequest) {
       const bParts = bankDesc.split(' ');
       const pParts = pName.split(' ');
       
-      if (bParts.length < 2 || pParts.length < 2) return false;
-      if (bParts[0] !== pParts[0]) return false;
+      if (bParts.length === 0 || pParts.length === 0) return false;
+      
+      // Find where the first word of the patient name appears in the bank parts
+      const startIndex = bParts.indexOf(pParts[0]);
+      if (startIndex === -1) return false;
       
       let pIdx = 1;
-      for (let bIdx = 1; bIdx < bParts.length; bIdx++) {
+      for (let bIdx = startIndex + 1; bIdx < bParts.length; bIdx++) {
         const bPart = bParts[bIdx];
+        if (bPart.length === 0) continue;
         let matched = false;
         while (pIdx < pParts.length) {
           if (pParts[pIdx].startsWith(bPart)) {
@@ -91,6 +99,7 @@ export async function POST(req: NextRequest) {
       }
       return true;
     };
+
 
     const patientMap = new Map<string, { professionals: Set<string>, hasPilates: boolean }>();
     sessions.forEach(s => {
@@ -113,7 +122,9 @@ export async function POST(req: NextRequest) {
     
     const historyMap = new Map<string, string>();
     pastIncomes.forEach(inc => {
-      const normDesc = normalizeName(inc.description);
+      // Strip any payee suffix from description to get the clean client name/description
+      const cleanDesc = inc.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
+      const normDesc = normalizeName(cleanDesc);
       if (normDesc.length > 3) {
         historyMap.set(normDesc, inc.category);
       }

@@ -35,7 +35,38 @@ export async function GET(request: Request) {
       }
     });
 
-    const patterns = buildHistoricalPatterns();
+    const pastIncomes = await prisma.transaction.findMany({
+      where: { type: 'INCOME' },
+      select: { description: true, category: true }
+    });
+
+    const patterns = { ...buildHistoricalPatterns() };
+
+    const normalizeTextForLearning = (txt: any): string => {
+      if (!txt) return '';
+      return String(txt)
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    pastIncomes.forEach(inc => {
+      const cleanDesc = inc.description.replace(/\s*\((KINESIS|DANIEL|STUART|PAULA|PILATES|FUNDO)\)$/i, '').trim();
+      const normDesc = normalizeTextForLearning(cleanDesc);
+      if (normDesc.length > 3 && inc.category) {
+        const catUpper = inc.category.toUpperCase();
+        if (["KINESIS", "DANIEL", "STUART", "PAULA", "PILATES", "FUNDO"].includes(catUpper)) {
+          patterns[normDesc] = {
+            favorecido: catUpper,
+            frequency: 1,
+            lastSeenSheet: 'Database'
+          };
+        }
+      }
+    });
 
     let cpflCount = 0;
     const enriched = transactions.map(t => {
