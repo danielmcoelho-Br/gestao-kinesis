@@ -16,8 +16,8 @@ export async function GET(request: Request) {
     const endMonth = parseInt(searchParams.get("endMonth") || startMonth.toString());
     const endYear = parseInt(searchParams.get("endYear") || startYear.toString());
 
-    const startDate = new Date(startYear, startMonth, 1);
-    const endDate = new Date(endYear, endMonth + 1, 0, 23, 59, 59);
+    const startDate = new Date(Date.UTC(startYear, startMonth, 1, 3, 0, 0));
+    const endDate = new Date(Date.UTC(endYear, endMonth + 1, 1, 2, 59, 59, 999));
 
     const transactions = await prisma.transaction.findMany({
       where: {

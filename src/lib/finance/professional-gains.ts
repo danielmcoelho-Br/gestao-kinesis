@@ -9,8 +9,8 @@ import { prisma } from '@/lib/prisma';
  * @param month Reference month (0-indexed, e.g. 2 for March)
  */
 export async function syncProfessionalGains(year: number, month: number) {
-  const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0, 23, 59, 59);
+  const startDate = new Date(Date.UTC(year, month, 1, 3, 0, 0));
+  const endDate = new Date(Date.UTC(year, month + 1, 1, 2, 59, 59, 999));
 
   // Fetch all sessions in the period
   const sessions = await prisma.session.findMany({

@@ -108,8 +108,8 @@ export async function POST(req: NextRequest) {
 
     if (clearMonth) {
       // 5. Delete previous data for the target period to prevent double-inserting
-      const startOfMonth = new Date(year, month, 1);
-      const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+      const startOfMonth = new Date(Date.UTC(year, month, 1, 3, 0, 0));
+      const endOfMonth = new Date(Date.UTC(year, month + 1, 1, 2, 59, 59, 999));
 
       await prisma.session.deleteMany({
         where: {

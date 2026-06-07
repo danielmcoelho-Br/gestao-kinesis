@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
     // Recalculate and update professional gains (excluding Pilates) before synchronizing
     await syncProfessionalGains(startYear, monthIndex);
 
-    const startDate = new Date(startYear, monthIndex, 1);
-    const endDate = new Date(startYear, monthIndex + 1, 0, 23, 59, 59);
+    const startDate = new Date(Date.UTC(startYear, monthIndex, 1, 3, 0, 0));
+    const endDate = new Date(Date.UTC(startYear, monthIndex + 1, 1, 2, 59, 59, 999));
 
     // Fetch all transactions for the selected month
     const transactions = await prisma.transaction.findMany({

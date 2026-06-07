@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
       if (d > maxDate) maxDate = d;
     });
 
-    const startDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    const endDate = new Date(maxDate.getFullYear(), maxDate.getMonth() + 1, 0);
+    const startDate = new Date(Date.UTC(minDate.getFullYear(), minDate.getMonth(), 1, 3, 0, 0));
+    const endDate = new Date(Date.UTC(maxDate.getFullYear(), maxDate.getMonth() + 1, 1, 2, 59, 59, 999));
 
     const sessions = await prisma.session.findMany({
       where: {
