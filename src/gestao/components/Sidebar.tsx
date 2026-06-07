@@ -31,6 +31,15 @@ export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Sync dropdown values with context when it loads from localStorage
+  useEffect(() => {
+    setLStartMonth(startMonth);
+    setLStartYear(startYear);
+    setLEndMonth(endMonth);
+    setLEndYear(endYear);
+    setIsPeriodExpanded(startMonth !== endMonth || startYear !== endYear);
+  }, [startMonth, startYear, endMonth, endYear]);
+
   useEffect(() => {
     setLoading(true);
     fetch("/api/profile")
