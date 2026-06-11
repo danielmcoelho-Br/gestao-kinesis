@@ -615,3 +615,260 @@ export async function getGroupDetails(id: string) {
   }
 }
 
+export async function getPatientDiagnoses(patientId: string) {
+  try {
+    const diagnoses = await prisma.patientDiagnosis.findMany({
+      where: { patient_id: patientId },
+      orderBy: { start_date: 'desc' }
+    });
+    return { success: true, data: diagnoses };
+  } catch (error: any) {
+    console.error("Error fetching patient diagnoses:", error);
+    return { success: false, error: `Falha ao buscar diagnósticos: ${error.message || "Erro desconhecido"}` };
+  }
+}
+
+async function ensureDefaultSuggestionsSeeded() {
+  try {
+    const count = await prisma.clinicalSegment.count();
+    if (count > 0) return;
+
+    const defaultData: Record<string, string[]> = {
+      "Coluna": [
+        "Cervicalgia / Dor Cervical",
+        "Lombalgia / Dor Lombar",
+        "Hérnia de Disco Cervical",
+        "Hérnia de Disco Lombar",
+        "Escoliose",
+        "Estenose do Canal Vertebral"
+      ],
+      "Joelho": [
+        "Lesão de Ligamento Cruzado Anterior (LCA)",
+        "Lesão de Menisco",
+        "Condromalácia Patelar / Dor Femoropatelar",
+        "Artrose de Joelho (Gonartrose)",
+        "Tendinite Patelar"
+      ],
+      "Ombro": [
+        "Síndrome do Impacto / Lesão do Manguito Rotador",
+        "Capsulite Adesiva (Ombro Congelado)",
+        "Instabilidade de Ombro / Luxação Recidivante",
+        "Tendinite do Bíceps"
+      ],
+      "Quadril": [
+        "Artrose de Quadril (Coxartrose)",
+        "Impacto Femoroacetabular (IFA)",
+        "Bursite Trocantérica / Síndrome da Dor Trocantérica Maior"
+      ],
+      "Tornozelo e Pé": [
+        "Entorse de Tornozelo",
+        "Fascite Plantar",
+        "Tendinopatia de Calcâneo (Aquiles)",
+        "Esporão de Calcâneo"
+      ],
+      "Cotovelo, Punho e Mão": [
+        "Epicondilite Lateral (Cotovelo de Tenista)",
+        "Epicondilite Medial (Cotovelo de Golfista)",
+        "Síndrome do Túnel do Carpo",
+        "Tenossinovite de De Quervain"
+      ]
+    };
+
+    for (const [segName, diags] of Object.entries(defaultData)) {
+      const segment = await prisma.clinicalSegment.create({
+        data: { name: segName }
+      });
+      for (const diag of diags) {
+        await prisma.diagnosisSuggestion.create({
+          data: {
+            segmentId: segment.id,
+            diagnosis: diag
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error seeding default suggestions:", error);
+  }
+}
+
+export async function getClinicalSegmentsAndSuggestions() {
+  try {
+    await ensureDefaultSuggestionsSeeded();
+    const segments = await prisma.clinicalSegment.findMany({
+      include: {
+        suggestions: {
+          orderBy: { diagnosis: 'asc' }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+    return { success: true, data: segments };
+  } catch (error: any) {
+    console.error("Error fetching clinical segments:", error);
+    return { success: false, error: `Erro ao buscar segmentos e sugestões: ${error.message || error}` };
+  }
+}
+
+export async function createClinicalSegment(name: string) {
+  try {
+    const segment = await prisma.clinicalSegment.create({
+      data: { name: name.trim() }
+    });
+    revalidatePath("/dashboard");
+    return { success: true, data: segment };
+  } catch (error: any) {
+    console.error("Error creating clinical segment:", error);
+    return { success: false, error: `Erro ao criar segmento: ${error.message || error}` };
+  }
+}
+
+export async function updateClinicalSegment(id: string, name: string) {
+  try {
+    const updated = await prisma.clinicalSegment.update({
+      where: { id },
+      data: { name: name.trim() }
+    });
+    revalidatePath("/dashboard");
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("Error updating clinical segment:", error);
+    return { success: false, error: `Erro ao renomear segmento: ${error.message || error}` };
+  }
+}
+
+export async function deleteClinicalSegment(id: string) {
+  try {
+    await prisma.clinicalSegment.delete({
+      where: { id }
+    });
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error deleting clinical segment:", error);
+    return { success: false, error: `Erro ao excluir segmento: ${error.message || error}` };
+  }
+}
+
+export async function createDiagnosisSuggestion(segmentId: string, diagnosis: string) {
+  try {
+    const suggestion = await prisma.diagnosisSuggestion.create({
+      data: {
+        segmentId,
+        diagnosis: diagnosis.trim()
+      }
+    });
+    revalidatePath("/dashboard");
+    return { success: true, data: suggestion };
+  } catch (error: any) {
+    console.error("Error creating diagnosis suggestion:", error);
+    return { success: false, error: `Erro ao adicionar sugestão: ${error.message || error}` };
+  }
+}
+
+export async function updateDiagnosisSuggestion(id: string, diagnosis: string) {
+  try {
+    const updated = await prisma.diagnosisSuggestion.update({
+      where: { id },
+      data: { diagnosis: diagnosis.trim() }
+    });
+    revalidatePath("/dashboard");
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("Error updating diagnosis suggestion:", error);
+    return { success: false, error: `Erro ao renomear sugestão: ${error.message || error}` };
+  }
+}
+
+export async function deleteDiagnosisSuggestion(id: string) {
+  try {
+    await prisma.diagnosisSuggestion.delete({
+      where: { id }
+    });
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error deleting diagnosis suggestion:", error);
+    return { success: false, error: `Erro ao excluir sugestão: ${error.message || error}` };
+  }
+}
+
+export async function addPatientDiagnosis(patientId: string, data: { segment: string; diagnosis: string; start_date: Date }) {
+  try {
+    const newDiagnosis = await prisma.patientDiagnosis.create({
+      data: {
+        patient_id: patientId,
+        segment: data.segment,
+        diagnosis: data.diagnosis,
+        start_date: new Date(data.start_date),
+        status: "ATIVO"
+      }
+    });
+
+    // Garante que o segmento e o diagnóstico existam nas sugestões dinâmicas
+    try {
+      let segmentRecord = await prisma.clinicalSegment.findUnique({
+        where: { name: data.segment }
+      });
+      if (!segmentRecord) {
+        segmentRecord = await prisma.clinicalSegment.create({
+          data: { name: data.segment }
+        });
+      }
+
+      await prisma.diagnosisSuggestion.upsert({
+        where: {
+          segmentId_diagnosis: {
+            segmentId: segmentRecord.id,
+            diagnosis: data.diagnosis
+          }
+        },
+        create: {
+          segmentId: segmentRecord.id,
+          diagnosis: data.diagnosis
+        },
+        update: {}
+      });
+    } catch (err) {
+      console.error("Error auto-saving suggestion in addPatientDiagnosis:", err);
+    }
+
+    revalidatePath(`/dashboard/patient/${patientId}`);
+    return { success: true, data: newDiagnosis };
+  } catch (error: any) {
+    console.error("Error adding patient diagnosis:", error);
+    return { success: false, error: `Falha ao salvar diagnóstico: ${error.message || "Erro desconhecido"}` };
+  }
+}
+
+export async function updatePatientDiagnosisStatus(id: string, status: string, dischargeDate?: Date) {
+  try {
+    const updated = await prisma.patientDiagnosis.update({
+      where: { id },
+      data: {
+        status,
+        discharge_date: dischargeDate ? new Date(dischargeDate) : null
+      }
+    });
+    revalidatePath(`/dashboard/patient/${updated.patient_id}`);
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("Error updating patient diagnosis status:", error);
+    return { success: false, error: `Falha ao atualizar diagnóstico: ${error.message || "Erro desconhecido"}` };
+  }
+}
+
+export async function deletePatientDiagnosis(id: string) {
+  try {
+    const deleted = await prisma.patientDiagnosis.delete({
+      where: { id }
+    });
+    revalidatePath(`/dashboard/patient/${deleted.patient_id}`);
+    return { success: true, data: deleted };
+  } catch (error: any) {
+    console.error("Error deleting patient diagnosis:", error);
+    return { success: false, error: `Falha ao excluir diagnóstico: ${error.message || "Erro desconhecido"}` };
+  }
+}
+
+

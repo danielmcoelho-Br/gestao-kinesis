@@ -26,7 +26,11 @@ import {
   X,
   CalendarRange,
   Clock,
-  Sparkles
+  Sparkles,
+  CheckCircle2,
+  Archive,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -38,7 +42,12 @@ import {
   createPatientEvolution,
   updatePatientEvolution,
   deletePatientEvolution,
-  getPatientDiaryHistory
+  getPatientDiaryHistory,
+  getPatientDiagnoses,
+  addPatientDiagnosis,
+  updatePatientDiagnosisStatus,
+  deletePatientDiagnosis,
+  getClinicalSegmentsAndSuggestions
 } from "../../actions";
 import { sendPushNotification } from "@/app/(integracao)/actions/push";
 import { questionnairesData } from "@/lab/data/questionnaires";
@@ -47,6 +56,7 @@ import ConfirmModal from "@/lab/components/ConfirmModal";
 import PatientDocuments from "@/lab/components/PatientDocuments";
 import { toast } from "sonner";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+
 
 export default function PatientHistoryPage() {
   const params = useParams();
@@ -65,6 +75,27 @@ export default function PatientHistoryPage() {
   // Deletion State
   const [assessmentToDelete, setAssessmentToDelete] = useState<any>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+  // Diagnoses States
+  const [diagnoses, setDiagnoses] = useState<any[]>([]);
+  const [clinicalSegments, setClinicalSegments] = useState<any[]>([]);
+  const [loadingDiagnoses, setLoadingDiagnoses] = useState(true);
+  const [isAddDiagOpen, setIsAddDiagOpen] = useState(false);
+  const [selectedSegment, setSelectedSegment] = useState("");
+  const [selectedDiagnosis, setSelectedDiagnosis] = useState("");
+  const [customSegment, setCustomSegment] = useState("");
+  const [customDiagnosis, setCustomDiagnosis] = useState("");
+  const [diagStartDate, setDiagStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Discharge State
+  const [diagToDischarge, setDiagToDischarge] = useState<any>(null);
+  const [dischargeDate, setDischargeDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Delete State
+  const [diagToDelete, setDiagToDelete] = useState<any>(null);
+
+  // History Accordion State
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
   // Evolutions State
   const [evolutions, setEvolutions] = useState<any[]>([]);
@@ -132,6 +163,104 @@ export default function PatientHistoryPage() {
     setLoadingDiary(false);
   };
 
+  const fetchDiagnoses = async () => {
+    setLoadingDiagnoses(true);
+    const result = await getPatientDiagnoses(patientId);
+    if (result.success && result.data) {
+      setDiagnoses(result.data);
+    }
+    setLoadingDiagnoses(false);
+  };
+
+  const fetchSuggestions = async () => {
+    const res = await getClinicalSegmentsAndSuggestions();
+    if (res.success && res.data) {
+      setClinicalSegments(res.data);
+    }
+  };
+
+  const handleAddDiagnosis = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSegment) {
+      toast.error("Por favor, selecione um segmento.");
+      return;
+    }
+
+    let segment = selectedSegment;
+    if (selectedSegment === "Outros" && customSegment.trim()) {
+      segment = customSegment.trim();
+    } else if (selectedSegment === "Outros") {
+      toast.error("Por favor, digite o nome do segmento.");
+      return;
+    }
+
+    let diagnosisName = selectedDiagnosis;
+    if (selectedDiagnosis === "Outro" && customDiagnosis.trim()) {
+      diagnosisName = customDiagnosis.trim();
+    } else if (selectedDiagnosis === "Outro") {
+      toast.error("Por favor, digite o diagnóstico.");
+      return;
+    } else if (selectedSegment === "Outros" && customDiagnosis.trim()) {
+      diagnosisName = customDiagnosis.trim();
+    } else if (selectedSegment === "Outros") {
+      toast.error("Por favor, digite o diagnóstico.");
+      return;
+    }
+
+    if (!diagnosisName) {
+      toast.error("Por favor, selecione ou digite um diagnóstico.");
+      return;
+    }
+
+    const res = await addPatientDiagnosis(patientId, {
+      segment,
+      diagnosis: diagnosisName,
+      start_date: new Date(diagStartDate)
+    });
+
+    if (res.success) {
+      toast.success("Diagnóstico adicionado com sucesso!");
+      setIsAddDiagOpen(false);
+      setSelectedSegment("");
+      setSelectedDiagnosis("");
+      setCustomSegment("");
+      setCustomDiagnosis("");
+      setDiagStartDate(new Date().toISOString().split('T')[0]);
+      fetchDiagnoses();
+      fetchSuggestions();
+    } else {
+      toast.error(res.error || "Erro ao adicionar diagnóstico.");
+    }
+  };
+
+  const handleDischargeConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!diagToDischarge) return;
+
+    const res = await updatePatientDiagnosisStatus(diagToDischarge.id, "ALTA", new Date(dischargeDate));
+    if (res.success) {
+      toast.success("Alta registrada com sucesso!");
+      setDiagToDischarge(null);
+      setDischargeDate(new Date().toISOString().split('T')[0]);
+      fetchDiagnoses();
+    } else {
+      toast.error(res.error || "Erro ao registrar alta.");
+    }
+  };
+
+  const handleDeleteDiagConfirm = async () => {
+    if (!diagToDelete) return;
+
+    const res = await deletePatientDiagnosis(diagToDelete.id);
+    if (res.success) {
+      toast.success("Diagnóstico excluído com sucesso!");
+      setDiagToDelete(null);
+      fetchDiagnoses();
+    } else {
+      toast.error(res.error || "Erro ao excluir diagnóstico.");
+    }
+  };
+
   useEffect(() => {
     setIsMounted(true);
     const savedUser = localStorage.getItem("user");
@@ -140,6 +269,8 @@ export default function PatientHistoryPage() {
     fetchData();
     fetchEvolutions();
     fetchDiaryLogs();
+    fetchDiagnoses();
+    fetchSuggestions();
     loadLibraryFromLocalStorage();
     loadSentLogsFromLocalStorage();
   }, [patientId]);
@@ -565,6 +696,20 @@ export default function PatientHistoryPage() {
     { id: 0, label: "D" }
   ];
 
+  const getDiagnosesForSegment = (segName: string) => {
+    const found = clinicalSegments.find((s: any) => s.name === segName);
+    if (!found) return [];
+    return found.suggestions.map((s: any) => s.diagnosis).filter(Boolean);
+  };
+
+  const getSegmentsList = () => {
+    const list = clinicalSegments.map((s: any) => s.name);
+    if (!list.includes("Outros")) {
+      list.push("Outros");
+    }
+    return list;
+  };
+
   return (
     <div className="patient-history-page">
       <div className="background-gradient" />
@@ -648,6 +793,259 @@ export default function PatientHistoryPage() {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
+              {/* Diagnósticos Clínicos Section */}
+              <div className="clinical-profile-container" style={{ marginBottom: '1.5rem' }}>
+                <div className="section-card">
+                  <div className="section-card-header">
+                    <div className="header-title-group">
+                      <Activity size={24} style={{ color: '#9d1d1d' }} />
+                      <h3>Perfil Clínico / Diagnósticos</h3>
+                    </div>
+                    {!isAddDiagOpen && (
+                      <button 
+                        className="btn-add-diag"
+                        onClick={() => setIsAddDiagOpen(true)}
+                        style={{ backgroundColor: '#9d1d1d' }}
+                      >
+                        <Plus size={16} />
+                        <span>Adicionar Diagnóstico</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Adicionar Diagnóstico Form */}
+                  {isAddDiagOpen && (
+                    <motion.form 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="add-diag-form"
+                      onSubmit={handleAddDiagnosis}
+                    >
+                      <h4 className="form-title" style={{ color: '#9d1d1d' }}>Novo Diagnóstico</h4>
+                      
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label>Segmento Corporal</label>
+                          <select 
+                            value={selectedSegment}
+                            onChange={(e) => {
+                              setSelectedSegment(e.target.value);
+                              setSelectedDiagnosis("");
+                            }}
+                            required
+                          >
+                            <option value="">Selecione...</option>
+                            {getSegmentsList().map(seg => (
+                              <option key={seg} value={seg}>{seg}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {selectedSegment === "Outros" && (
+                          <div className="form-group">
+                            <label>Nome do Segmento</label>
+                            <input 
+                              type="text" 
+                              value={customSegment}
+                              onChange={(e) => setCustomSegment(e.target.value)}
+                              placeholder="Ex: Cotovelo, Punho..."
+                              required
+                            />
+                          </div>
+                        )}
+
+                        {selectedSegment && selectedSegment !== "Outros" && (
+                          <div className="form-group">
+                            <label>Diagnóstico</label>
+                            <select 
+                              value={selectedDiagnosis}
+                              onChange={(e) => setSelectedDiagnosis(e.target.value)}
+                              required
+                            >
+                              <option value="">Selecione...</option>
+                              {getDiagnosesForSegment(selectedSegment).map(diag => (
+                                <option key={diag} value={diag}>{diag}</option>
+                              ))}
+                              <option value="Outro">Outro...</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {(selectedSegment === "Outros" || selectedDiagnosis === "Outro") && (
+                          <div className="form-group">
+                            <label>Especificar Diagnóstico</label>
+                            <input 
+                              type="text" 
+                              value={customDiagnosis}
+                              onChange={(e) => setCustomDiagnosis(e.target.value)}
+                              placeholder="Digite o diagnóstico"
+                              required
+                            />
+                          </div>
+                        )}
+
+                        <div className="form-group">
+                          <label>Data de Início</label>
+                          <input 
+                            type="date" 
+                            value={diagStartDate}
+                            onChange={(e) => setDiagStartDate(e.target.value)}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-actions">
+                        <button type="button" className="btn-cancel" onClick={() => setIsAddDiagOpen(false)}>
+                          Cancelar
+                        </button>
+                        <button type="submit" className="btn-submit" style={{ backgroundColor: '#9d1d1d' }}>
+                          Salvar Diagnóstico
+                        </button>
+                      </div>
+                    </motion.form>
+                  )}
+
+                  {/* Alta Form Overlay */}
+                  {diagToDischarge && (
+                    <div className="modal-backdrop" onClick={() => setDiagToDischarge(null)}>
+                      <div className="discharge-dialog" onClick={(e) => e.stopPropagation()}>
+                        <h4>Dar Alta do Tratamento</h4>
+                        <p className="discharge-subtitle">Registrar alta para: <strong>{diagToDischarge.diagnosis}</strong> ({diagToDischarge.segment})</p>
+                        
+                        <form onSubmit={handleDischargeConfirm}>
+                          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                            <label>Data da Alta</label>
+                            <input 
+                              type="date" 
+                              value={dischargeDate}
+                              onChange={(e) => setDischargeDate(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="form-actions">
+                            <button type="button" className="btn-cancel" onClick={() => setDiagToDischarge(null)}>
+                              Cancelar
+                            </button>
+                            <button type="submit" className="btn-submit discharge-confirm-btn">
+                              Confirmar Alta
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Diagnoses Content */}
+                  <div className="diagnoses-content">
+                    {loadingDiagnoses ? (
+                      <p className="loading-text">Carregando perfil clínico...</p>
+                    ) : diagnoses.length === 0 ? (
+                      <p className="empty-text">Nenhum diagnóstico clínico cadastrado para este paciente.</p>
+                    ) : (
+                      <div className="diagnoses-lists-wrapper">
+                        {/* Active Diagnoses */}
+                        {diagnoses.filter(d => d.status === "ATIVO").length > 0 && (
+                          <div className="active-diagnoses-list">
+                            <h4 className="list-subtitle">Em Tratamento (Ativos)</h4>
+                            <div className="diagnoses-grid">
+                              {diagnoses.filter(d => d.status === "ATIVO").map(diag => (
+                                <div key={diag.id} className="diagnosis-card active-card" style={{ borderLeftColor: '#9d1d1d' }}>
+                                  <div className="diag-card-header">
+                                    <span className="segment-badge" style={{ color: '#9d1d1d', backgroundColor: '#fef2f2' }}>{diag.segment}</span>
+                                    <div className="diag-actions">
+                                      <button 
+                                        className="action-btn-discharge" 
+                                        title="Dar Alta"
+                                        onClick={() => {
+                                          setDiagToDischarge(diag);
+                                          setDischargeDate(new Date().toISOString().split('T')[0]);
+                                        }}
+                                      >
+                                        <CheckCircle2 size={14} />
+                                        <span>Alta</span>
+                                      </button>
+                                      <button 
+                                        className="action-btn-delete" 
+                                        title="Excluir"
+                                        onClick={() => setDiagToDelete(diag)}
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <h4 className="diag-name">{diag.diagnosis}</h4>
+                                  <p className="diag-date">
+                                    <Calendar size={14} />
+                                    Início em: {new Date(diag.start_date).toLocaleDateString('pt-BR')}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* No active diagnoses but has history */}
+                        {diagnoses.filter(d => d.status === "ATIVO").length === 0 && (
+                          <p className="all-discharged-text">Paciente sem tratamentos ativos no momento.</p>
+                        )}
+
+                        {/* Discharged Diagnoses (History) */}
+                        {diagnoses.filter(d => d.status === "ALTA").length > 0 && (
+                          <div className="history-diagnoses-section">
+                            <button 
+                              type="button"
+                              className="history-toggle"
+                              onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                            >
+                              <Archive size={16} />
+                              <span>Histórico de Altas ({diagnoses.filter(d => d.status === "ALTA").length})</span>
+                              {isHistoryExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+
+                            {isHistoryExpanded && (
+                              <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                className="history-list"
+                              >
+                                <div className="diagnoses-grid">
+                                  {diagnoses.filter(d => d.status === "ALTA").map(diag => (
+                                    <div key={diag.id} className="diagnosis-card discharged-card">
+                                      <div className="diag-card-header">
+                                        <span className="segment-badge discharged-badge">{diag.segment}</span>
+                                        <button 
+                                          className="action-btn-delete muted-delete" 
+                                          title="Excluir"
+                                          onClick={() => setDiagToDelete(diag)}
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                      <h4 className="diag-name text-muted">{diag.diagnosis}</h4>
+                                      <div className="diag-dates-group">
+                                        <p className="diag-date text-muted">
+                                          <Calendar size={14} />
+                                          De: {new Date(diag.start_date).toLocaleDateString('pt-BR')}
+                                        </p>
+                                        <p className="diag-date text-muted">
+                                          <CheckCircle2 size={14} style={{ color: '#10B981' }} />
+                                          Alta: {diag.discharge_date ? new Date(diag.discharge_date).toLocaleDateString('pt-BR') : 'N/A'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="history-container">
                 <h3 className="history-title">
                   <History size={24} style={{ color: '#9d1d1d' }} />
@@ -2138,6 +2536,337 @@ export default function PatientHistoryPage() {
             font-size: 0.85rem;
             padding: 0.75rem 0.25rem;
           }
+          .clinical-profile-container {
+            margin-bottom: 1.5rem;
+          }
+          .section-card {
+            padding: 1.5rem;
+          }
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+          .diagnoses-grid {
+            grid-template-columns: 1fr;
+          }
+          .section-card-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .btn-add-diag {
+            width: 100%;
+            justify-content: center;
+          }
+        }
+
+        /* Diagnósticos Styles */
+        .clinical-profile-container {
+          margin-bottom: 2rem;
+        }
+        .section-card {
+          background-color: white;
+          padding: 2.5rem;
+          border-radius: var(--radius-xl);
+          box-shadow: var(--shadow-lg);
+          border: 1px solid var(--border);
+        }
+        .section-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 1.5rem;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+        .header-title-group {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        .header-title-group h3 {
+          font-size: 1.5rem;
+          font-weight: bold;
+          margin: 0;
+          color: var(--text);
+        }
+        .btn-add-diag {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: white;
+          border: none;
+          padding: 0.6rem 1.2rem;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-add-diag:hover {
+          opacity: 0.9;
+          transform: translateY(-1px);
+        }
+        .add-diag-form {
+          background-color: #f9fafb;
+          padding: 1.5rem;
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--border);
+          margin-bottom: 1.5rem;
+        }
+        .form-title {
+          font-size: 1.125rem;
+          font-weight: bold;
+          margin: 0 0 1rem 0;
+        }
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1.25rem;
+          margin-bottom: 1.25rem;
+        }
+        .form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .form-group label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--text);
+        }
+        .form-group select,
+        .form-group input {
+          padding: 0.6rem;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          background-color: white;
+          color: var(--text);
+          font-size: 0.95rem;
+        }
+        .form-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 0.75rem;
+        }
+        .btn-cancel {
+          background-color: white;
+          color: var(--text-muted);
+          border: 1px solid var(--border);
+          padding: 0.5rem 1rem;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .btn-cancel:hover {
+          background-color: #f3f4f6;
+        }
+        .btn-submit {
+          color: white;
+          border: none;
+          padding: 0.5rem 1.2rem;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .btn-submit:hover {
+          opacity: 0.9;
+        }
+        .loading-text, .empty-text, .all-discharged-text {
+          color: var(--text-muted);
+          font-size: 1rem;
+          margin: 0;
+          text-align: center;
+          padding: 1rem 0;
+        }
+        .diagnoses-lists-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 2rem;
+        }
+        .list-subtitle {
+          font-size: 1.125rem;
+          font-weight: 700;
+          color: var(--text);
+          margin: 0 0 1rem 0;
+        }
+        .diagnoses-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+          gap: 1.25rem;
+        }
+        .diagnosis-card {
+          padding: 1.25rem;
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--border);
+          background-color: white;
+          position: relative;
+          transition: all 0.2s;
+        }
+        .active-card {
+          border-left: 4px solid #9d1d1d;
+          background: linear-gradient(to right, #fbfcfd, white);
+        }
+        .active-card:hover {
+          box-shadow: var(--shadow-md);
+          border-color: #9d1d1d;
+        }
+        .discharged-card {
+          border-left: 4px solid #9ca3af;
+          background-color: #fafafa;
+          opacity: 0.85;
+        }
+        .discharged-card:hover {
+          opacity: 1;
+        }
+        .diag-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0.75rem;
+        }
+        .segment-badge {
+          font-size: 0.75rem;
+          font-weight: bold;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          text-transform: uppercase;
+        }
+        .discharged-badge {
+          color: #4b5563;
+          background-color: #e5e7eb;
+        }
+        .diag-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .action-btn-discharge {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          background-color: #ecfdf5;
+          color: #059669;
+          border: 1px solid #a7f3d0;
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .action-btn-discharge:hover {
+          background-color: #d1fae5;
+          border-color: #34d399;
+        }
+        .action-btn-delete {
+          color: #9ca3af;
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s;
+        }
+        .action-btn-delete:hover {
+          color: #ef4444;
+          background-color: #fef2f2;
+        }
+        .muted-delete:hover {
+          color: #ef4444;
+        }
+        .diag-name {
+          font-size: 1.1rem;
+          font-weight: 700;
+          color: var(--text);
+          margin: 0 0 0.75rem 0;
+          line-height: 1.3;
+        }
+        .text-muted {
+          color: var(--text-muted) !important;
+        }
+        .diag-date {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          margin: 0;
+        }
+        .diag-dates-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+        .history-diagnoses-section {
+          border-top: 1px solid var(--border);
+          padding-top: 1.5rem;
+          margin-top: 0.5rem;
+        }
+        .history-toggle {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 0.95rem;
+          padding: 0;
+          width: 100%;
+          text-align: left;
+        }
+        .history-toggle:hover {
+          color: var(--text);
+        }
+        .history-toggle span {
+          flex: 1;
+        }
+        .history-list {
+          margin-top: 1rem;
+        }
+        .modal-backdrop {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          backdrop-filter: blur(2px);
+        }
+        .discharge-dialog {
+          background-color: white;
+          padding: 2rem;
+          border-radius: var(--radius-xl);
+          width: 90%;
+          max-width: 400px;
+          box-shadow: var(--shadow-2xl);
+          border: 1px solid var(--border);
+        }
+        .discharge-dialog h4 {
+          margin: 0 0 0.5rem 0;
+          font-size: 1.25rem;
+          font-weight: bold;
+          color: var(--text);
+        }
+        .discharge-subtitle {
+          font-size: 0.9rem;
+          color: var(--text-muted);
+          margin: 0 0 1.5rem 0;
+          line-height: 1.4;
+        }
+        .discharge-confirm-btn {
+          background-color: #10b981 !important;
+        }
+        .discharge-confirm-btn:hover {
+          background-color: #059669 !important;
         }
       `}</style>
       <ConfirmModal 
@@ -2146,6 +2875,15 @@ export default function PatientHistoryPage() {
         onConfirm={confirmDeleteAssessment}
         title="Excluir Avaliação"
         message="Tem certeza que deseja excluir esta avaliação? Esta ação não pode ser desfeita e os dados serão removidos permanentemente."
+        confirmLabel="Sim, excluir"
+        cancelLabel="Cancelar"
+      />
+      <ConfirmModal 
+        isOpen={!!diagToDelete}
+        onClose={() => setDiagToDelete(null)}
+        onConfirm={handleDeleteDiagConfirm}
+        title="Excluir Diagnóstico"
+        message="Tem certeza que deseja excluir este diagnóstico? Esta ação não pode ser desfeita e os dados serão removidos permanentemente."
         confirmLabel="Sim, excluir"
         cancelLabel="Cancelar"
       />

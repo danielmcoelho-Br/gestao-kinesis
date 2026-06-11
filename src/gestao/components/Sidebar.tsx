@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { 
   Check, Filter, LogOut, Settings, User as UserIcon, 
   Shield, Loader2, LayoutDashboard, Users, 
-  CreditCard, BarChart3, UploadCloud, Home
+  CreditCard, BarChart3, UploadCloud, Home, Megaphone
 } from "lucide-react";
 
 const months = [
@@ -174,10 +174,12 @@ export function Sidebar() {
             ))}
 
             {isAdmin && (
-              <Link href="/financeiro" className={`nav-item ${isActive("/financeiro") ? 'active' : ''}`}>
-                <CreditCard size={18} />
-                <span>Financeiro Clínica</span>
-              </Link>
+              <>
+                <Link href="/financeiro" className={`nav-item ${isActive("/financeiro") ? 'active' : ''}`}>
+                  <CreditCard size={18} />
+                  <span>Financeiro Clínica</span>
+                </Link>
+              </>
             )}
 
 

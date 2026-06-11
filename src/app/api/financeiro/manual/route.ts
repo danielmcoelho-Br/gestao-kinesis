@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isDateLocked } from '@/lib/finance/lock-check';
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +9,15 @@ export async function POST(req: NextRequest) {
 
     if (!date || !description || amount === undefined || !type) {
       return NextResponse.json({ error: 'Dados obrigatórios ausentes (data, descrição, valor, tipo).' }, { status: 400 });
+    }
+
+    const parsedDate = new Date(date + 'T12:00:00');
+    if (isNaN(parsedDate.getTime())) {
+      return NextResponse.json({ error: 'Formato de data inválido (esperado YYYY-MM-DD).' }, { status: 400 });
+    }
+
+    if (await isDateLocked(parsedDate)) {
+      return NextResponse.json({ error: 'Este período está fechado para edições e lançamentos.' }, { status: 400 });
     }
 
     const numericAmount = Math.abs(parseFloat(amount) || 0);

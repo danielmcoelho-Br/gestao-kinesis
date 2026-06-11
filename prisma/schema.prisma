@@ -147,6 +147,7 @@ model Patient {
   evolutions     Evolution[]
   created_by     User?        @relation("PatientCreatedBy", fields: [created_by_id], references: [id])
   groups         Group[]
+  diagnoses      PatientDiagnosis[]
 }
 
 model DiaryLog {
@@ -256,3 +257,67 @@ model Group {
   patients  Patient[]
 }
 
+model MarketingPost {
+  id          String   @id @default(cuid())
+  weekStart   DateTime // Monday of the reference week
+  dayOfWeek   String   // "Segunda-feira", "Quarta-feira", "Sexta-feira"
+  title       String
+  sourceTopic String   @db.Text
+  content     String   @db.Text
+  imagePrompt String   @db.Text
+  imageUrl    String?
+  status      String   @default("DRAFT") // DRAFT, APPROVED, POSTED
+  storyContent String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MonthLock {
+  id        String   @id @default(cuid())
+  month     Int
+  year      Int
+  locked    Boolean  @default(false)
+  lockedBy  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, year])
+}
+
+model PatientDiagnosis {
+  id             String    @id @default(cuid())
+  patient_id     String
+  segment        String
+  diagnosis      String
+  start_date     DateTime  @db.Timestamptz(6)
+  status         String    @default("ATIVO") // "ATIVO" ou "ALTA"
+  discharge_date DateTime? @db.Timestamptz(6)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @updatedAt @db.Timestamptz(6)
+  patient        Patient   @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+
+  @@index([patient_id])
+  @@map("patient_diagnoses")
+}
+
+model ClinicalSegment {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  suggestions DiagnosisSuggestion[]
+
+  @@map("clinical_segments")
+}
+
+model DiagnosisSuggestion {
+  id         String   @id @default(cuid())
+  segmentId  String
+  diagnosis  String
+  createdAt  DateTime @default(now())
+
+  segment    ClinicalSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+
+  @@unique([segmentId, diagnosis])
+  @@map("diagnosis_suggestions")
+}

@@ -27,7 +27,11 @@ import {
   ExternalLink,
   AlertTriangle,
   Users,
-  Send
+  Send,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Activity
 } from "lucide-react";
 
 
@@ -42,7 +46,14 @@ import {
   getGroups,
   createGroup,
   updateGroup,
-  deleteGroup
+  deleteGroup,
+  getClinicalSegmentsAndSuggestions,
+  createClinicalSegment,
+  updateClinicalSegment,
+  deleteClinicalSegment,
+  createDiagnosisSuggestion,
+  updateDiagnosisSuggestion,
+  deleteDiagnosisSuggestion
 } from "./actions";
 import { toast } from "sonner";
 import Header from "@/lab/components/Header";
@@ -82,6 +93,19 @@ export default function DashboardPage() {
   const [newPhone, setNewPhone] = useState("");
   const [pendingGestaoPatients, setPendingGestaoPatients] = useState<any[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
+
+  // Gestão de Diagnósticos States
+  const [segments, setSegments] = useState<any[]>([]);
+  const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
+  const [isAddingSegment, setIsAddingSegment] = useState(false);
+  const [newSegmentName, setNewSegmentName] = useState("");
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [editingSegmentName, setEditingSegmentName] = useState("");
+  
+  const [isAddingDiagnosis, setIsAddingDiagnosis] = useState<Record<string, boolean>>({});
+  const [newDiagnosisNames, setNewDiagnosisNames] = useState<Record<string, string>>({});
+  const [editingDiagnosisId, setEditingDiagnosisId] = useState<string | null>(null);
+  const [editingDiagnosisName, setEditingDiagnosisName] = useState("");
 
   // Recent Searches State
   const [recentPatients, setRecentPatients] = useState<any[]>([]);
@@ -265,6 +289,95 @@ export default function DashboardPage() {
     setIsConfirmGroupDeleteOpen(false);
   };
 
+  const fetchSegments = async () => {
+    const res = await getClinicalSegmentsAndSuggestions();
+    if (res.success && res.data) {
+      setSegments(res.data);
+    }
+  };
+
+  const handleAddSegment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSegmentName.trim()) return;
+    const res = await createClinicalSegment(newSegmentName);
+    if (res.success) {
+      toast.success("Segmento criado com sucesso!");
+      setNewSegmentName("");
+      setIsAddingSegment(false);
+      fetchSegments();
+    } else {
+      toast.error(res.error || "Erro ao criar segmento.");
+    }
+  };
+
+  const handleUpdateSegment = async (id: string) => {
+    if (!editingSegmentName.trim()) return;
+    const res = await updateClinicalSegment(id, editingSegmentName);
+    if (res.success) {
+      toast.success("Segmento renomeado com sucesso!");
+      setEditingSegmentId(null);
+      setEditingSegmentName("");
+      fetchSegments();
+    } else {
+      toast.error(res.error || "Erro ao renomear segmento.");
+    }
+  };
+
+  const handleDeleteSegment = async (id: string, name: string) => {
+    if (confirm(`Tem certeza que deseja excluir o segmento "${name}" e TODAS as suas patologias? Esta ação não afetará os diagnósticos históricos já gravados nos pacientes.`)) {
+      const res = await deleteClinicalSegment(id);
+      if (res.success) {
+        toast.success("Segmento excluído com sucesso!");
+        fetchSegments();
+      } else {
+        toast.error(res.error || "Erro ao excluir segmento.");
+      }
+    }
+  };
+
+  const handleAddDiagnosisSuggestion = async (segmentId: string) => {
+    const diagName = newDiagnosisNames[segmentId] || "";
+    if (!diagName.trim()) return;
+    const res = await createDiagnosisSuggestion(segmentId, diagName);
+    if (res.success) {
+      toast.success("Diagnóstico adicionado!");
+      setNewDiagnosisNames(prev => ({ ...prev, [segmentId]: "" }));
+      setIsAddingDiagnosis(prev => ({ ...prev, [segmentId]: false }));
+      fetchSegments();
+    } else {
+      toast.error(res.error || "Erro ao adicionar diagnóstico.");
+    }
+  };
+
+  const handleUpdateDiagnosisSuggestion = async (id: string) => {
+    if (!editingDiagnosisName.trim()) return;
+    const res = await updateDiagnosisSuggestion(id, editingDiagnosisName);
+    if (res.success) {
+      toast.success("Diagnóstico renomeado com sucesso!");
+      setEditingDiagnosisId(null);
+      setEditingDiagnosisName("");
+      fetchSegments();
+    } else {
+      toast.error(res.error || "Erro ao renomear diagnóstico.");
+    }
+  };
+
+  const handleDeleteDiagnosisSuggestion = async (id: string, name: string) => {
+    if (confirm(`Excluir "${name}" das sugestões?`)) {
+      const res = await deleteDiagnosisSuggestion(id);
+      if (res.success) {
+        toast.success("Sugestão excluída com sucesso!");
+        fetchSegments();
+      } else {
+        toast.error(res.error || "Erro ao excluir sugestão.");
+      }
+    }
+  };
+
+  const toggleSegmentExpand = (id: string) => {
+    setExpandedSegments(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setUser(JSON.parse(savedUser));
@@ -274,6 +387,7 @@ export default function DashboardPage() {
 
     fetchPatients();
     fetchGroups();
+    fetchSegments();
   }, []);
 
   useEffect(() => {
@@ -698,6 +812,265 @@ export default function DashboardPage() {
                   ))
                 )}
               </div>
+
+              {/* Gestão de Diagnósticos (Admin) */}
+              {user && ['ADMINISTRADOR', 'ADMIN', 'GERENTE'].includes(String(user.role || '').toUpperCase()) && (
+                <div className="list-container" style={{ marginTop: '2rem' }}>
+                  <div className="column-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h3 className="list-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Activity size={20} style={{ color: 'var(--primary)' }} />
+                      Gestão de Diagnósticos
+                    </h3>
+                    {!isAddingSegment && (
+                      <button 
+                        className="btn-primary secondary-btn compact-btn" 
+                        onClick={() => setIsAddingSegment(true)}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                      >
+                        <Plus size={16} />
+                        <span>Novo Segmento</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {isAddingSegment && (
+                    <form onSubmit={handleAddSegment} style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Nome do segmento..."
+                        className="form-input"
+                        value={newSegmentName}
+                        onChange={(e) => setNewSegmentName(e.target.value)}
+                        required
+                        style={{ flex: 1 }}
+                      />
+                      <button type="submit" className="btn-primary" style={{ padding: '0.5rem 1rem' }}>Salvar</button>
+                      <button type="button" className="btn-primary secondary-btn" onClick={() => setIsAddingSegment(false)} style={{ padding: '0.5rem 1rem' }}>Cancelar</button>
+                    </form>
+                  )}
+
+                  <div className="segment-suggestions-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {segments.length === 0 ? (
+                      <div className="empty-state">Nenhum segmento clínico cadastrado.</div>
+                    ) : (
+                      segments.map((seg) => {
+                        const isExpanded = !!expandedSegments[seg.id];
+                        const isEditingSeg = editingSegmentId === seg.id;
+                        
+                        return (
+                          <div 
+                            key={seg.id} 
+                            style={{ 
+                              border: '1px solid var(--border)', 
+                              borderRadius: '0.75rem', 
+                              backgroundColor: '#ffffff',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            {/* Segment Header */}
+                            <div 
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'space-between', 
+                                padding: '0.75rem 1rem',
+                                cursor: 'pointer',
+                                backgroundColor: isExpanded ? '#fafafa' : '#ffffff'
+                              }}
+                              onClick={() => toggleSegmentExpand(seg.id)}
+                            >
+                              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {isEditingSeg ? (
+                                  <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                                    <input 
+                                      type="text"
+                                      value={editingSegmentName}
+                                      onChange={(e) => setEditingSegmentName(e.target.value)}
+                                      className="form-input"
+                                      required
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+                                    />
+                                    <button 
+                                      onClick={() => handleUpdateSegment(seg.id)}
+                                      className="btn-primary"
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                    >
+                                      Salvar
+                                    </button>
+                                    <button 
+                                      onClick={() => setEditingSegmentId(null)}
+                                      className="btn-primary secondary-btn"
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                    >
+                                      X
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>{seg.name}</span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                      ({seg.suggestions ? seg.suggestions.length : 0} {seg.suggestions?.length === 1 ? 'patologia' : 'patologias'})
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              
+                              {!isEditingSeg && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => {
+                                      setEditingSegmentId(seg.id);
+                                      setEditingSegmentName(seg.name);
+                                    }}
+                                    className="btn-action edit-btn"
+                                    title="Editar Nome do Segmento"
+                                    style={{ padding: '4px' }}
+                                  >
+                                    <Edit size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSegment(seg.id, seg.name)}
+                                    className="btn-action delete-btn"
+                                    title="Excluir Segmento"
+                                    style={{ padding: '4px' }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                  {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-muted)' }} />}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Expanded suggestions list */}
+                            {isExpanded && (
+                              <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', backgroundColor: '#fafafa' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Sugestões no segmento:</span>
+                                  {!isAddingDiagnosis[seg.id] && (
+                                    <button 
+                                      className="btn-primary secondary-btn compact-btn"
+                                      onClick={() => setIsAddingDiagnosis(prev => ({ ...prev, [seg.id]: true }))}
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                    >
+                                      + Diagnóstico
+                                    </button>
+                                  )}
+                                </div>
+
+                                {isAddingDiagnosis[seg.id] && (
+                                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                    <input 
+                                      type="text"
+                                      placeholder="Nova patologia..."
+                                      className="form-input"
+                                      value={newDiagnosisNames[seg.id] || ""}
+                                      onChange={(e) => setNewDiagnosisNames(prev => ({ ...prev, [seg.id]: e.target.value }))}
+                                      style={{ flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+                                    />
+                                    <button 
+                                      onClick={() => handleAddDiagnosisSuggestion(seg.id)}
+                                      className="btn-primary"
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                    >
+                                      Adicionar
+                                    </button>
+                                    <button 
+                                      onClick={() => setIsAddingDiagnosis(prev => ({ ...prev, [seg.id]: false }))}
+                                      className="btn-primary secondary-btn"
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                    >
+                                      X
+                                    </button>
+                                  </div>
+                                )}
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                  {!seg.suggestions || seg.suggestions.length === 0 ? (
+                                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>Nenhuma patologia cadastrada para este segmento.</p>
+                                  ) : (
+                                    seg.suggestions.map((s: any) => {
+                                      const isEditingDiag = editingDiagnosisId === s.id;
+                                      return (
+                                        <div 
+                                          key={s.id}
+                                          style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'space-between',
+                                            padding: '0.5rem 0.75rem',
+                                            backgroundColor: '#ffffff',
+                                            borderRadius: '0.5rem',
+                                            border: '1px solid var(--border)'
+                                          }}
+                                        >
+                                          <div style={{ flex: 1 }}>
+                                            {isEditingDiag ? (
+                                              <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                                                <input 
+                                                  type="text"
+                                                  value={editingDiagnosisName}
+                                                  onChange={(e) => setEditingDiagnosisName(e.target.value)}
+                                                  className="form-input"
+                                                  required
+                                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+                                                />
+                                                <button 
+                                                  onClick={() => handleUpdateDiagnosisSuggestion(s.id)}
+                                                  className="btn-primary"
+                                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                >
+                                                  Salvar
+                                                </button>
+                                                <button 
+                                                  onClick={() => setEditingDiagnosisId(null)}
+                                                  className="btn-primary secondary-btn"
+                                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                >
+                                                  X
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <span style={{ fontSize: '0.875rem', color: 'var(--text)' }}>{s.diagnosis}</span>
+                                            )}
+                                          </div>
+
+                                          {!isEditingDiag && (
+                                            <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                              <button
+                                                onClick={() => {
+                                                  setEditingDiagnosisId(s.id);
+                                                  setEditingDiagnosisName(s.diagnosis);
+                                                }}
+                                                className="btn-action edit-btn"
+                                                title="Editar Diagnóstico"
+                                                style={{ padding: '3px' }}
+                                              >
+                                                <Edit size={12} />
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteDiagnosisSuggestion(s.id, s.diagnosis)}
+                                                className="btn-action delete-btn"
+                                                title="Excluir Diagnóstico"
+                                                style={{ padding: '3px' }}
+                                              >
+                                                <Trash2 size={12} />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

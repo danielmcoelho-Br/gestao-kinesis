@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isDateLocked } from '@/lib/finance/lock-check';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,14 @@ export async function POST(req: NextRequest) {
     const tx = await prisma.transaction.findUnique({
       where: { id: transactionId }
     });
+
+    if (!tx) {
+      return NextResponse.json({ error: 'Transação não encontrada.' }, { status: 404 });
+    }
+
+    if (await isDateLocked(tx.date)) {
+      return NextResponse.json({ error: 'Este período está fechado para edições.' }, { status: 400 });
+    }
 
     if (tx?.category === 'PRO_EARNING') {
       await prisma.transaction.update({

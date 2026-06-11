@@ -12,7 +12,9 @@ export async function GET(request: Request) {
     const startYear = parseInt(searchParams.get("startYear") || searchParams.get("year") || "2026");
 
     // Recalculate and update professional gains (excluding Pilates)
-    await syncProfessionalGains(startYear, startMonth);
+    if (startYear > 2026 || (startYear === 2026 && startMonth > 2)) {
+      await syncProfessionalGains(startYear, startMonth);
+    }
     const endMonth = parseInt(searchParams.get("endMonth") || startMonth.toString());
     const endYear = parseInt(searchParams.get("endYear") || startYear.toString());
 

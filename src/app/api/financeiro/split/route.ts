@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isDateLocked } from '@/lib/finance/lock-check';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,11 +19,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Transação não encontrada.' }, { status: 404 });
     }
 
+    if (await isDateLocked(tx.date)) {
+      return NextResponse.json({ error: 'Este período está fechado para edições.' }, { status: 400 });
+    }
+
     const val1 = parseFloat(amount1);
     const val2 = parseFloat(amount2);
 
     if (isNaN(val1) || isNaN(val2) || val1 <= 0 || val2 <= 0) {
       return NextResponse.json({ error: 'Valores de divisão inválidos.' }, { status: 400 });
+    }
+
+    // Validate that the sum of split amounts equals the original transaction amount (allowing 0.02 margin for rounding)
+    if (Math.abs((val1 + val2) - tx.amount) > 0.02) {
+      return NextResponse.json({ error: 'A soma dos valores da divisão deve ser igual ao valor original da transação.' }, { status: 400 });
     }
 
     // Clean original payee and existing split notes from description

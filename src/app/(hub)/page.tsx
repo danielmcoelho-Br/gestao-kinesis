@@ -1,7 +1,7 @@
 import { getSession } from "@/gestao/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Activity, LayoutDashboard, LogOut, Shield } from "lucide-react";
+import { Activity, LayoutDashboard, LogOut, Shield, Megaphone } from "lucide-react";
 
 export default async function HubPage() {
   const session = await getSession();
@@ -33,7 +33,7 @@ export default async function HubPage() {
           </form>
         </div>
         
-        <div className={`p-10 grid grid-cols-1 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 max-w-5xl mx-auto`}>
+        <div className={`p-10 grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2'} gap-6 max-w-6xl mx-auto`}>
           {/* Card Módulo Clínico (KinesisLab) */}
           <Link href="/dashboard" className="group block h-full">
             <div className="border-2 border-slate-100 rounded-xl p-8 h-full flex flex-col items-center justify-center transition-all duration-300 hover:border-blue-500 hover:shadow-lg hover:-translate-y-1 bg-white cursor-pointer relative overflow-hidden">
@@ -73,6 +73,22 @@ export default async function HubPage() {
                 <h2 className="text-2xl font-bold text-slate-800 mb-3">Módulo Adm</h2>
                 <p className="text-slate-500 text-center leading-relaxed">
                   Gerenciamento de usuários, controle de permissões de acesso e comissões dos profissionais.
+                </p>
+              </div>
+            </Link>
+          )}
+
+          {/* Card Módulo Marketing (Marketing IA) */}
+          {isAdmin && (
+            <Link href="/marketing" className="group block h-full">
+              <div className="border-2 border-slate-100 rounded-xl p-8 h-full flex flex-col items-center justify-center transition-all duration-300 hover:border-pink-500 hover:shadow-lg hover:-translate-y-1 bg-white cursor-pointer relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-pink-500 transform origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                <div className="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mb-6 group-hover:bg-pink-100 transition-colors">
+                  <Megaphone size={40} className="text-pink-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-3">Marketing IA</h2>
+                <p className="text-slate-500 text-center leading-relaxed">
+                  Planejamento semanal de posts, redação com inteligência artificial e prompts para redes sociais.
                 </p>
               </div>
             </Link>

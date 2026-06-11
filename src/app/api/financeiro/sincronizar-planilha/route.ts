@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { writeToGestaoBB, writeToFinanceiro26, FinalTransaction } from '@/lib/finance/excel-writer';
 import { buildHistoricalPatterns, matchTransaction } from '@/lib/finance/pattern-matcher';
 import { syncProfessionalGains } from '@/lib/finance/professional-gains';
+import { isMonthLocked } from '@/lib/finance/lock-check';
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,9 +23,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Mês inválido.' }, { status: 400 });
     }
 
-    const startYear = 2000 + parseInt(year);
+    let startYear = parseInt(year);
+    if (isNaN(startYear)) {
+      return NextResponse.json({ error: 'Ano inválido.' }, { status: 400 });
+    }
+    if (startYear < 100) {
+      startYear = 2000 + startYear;
+    }
+
+    if (await isMonthLocked(monthIndex, startYear)) {
+      return NextResponse.json({ error: 'Este período está fechado para alteração e sincronização.' }, { status: 400 });
+    }
+
     // Recalculate and update professional gains (excluding Pilates) before synchronizing
-    await syncProfessionalGains(startYear, monthIndex);
+    if (startYear > 2026 || (startYear === 2026 && monthIndex > 2)) {
+      await syncProfessionalGains(startYear, monthIndex);
+    }
 
     const startDate = new Date(Date.UTC(startYear, monthIndex, 1, 3, 0, 0));
     const endDate = new Date(Date.UTC(startYear, monthIndex + 1, 1, 2, 59, 59, 999));

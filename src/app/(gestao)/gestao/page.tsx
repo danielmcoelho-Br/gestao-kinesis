@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
-import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3, Download } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3, Download, X, Send, Sparkles, Loader2 } from 'lucide-react';
 import { 
   MetricCard, 
   StatusBox, 
@@ -328,12 +328,12 @@ function AICopilotSection({ activeTab, startMonth, startYear, endMonth, endYear 
         const cells = trimmed.split('|').map(c => c.trim()).filter((c, idx, arr) => idx > 0 && idx < arr.length - 1);
         let prefix = '';
         if (!inTable) {
-          prefix = '<div style="overflow-x:auto; margin: 16px 0;"><table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.9rem; border: 1px solid rgba(0,0,0,0.06); border-radius: 8px;">';
+          prefix = '<div style="overflow-x:auto; margin: 16px 0;"><table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.8rem; border: 1px solid rgba(0,0,0,0.06); border-radius: 8px;">';
           inTable = true;
-          const headerCells = cells.map(c => `<th style="padding:12px; border-bottom:2px solid rgba(0,0,0,0.08); background: rgba(0,0,0,0.02); font-weight:700;">${c}</th>`).join('');
+          const headerCells = cells.map(c => `<th style="padding:10px; border-bottom:2px solid rgba(0,0,0,0.08); background: rgba(0,0,0,0.02); font-weight:700;">${c}</th>`).join('');
           return `${prefix}<thead><tr>${headerCells}</tr></thead><tbody>`;
         }
-        const rowCells = cells.map(c => `<td style="padding:12px; border-bottom:1px solid rgba(0,0,0,0.06);">${c}</td>`).join('');
+        const rowCells = cells.map(c => `<td style="padding:10px; border-bottom:1px solid rgba(0,0,0,0.06);">${c}</td>`).join('');
         return `<tr>${rowCells}</tr>`;
       } else {
         let suffix = '';
@@ -373,292 +373,258 @@ function AICopilotSection({ activeTab, startMonth, startYear, endMonth, endYear 
   }, [response]);
 
   return (
-    <div className="card no-print" style={{ 
-      marginBottom: '40px', 
-      background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%)',
-      border: '1px solid rgba(139, 92, 246, 0.15)',
-      borderRadius: '24px',
-      padding: '24px',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-      {/* Background glowing blur sphere */}
-      <div style={{
-        position: 'absolute',
-        top: '-50px',
-        right: '-50px',
-        width: '150px',
-        height: '150px',
-        background: 'radial-gradient(circle, rgba(139, 92, 246, 0.2) 0%, transparent 70%)',
-        filter: 'blur(20px)',
-        zIndex: 0,
-        pointerEvents: 'none'
-      }} />
+    <>
+      {/* Botão Flutuante do Copilot */}
+      <button
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          color: 'white',
+          border: 'none',
+          boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          transition: 'transform 0.2s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+      >
+        <Sparkles size={24} />
+      </button>
 
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              color: 'white',
-              borderRadius: '12px',
-              padding: '10px',
+      {/* Drawer do Copilot */}
+      {isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0,0,0,0.3)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            width: '100%',
+            maxWidth: '460px',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '-10px 0 25px -5px rgba(0, 0, 0, 0.1)',
+            borderLeft: '1px solid #cbd5e1'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #cbd5e1',
               display: 'flex',
               alignItems: 'center',
-              boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)'
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #f8fafc 0%, #f5f3ff 100%)'
             }}>
-              <TrendingUp size={22} style={{ transform: 'rotate(45deg)' }} />
-            </div>
-            <div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                Kinesis AI Copilot
-                <span style={{ 
-                  fontSize: '0.65rem', 
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: 'white',
-                  padding: '2px 8px',
-                  borderRadius: '100px',
-                  fontWeight: '700',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>Gemini Powered</span>
-              </h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
-                Inteligência analítica integrada. Pergunte sobre correlações de dor, faltas ou faturamento.
-              </p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {isOpen && (
-              <button 
-                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                className="btn" 
-                style={{ 
-                  background: isSettingsOpen ? 'rgba(139, 92, 246, 0.1)' : 'white', 
-                  border: isSettingsOpen ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(0,0,0,0.08)',
-                  color: isSettingsOpen ? '#6d28d9' : 'var(--text-primary)',
-                  borderRadius: '12px', 
-                  padding: '8px 12px',
-                  fontWeight: '600',
-                  fontSize: '0.85rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
-                }}
-              >
-                ⚙️ Ajustar Prompt
-              </button>
-            )}
-            <button 
-              onClick={() => {
-                setIsOpen(!isOpen);
-                if (isOpen) setIsSettingsOpen(false);
-              }} 
-              className="btn" 
-              style={{ 
-                background: 'white', 
-                border: '1px solid rgba(0,0,0,0.08)',
-                color: 'var(--text-primary)',
-                borderRadius: '12px', 
-                padding: '8px 16px',
-                fontWeight: '600',
-                fontSize: '0.85rem',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
-              }}
-            >
-              {isOpen ? "Ocultar Painel" : "Abrir Copilot"}
-            </button>
-          </div>
-        </div>
-
-        {isOpen && (
-          <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(139, 92, 246, 0.1)' }}>
-            {/* Settings Area */}
-            {isSettingsOpen && (
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.6)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(139, 92, 246, 0.2)',
-                borderRadius: '16px',
-                padding: '20px',
-                marginBottom: '20px',
-                boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
-                position: 'relative'
-              }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '700', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px', color: '#4c1d95' }}>
-                  ⚙️ Diretrizes Personalizadas do Prompt
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: '900', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <TrendingUp size={18} style={{ transform: 'rotate(45deg)', color: '#8b5cf6' }} />
+                  Kinesis AI Copilot
                 </h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 0 16px 0', lineHeight: '1.4' }}>
-                  Escreva regras, termos preferidos ou instruções específicas (ex: "Não utilize abreviações clínicas", "Sempre sugira estratégias de retenção para Pilates"). O Copilot aplicará essas regras com prioridade máxima em todas as respostas.
-                </p>
-                <textarea
-                  value={customInstructions}
-                  onChange={(e) => setCustomInstructions(e.target.value)}
-                  placeholder="Escreva aqui suas diretrizes ou regras adicionais..."
-                  style={{
-                    width: '100%',
-                    height: '120px',
-                    background: 'white',
-                    border: '1px solid rgba(139, 92, 246, 0.2)',
-                    borderRadius: '12px',
-                    padding: '12px 16px',
-                    fontSize: '0.85rem',
-                    fontFamily: 'inherit',
-                    color: 'var(--text-primary)',
-                    outline: 'none',
-                    resize: 'vertical',
-                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)',
-                    transition: 'all 0.2s'
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.15)'; }}
-                  onBlur={(e) => { e.target.style.borderColor = 'rgba(139, 92, 246, 0.2)'; e.target.style.boxShadow = 'none'; }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
-                  {saveSuccess && (
-                    <span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: '600' }}>
-                      ✓ Diretrizes salvas e aplicadas!
-                    </span>
-                  )}
-                  <button
-                    onClick={handleSaveInstructions}
-                    disabled={savingSettings}
-                    style={{
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '10px',
-                      padding: '8px 16px',
-                      fontWeight: '600',
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      opacity: savingSettings ? 0.6 : 1,
-                      transition: 'all 0.2s',
-                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)'
-                    }}
-                  >
-                    {savingSettings ? "Salvando..." : "Salvar Diretrizes"}
-                  </button>
-                </div>
+                <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', margin: '2px 0 0 0' }}>Inteligência Analítica Integrada</p>
               </div>
-            )}
-
-            {/* Suggestions Chips */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
-              {suggestions.map((s, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setPrompt(s.query);
-                    handleAsk(s.query);
-                  }}
-                  disabled={loading}
-                  style={{
-                    background: 'rgba(139, 92, 246, 0.06)',
-                    border: '1px solid rgba(139, 92, 246, 0.1)',
-                    color: '#6d28d9',
-                    borderRadius: '100px',
-                    padding: '8px 16px',
-                    fontSize: '0.8rem',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(139, 92, 246, 0.12)';
-                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'rgba(139, 92, 246, 0.06)';
-                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.1)';
-                  }}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button 
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px', fontSize: '1.1rem' }}
+                  title="Ajustar Diretrizes"
                 >
-                  {s.label}
+                  ⚙️
                 </button>
-              ))}
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
-            {/* Response Box */}
-            {(response || loading || error) && (
-              <div style={{ 
-                background: 'white',
-                border: '1px solid rgba(0,0,0,0.06)',
-                borderRadius: '16px',
-                padding: '20px',
-                marginBottom: '20px',
-                maxHeight: '400px',
-                overflowY: 'auto',
-                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)'
-              }}>
-                {loading && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0' }}>
-                    <div className="loader" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', animation: 'pulse 1.5s infinite' }}>
-                      Analisando banco de dados Kinesis e cruzando informações...
-                    </span>
-                  </div>
-                )}
-                
-                {error && (
-                  <div style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: '500', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <p style={{ margin: 0 }}>⚠️ {error}</p>
-                  </div>
-                )}
-                
-                {response && (
-                  <div 
-                    style={{ fontSize: '0.92rem', lineHeight: '1.6', color: '#1e293b' }}
-                    dangerouslySetInnerHTML={{ __html: formattedResponse }} 
+            {/* Content Area */}
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              backgroundColor: '#f8fafc'
+            }}>
+              {/* Settings Area if open */}
+              {isSettingsOpen && (
+                <div style={{
+                  background: '#ffffff',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#4c1d95' }}>Diretrizes Personalizadas</span>
+                  <textarea
+                    value={customInstructions}
+                    onChange={(e) => setCustomInstructions(e.target.value)}
+                    placeholder="Regras adicionais para o Copilot..."
+                    style={{
+                      width: '100%',
+                      height: '80px',
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '0.75rem',
+                      outline: 'none',
+                      resize: 'vertical'
+                    }}
                   />
-                )}
-              </div>
-            )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {saveSuccess && <span style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: '700' }}>Salvo!</span>}
+                    <button
+                      onClick={handleSaveInstructions}
+                      disabled={savingSettings}
+                      style={{
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {savingSettings ? "Salvando..." : "Salvar"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Suggestions */}
+              {!response && !loading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Perguntas Sugeridas:</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {suggestions.map((s, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setPrompt(s.query);
+                          handleAsk(s.query);
+                        }}
+                        style={{
+                          background: '#eff6ff',
+                          color: '#1e40af',
+                          border: '1px solid #bfdbfe',
+                          borderRadius: '6px',
+                          padding: '8px 12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Response/Loading Area */}
+              {(response || loading || error) && (
+                <div style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.8rem',
+                  lineHeight: '1.6',
+                  color: '#1e293b'
+                }}>
+                  {loading && (
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', color: '#64748b' }}>
+                      <Loader2 className="animate-spin" size={14} />
+                      <span>Analisando banco de dados clínico...</span>
+                    </div>
+                  )}
+                  {error && <span style={{ color: '#ef4444' }}>⚠️ {error}</span>}
+                  {response && (
+                    <div 
+                      style={{ whiteSpace: 'pre-wrap' }}
+                      dangerouslySetInnerHTML={{ __html: formattedResponse }} 
+                    />
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Input Form */}
-            <form onSubmit={(e) => { e.preventDefault(); handleAsk(prompt); }} style={{ display: 'flex', gap: '12px' }}>
-              <input
+            <form onSubmit={(e) => { e.preventDefault(); handleAsk(prompt); }} style={{
+              padding: '16px 20px',
+              borderTop: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              gap: '10px',
+              alignItems: 'center'
+            }}>
+              <input 
                 type="text"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Pergunte ao Copilot (ex: Quais pacientes tiveram maior média de dor neste mês?)"
+                placeholder="Pergunte sobre assiduidade, dor, repasses..."
                 disabled={loading}
                 style={{
                   flex: 1,
-                  background: 'white',
-                  border: '1px solid rgba(139, 92, 246, 0.2)',
-                  borderRadius: '14px',
-                  padding: '12px 20px',
-                  fontSize: '0.9rem',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.8rem',
+                  fontWeight: '600',
                   outline: 'none',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                  background: '#f8fafc'
                 }}
-                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.15)'; }}
-                onBlur={(e) => { e.target.style.borderColor = 'rgba(139, 92, 246, 0.2)'; e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)'; }}
               />
-              <button
+              <button 
                 type="submit"
                 disabled={loading || !prompt.trim()}
                 style={{
-                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                  backgroundColor: prompt.trim() && !loading ? '#8b5cf6' : '#cbd5e1',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '14px',
-                  padding: '0 24px',
-                  fontWeight: '700',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  opacity: (loading || !prompt.trim()) ? 0.6 : 1,
-                  transition: 'all 0.2s',
-                  boxShadow: '0 4px 12px rgba(139, 92, 246, 0.25)'
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  cursor: prompt.trim() && !loading ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}
               >
-                Perguntar
+                <Send size={16} />
               </button>
             </form>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }
