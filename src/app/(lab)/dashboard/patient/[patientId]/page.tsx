@@ -696,14 +696,14 @@ export default function PatientHistoryPage() {
     { id: 0, label: "D" }
   ];
 
-  const getDiagnosesForSegment = (segName: string) => {
+  const getDiagnosesForSegment = (segName: string): string[] => {
     const found = clinicalSegments.find((s: any) => s.name === segName);
     if (!found) return [];
-    return found.suggestions.map((s: any) => s.diagnosis).filter(Boolean);
+    return found.suggestions.map((s: any) => s.diagnosis as string).filter(Boolean);
   };
 
-  const getSegmentsList = () => {
-    const list = clinicalSegments.map((s: any) => s.name);
+  const getSegmentsList = (): string[] => {
+    const list = clinicalSegments.map((s: any) => s.name as string);
     if (!list.includes("Outros")) {
       list.push("Outros");
     }
