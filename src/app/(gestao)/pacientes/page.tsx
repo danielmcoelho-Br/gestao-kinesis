@@ -16,7 +16,11 @@ import {
   MessageSquare,
   Send,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Loader2,
+  X,
+  TrendingUp
 } from "lucide-react";
 import { MetricCard } from "@/gestao/components/DashboardComponents";
 import { 
@@ -50,11 +54,18 @@ export default function PacientesPage() {
   const [inactiveData, setInactiveData] = useState<{ inactivePatients: any[], feedbacks: any[] } | null>(null);
   const [loadingInactive, setLoadingInactive] = useState(false);
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
+  
+  // Novos estados para filtro de Fisioterapeuta e Alta
+  const [professionals, setProfessionals] = useState<any[]>([]);
+  const [selectedProfessional, setSelectedProfessional] = useState<string>("all");
+  const [showDischarged, setShowDischarged] = useState<boolean>(false);
+  const [user, setUser] = useState<any>(null);
 
   const fetchInactivePatients = async () => {
     setLoadingInactive(true);
     try {
-      const res = await fetch('/api/patients/inactive');
+      const url = `/api/patients/inactive?startMonth=${startMonth}&startYear=${startYear}&endMonth=${endMonth}&endYear=${endYear}`;
+      const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
         setInactiveData(json);
@@ -92,7 +103,32 @@ export default function PacientesPage() {
     if (activeView === 'inactive') {
       fetchInactivePatients();
     }
-  }, [activeView]);
+  }, [activeView, startMonth, startYear, endMonth, endYear]);
+
+  // Carregar profissionais e dados do usuário logado
+  useEffect(() => {
+    fetch("/api/profissionais")
+      .then(res => res.json())
+      .then(data => setProfessionals(Array.isArray(data) ? data : []))
+      .catch(() => setProfessionals([]));
+
+    fetch("/api/profile")
+      .then(res => res.json())
+      .then(data => {
+        if (data.id) setUser(data);
+      })
+      .catch(() => setUser(null));
+  }, []);
+
+  // Definir filtro padrão caso o usuário logado seja Fisioterapeuta
+  useEffect(() => {
+    if (user && professionals.length > 0) {
+      const matched = professionals.find(p => p.name.toLowerCase() === user.name.toLowerCase());
+      if (matched) {
+        setSelectedProfessional(matched.id);
+      }
+    }
+  }, [user, professionals]);
 
   const fetchStats = async () => {
     if (!initialized) return;
@@ -139,12 +175,26 @@ export default function PacientesPage() {
 
   const filteredPatients = useMemo(() => {
     if (!data?.patients) return [];
-    return data.patients.filter((p: Patient) => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.profession?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.provenance?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [data, searchTerm]);
+    return data.patients.filter((p: any) => {
+      // 1. Filtro por Fisioterapeuta
+      if (selectedProfessional !== "all") {
+        const hasSessionWithProf = p.professionals?.some((prof: any) => prof.id === selectedProfessional);
+        if (!hasSessionWithProf) return false;
+      }
+
+      // 2. Filtro por Alta (Em Atendimento)
+      const isDischarged = p.diagnoses && p.diagnoses.length > 0 && p.diagnoses.every((d: any) => d.status === "ALTA");
+      if (isDischarged && !showDischarged) return false;
+
+      // 3. Filtro por busca de texto
+      const matchesSearch = 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.profession && p.profession.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (p.provenance && p.provenance.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      return matchesSearch;
+    });
+  }, [data, searchTerm, selectedProfessional, showDischarged]);
 
   const statsData = useMemo(() => {
     if (!data) return null;
@@ -174,6 +224,8 @@ export default function PacientesPage() {
   const { ageData } = statsData;
   const professionData = stats.allProfessions;
   const provenanceData = stats.allProvenance;
+  const diagnosesData = stats.allDiagnoses || [];
+  const segmentsData = stats.allSegments || [];
 
   const kinesisLocation = { lat: -21.1969, lng: -47.8105 };
 
@@ -418,14 +470,90 @@ export default function PacientesPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Diagnósticos e Segmentos */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginTop: '24px' }}>
+                <div className="card chart-card">
+                  <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Activity size={20} color="#8b5cf6" /> Frequência de Diagnósticos Clínicos
+                  </h3>
+                  {diagnosesData.length > 0 ? (
+                    <div style={{ height: '400px' }} className="chart-container-inner is-expanded">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={diagnosesData.slice(0, 10)} layout="vertical" margin={{ left: 40, right: 40 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0,0,0,0.05)" />
+                          <XAxis type="number" hide />
+                          <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11, fontWeight: 600 }} />
+                          <Tooltip 
+                            isAnimationActive={false}
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                return (
+                                  <div style={{ background: 'white', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                    <p style={{ margin: 0, fontWeight: '800' }}>{payload[0].payload.name}</p>
+                                    <p style={{ margin: 0, color: '#8b5cf6' }}>{payload[0].value} pacientes ({payload[0].payload.pct}%)</p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={25} isAnimationActive={false}>
+                            <LabelList 
+                              dataKey="count" 
+                              position="right" 
+                              formatter={((val: number, entry: any) => {
+                                if (!entry || !entry.payload) return val;
+                                return `${val} (${entry.payload.pct}%)`;
+                              }) as any}
+                              style={{ fontSize: '0.8rem', fontWeight: '700', fill: 'var(--text-primary)' }}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(0,0,0,0.01)', borderRadius: '16px', border: '1px dashed var(--border-color)', height: '340px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                      <Activity size={48} color="var(--text-secondary)" style={{ opacity: 0.3, marginBottom: '16px' }} />
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Nenhum diagnóstico registrado para os pacientes atendidos neste período.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="card">
+                  <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <MapIcon size={20} color="#6366f1" /> Segmentos Corporais Acometidos
+                  </h3>
+                  {segmentsData.length > 0 ? (
+                    <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {segmentsData.map((item: any, i: number) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(0,0,0,0.02)', borderRadius: '10px' }}>
+                            <span style={{ fontWeight: '600' }}>{item.name}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{item.pct}%</span>
+                              <span style={{ fontWeight: '800', color: '#6366f1', minWidth: '30px', textAlign: 'right' }}>{item.count}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(0,0,0,0.01)', borderRadius: '16px', border: '1px dashed var(--border-color)', height: '340px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                      <MapIcon size={48} color="var(--text-secondary)" style={{ opacity: 0.3, marginBottom: '16px' }} />
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Nenhum segmento corporal registrado para os pacientes atendidos neste período.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {activeView === 'list' && (
           <div className="fade-in card">
-            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '250px', maxWidth: '400px' }}>
                 <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} size={18} />
                 <input 
                   type="text" 
@@ -434,6 +562,33 @@ export default function PacientesPage() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid var(--border-color)', outline: 'none' }}
                 />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label htmlFor="fisioterapeuta-select" style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-secondary)' }}>Fisioterapeuta:</label>
+                  <select 
+                    id="fisioterapeuta-select"
+                    value={selectedProfessional} 
+                    onChange={(e) => setSelectedProfessional(e.target.value)}
+                    style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'white', fontWeight: '600', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value="all">Todos os Fisioterapeutas</option>
+                    {professionals.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={showDischarged} 
+                    onChange={(e) => setShowDischarged(e.target.checked)}
+                    style={{ width: '18px', height: '18px', borderRadius: '6px', cursor: 'pointer' }}
+                  />
+                  <span>Mostrar pacientes com alta</span>
+                </label>
               </div>
             </div>
 
@@ -444,22 +599,64 @@ export default function PacientesPage() {
                     <th>Nome do Paciente</th>
                     <th>Gênero</th>
                     <th>Idade</th>
+                    <th>Diagnóstico Ativo</th>
+                    <th>Fisioterapeuta(s)</th>
                     <th>Profissão</th>
                     <th>Origem</th>
                     <th>Bairro/Procedência</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPatients.map((p: any, i: number) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: '700' }}>{p.name}</td>
-                      <td>{p.gender || 'N/I'}</td>
-                      <td>{p.age || 'N/I'}</td>
-                      <td>{p.profession || 'N/I'}</td>
-                      <td>{p.origin || 'N/I'}</td>
-                      <td>{p.provenance || 'N/I'}</td>
-                    </tr>
-                  ))}
+                  {filteredPatients.map((p: any, i: number) => {
+                    const activeDiags = p.diagnoses?.filter((d: any) => d.status === "ATIVO") || [];
+                    const isDischarged = p.diagnoses && p.diagnoses.length > 0 && p.diagnoses.every((d: any) => d.status === "ALTA");
+                    
+                    return (
+                      <tr key={i} style={{ opacity: isDischarged ? 0.6 : 1 }}>
+                        <td style={{ fontWeight: '700' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {p.name}
+                            {isDischarged && (
+                              <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '12px', background: '#e2e8f0', color: '#475569', fontWeight: '800' }}>ALTA</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>{p.gender || 'N/I'}</td>
+                        <td>{p.age || 'N/I'}</td>
+                        <td>
+                          {activeDiags.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {activeDiags.map((d: any) => (
+                                <span key={d.id} style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '8px', background: '#fef2f2', color: '#9d1d1d', border: '1px solid #fecaca', fontWeight: '700' }}>
+                                  {d.diagnosis} ({d.segment})
+                                </span>
+                              ))}
+                            </div>
+                          ) : isDischarged ? (
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontStyle: 'italic' }}>Alta clínica</span>
+                          ) : (
+                            <span style={{ color: '#f59e0b', fontSize: '0.85rem', fontWeight: '600' }}>Sem diagnóstico</span>
+                          )}
+                        </td>
+                        <td>
+                          {p.professionals && p.professionals.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {p.professionals.map((prof: any) => (
+                                <span key={prof.id} style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '8px', background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: '700' }}>
+                                  {prof.name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Nenhum</span>
+                          )}
+                        </td>
+                        <td>{p.profession || 'N/I'}</td>
+                        <td>{p.origin || 'N/I'}</td>
+                        <td>{p.provenance || 'N/I'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -650,6 +847,308 @@ export default function PacientesPage() {
           </div>
         )}
       </div>
+      <PatientAICopilotSection startMonth={startMonth} startYear={startYear} endMonth={endMonth} endYear={endYear} />
     </div>
+  );
+}
+
+function PatientAICopilotSection({ startMonth, startYear, endMonth, endYear }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [response, setResponse] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const suggestions = [
+    { label: "📊 Evasão por Bairro/Profissão", query: "Analise se os pacientes inativos ou com mais dias sem agendamento possuem alguma correlação estatística clara com o bairro (procedência) onde moram ou com suas profissões." },
+    { label: "🩺 Patologias por Perfil", query: "Quais são as patologias (diagnósticos) mais frequentes na clínica e como elas se distribuem entre os gêneros (feminino/masculino) e faixas etárias dos pacientes?" },
+    { label: "🔄 Estratégia para Inativos", query: "Com base na lista de pacientes inativos e nos motivos fornecidos nos feedbacks, elabore um plano estratégico acionável de 3 passos para reengajar esses pacientes." }
+  ];
+
+  const handleAsk = async (userPrompt: string) => {
+    if (!userPrompt.trim()) return;
+    setLoading(true);
+    setError("");
+    setResponse("");
+    try {
+      const res = await fetch("/api/patients/copilot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: userPrompt,
+          startMonth,
+          startYear,
+          endMonth,
+          endYear
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao consultar o Agente de IA.");
+      }
+      setResponse(data.text);
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message || "Erro na comunicação com o Agente de IA.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formattedResponse = useMemo(() => {
+    if (!response) return "";
+    let html = response
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    
+    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/`([^`]+)`/g, "<code style='background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; font-family: monospace;'>$1</code>");
+
+    const lines = html.split('\n');
+    let inList = false;
+    let inTable = false;
+    
+    const formattedLines = lines.map(line => {
+      const trimmed = line.trim();
+      
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        if (/^[|\s-]+$/.test(trimmed)) {
+          return '';
+        }
+        const cells = trimmed.split('|').map(c => c.trim()).filter((c, idx, arr) => idx > 0 && idx < arr.length - 1);
+        let prefix = '';
+        if (!inTable) {
+          prefix = '<div style="overflow-x:auto; margin: 16px 0;"><table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.8rem; border: 1px solid rgba(0,0,0,0.06); border-radius: 8px;">';
+          inTable = true;
+          const headerCells = cells.map(c => `<th style="padding:10px; border-bottom:2px solid rgba(0,0,0,0.08); background: rgba(0,0,0,0.02); font-weight:700;">${c}</th>`).join('');
+          return `${prefix}<thead><tr>${headerCells}</tr></thead><tbody>`;
+        }
+        const rowCells = cells.map(c => `<td style="padding:10px; border-bottom:1px solid rgba(0,0,0,0.06);">${c}</td>`).join('');
+        return `<tr>${rowCells}</tr>`;
+      } else {
+        let suffix = '';
+        if (inTable) {
+          suffix = '</tbody></table></div>';
+          inTable = false;
+        }
+        
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          const content = trimmed.substring(2);
+          let prefixList = '';
+          if (!inList) {
+            prefixList = '<ul style="margin: 8px 0; padding-left: 20px; list-style-type: disc;">';
+            inList = true;
+          }
+          return `${suffix}${prefixList}<li style="margin: 6px 0;">${content}</li>`;
+        } else {
+          let suffixList = '';
+          if (inList) {
+            suffixList = '</ul>';
+            inList = false;
+          }
+          return `${suffix}${suffixList}${line}`;
+        }
+      }
+    });
+
+    if (inTable) formattedLines.push('</tbody></table></div>');
+    if (inList) formattedLines.push('</ul>');
+
+    return formattedLines.filter(line => line !== '').join('<br />')
+      .replace(/<\/ul><br \/>/g, "</ul>")
+      .replace(/<br \/><ul/g, "<ul")
+      .replace(/<\/div><br \/>/g, "</div>")
+      .replace(/<br \/><div/g, "<div");
+  }, [response]);
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          color: 'white',
+          border: 'none',
+          boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          transition: 'transform 0.2s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+      >
+        <Sparkles size={24} />
+      </button>
+
+      {isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0,0,0,0.3)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            width: '100%',
+            maxWidth: '460px',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '-10px 0 25px -5px rgba(0, 0, 0, 0.1)',
+            borderLeft: '1px solid #cbd5e1'
+          }}>
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #cbd5e1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #f8fafc 0%, #f5f3ff 100%)'
+            }}>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: '900', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <TrendingUp size={18} style={{ transform: 'rotate(45deg)', color: '#8b5cf6' }} />
+                  Agente de IA - Pacientes Kinesis
+                </h3>
+                <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', margin: '2px 0 0 0' }}>Análise de Padrões & Agendamentos</p>
+              </div>
+              <button 
+                onClick={() => setIsOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              backgroundColor: '#f8fafc'
+            }}>
+              {!response && !loading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Análises Recomendadas:</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {suggestions.map((s, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setPrompt(s.query);
+                          handleAsk(s.query);
+                        }}
+                        style={{
+                          background: '#eff6ff',
+                          color: '#1e40af',
+                          border: '1px solid #bfdbfe',
+                          borderRadius: '6px',
+                          padding: '8px 12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(response || loading || error) && (
+                <div style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.8rem',
+                  lineHeight: '1.6',
+                  color: '#1e293b'
+                }}>
+                  {loading && (
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', color: '#64748b' }}>
+                      <Loader2 className="animate-spin" size={14} strokeWidth={3} />
+                      <span style={{ marginLeft: '6px' }}>Analisando padrões demográficos e agendamentos...</span>
+                    </div>
+                  )}
+                  {error && <span style={{ color: '#ef4444' }}>⚠️ {error}</span>}
+                  {response && (
+                    <div 
+                      style={{ whiteSpace: 'pre-wrap' }}
+                      dangerouslySetInnerHTML={{ __html: formattedResponse }} 
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleAsk(prompt); }} style={{
+              padding: '16px 20px',
+              borderTop: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              gap: '10px',
+              alignItems: 'center'
+            }}>
+              <input 
+                type="text"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Pergunte sobre bairros, profissões, inativos..."
+                disabled={loading}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.8rem',
+                  fontWeight: '600',
+                  outline: 'none',
+                  background: '#f8fafc'
+                }}
+              />
+              <button 
+                type="submit"
+                disabled={loading || !prompt.trim()}
+                style={{
+                  backgroundColor: prompt.trim() && !loading ? '#8b5cf6' : '#cbd5e1',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  cursor: prompt.trim() && !loading ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <Send size={16} />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

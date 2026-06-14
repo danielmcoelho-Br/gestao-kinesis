@@ -94,6 +94,11 @@ export default function DashboardPage() {
   const [pendingGestaoPatients, setPendingGestaoPatients] = useState<any[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
 
+  // Filtros de Fisioterapeuta e Alta
+  const [professionalsList, setProfessionalsList] = useState<any[]>([]);
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>("all");
+  const [showDischarged, setShowDischarged] = useState<boolean>(false);
+
   // Gestão de Diagnósticos States
   const [segments, setSegments] = useState<any[]>([]);
   const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
@@ -385,20 +390,48 @@ export default function DashboardPage() {
     const savedRecent = localStorage.getItem("kinesis_recent_patients");
     if (savedRecent) setRecentPatients(JSON.parse(savedRecent));
 
-    fetchPatients();
+    // Carregar profissionais
+    fetch("/api/profissionais")
+      .then(res => res.json())
+      .then(data => setProfessionalsList(Array.isArray(data) ? data : []))
+      .catch(() => setProfessionalsList([]));
+
     fetchGroups();
     fetchSegments();
   }, []);
 
+  // Definir filtro padrão caso o usuário logado seja Fisioterapeuta
+  useEffect(() => {
+    if (user && professionalsList.length > 0) {
+      const matched = professionalsList.find(p => p.name.toLowerCase() === user.name.toLowerCase());
+      if (matched) {
+        setSelectedProfessionalId(matched.id);
+        fetchPatients(search, matched.id, showDischarged);
+      } else {
+        fetchPatients(search, selectedProfessionalId, showDischarged);
+      }
+    } else {
+      fetchPatients(search, selectedProfessionalId, showDischarged);
+    }
+  }, [user, professionalsList]);
+
+  // Re-buscar quando os filtros mudarem
+  useEffect(() => {
+    fetchPatients(search, selectedProfessionalId, showDischarged);
+  }, [selectedProfessionalId, showDischarged]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchPatients(search);
+      fetchPatients(search, selectedProfessionalId, showDischarged);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const fetchPatients = async (query: string = "") => {
-    const result = await getPatients(query);
+  const fetchPatients = async (query: string = "", profId?: string, showAltas?: boolean) => {
+    const activeProfId = profId !== undefined ? profId : selectedProfessionalId;
+    const activeShowAltas = showAltas !== undefined ? showAltas : showDischarged;
+    
+    const result = await getPatients(query, 50, activeProfId, activeShowAltas);
     if (result.success) {
       setPatients(result.data || []);
     }
@@ -575,7 +608,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Busca de Pacientes */}
-              <div className="search-container" style={{ marginBottom: '1.5rem' }}>
+              <div className="search-container" style={{ marginBottom: '1rem' }}>
                 <Search className="search-icon" size={20} />
                 <input 
                   type="text" 
@@ -586,154 +619,144 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Lista ou Recentes */}
-              {search === "" ? (
-                <div>
-                  <h4 className="section-subtitle" style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <HistoryIcon size={14} /> Pesquisas Recentes
-                  </h4>
-                  <div className="patient-list">
-                    {recentPatients.length === 0 ? (
-                      <div className="empty-state">
-                        Nenhum paciente pesquisado recentemente. Use o campo de busca acima para encontrar um paciente.
-                      </div>
-                    ) : (
-                      recentPatients.map((patient, index) => (
-                        <motion.div
-                          key={`recent-${patient.id}`}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className="patient-item-wrapper"
-                          whileHover={{ borderColor: 'var(--primary)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
-                          style={{ alignItems: 'center' }}
-                        >
-                          <div className="patient-info" onClick={() => handlePatientClick(patient)}>
-                            <div className="patient-header" style={{ width: '100%' }}>
-                              <h4 className="patient-name">{patient.name}</h4>
-                              <div className="patient-status">
-                                {patient.hasOswestry ? (
-                                  <span className="status-badge success">
-                                    <CheckCircle2 size={12} /> ODI Concluído
-                                  </span>
-                                ) : (
-                                  <span className="status-badge warning">
-                                    <Clock size={12} /> ODI Pendente
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="patient-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleOpenShareModal(patient); }}
-                                  className="btn-action share-btn"
-                                  title="Compartilhar"
-                                >
-                                  <MessageCircle size={18} />
-                                </button>
-
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); openEditModal(patient); }}
-                                  className="btn-action edit-btn"
-                                  title="Editar"
-                                >
-                                  <Edit size={18} />
-                                </button>
-
-                                {String(user?.role || '').toUpperCase() !== 'SECRETARIA' && (
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/assessment/select-segment/${patient.id}`); }}
-                                    className="btn-action new-btn"
-                                    title="Nova Avaliação"
-                                  >
-                                    <FileText size={18} />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <p className="patient-meta" style={{ marginTop: '0.25rem' }}>
-                              {patient.age} anos | {patient.gender} | Cadastrado em {new Date(patient.createdAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </motion.div>
-                      ))
-                    )}
-                  </div>
+              {/* Filtros adicionais (Fisioterapeuta e Alta) */}
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <select
+                    value={selectedProfessionalId}
+                    onChange={(e) => setSelectedProfessionalId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.625rem 1rem',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-color)',
+                      background: 'white',
+                      fontWeight: '600',
+                      color: 'var(--text-primary)',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    <option value="all">Todos os Fisioterapeutas</option>
+                    {professionalsList.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
                 </div>
-              ) : (
-                <div>
-                  <h4 className="section-subtitle" style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                    Resultado da Busca
-                  </h4>
-                  <div className="patient-list">
-                    {loading ? (
-                      <div className="status-message">Buscando pacientes...</div>
-                    ) : patients.length === 0 ? (
-                      <div className="status-message">Nenhum paciente encontrado.</div>
-                    ) : (
-                      patients.map((patient, index) => (
-                        <motion.div
-                          key={`search-${patient.id}`}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className="patient-item-wrapper"
-                          whileHover={{ borderColor: 'var(--primary)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
-                          style={{ alignItems: 'center' }}
-                        >
-                          <div className="patient-info" onClick={() => handlePatientClick(patient)}>
-                            <div className="patient-header" style={{ width: '100%' }}>
-                              <h4 className="patient-name">{patient.name}</h4>
-                              <div className="patient-status">
-                                {patient.hasOswestry ? (
-                                  <span className="status-badge success">
-                                    <CheckCircle2 size={12} /> ODI Concluído
-                                  </span>
-                                ) : (
-                                  <span className="status-badge warning">
-                                    <Clock size={12} /> ODI Pendente
-                                  </span>
-                                )}
-                              </div>
+                
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-muted)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={showDischarged} 
+                    onChange={(e) => setShowDischarged(e.target.checked)}
+                    style={{ width: '16px', height: '16px', borderRadius: '4px', cursor: 'pointer' }}
+                  />
+                  <span>Mostrar altas</span>
+                </label>
+              </div>
 
-                              <div className="patient-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleOpenShareModal(patient); }}
-                                  className="btn-action share-btn"
-                                  title="Compartilhar"
-                                >
-                                  <MessageCircle size={18} />
-                                </button>
-
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); openEditModal(patient); }}
-                                  className="btn-action edit-btn"
-                                  title="Editar"
-                                >
-                                  <Edit size={18} />
-                                </button>
-
-                                {String(user?.role || '').toUpperCase() !== 'SECRETARIA' && (
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/assessment/select-segment/${patient.id}`); }}
-                                    className="btn-action new-btn"
-                                    title="Nova Avaliação"
-                                  >
-                                    <FileText size={18} />
-                                  </button>
-                                )}
-                              </div>
+              {/* Lista de Pacientes */}
+              <div>
+                <h4 className="section-subtitle" style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Users size={14} /> {search === "" ? (showDischarged ? "Todos os Pacientes" : "Pacientes em Atendimento") : "Resultado da Busca"}
+                </h4>
+                <div className="patient-list">
+                  {loading ? (
+                    <div className="status-message">Carregando pacientes...</div>
+                  ) : patients.length === 0 ? (
+                    <div className="status-message">Nenhum paciente encontrado.</div>
+                  ) : (
+                    patients.map((patient, index) => (
+                      <motion.div
+                        key={`patient-${patient.id}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="patient-item-wrapper"
+                        whileHover={{ borderColor: 'var(--primary)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
+                        style={{ alignItems: 'center' }}
+                      >
+                        <div className="patient-info" onClick={() => handlePatientClick(patient)}>
+                          <div className="patient-header" style={{ width: '100%' }}>
+                            <h4 className="patient-name">
+                              {patient.name}
+                              {patient.diagnoses && patient.diagnoses.length > 0 && patient.diagnoses.every((d: any) => d.status === "ALTA") && (
+                                <span style={{ marginLeft: '8px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '8px', background: '#e2e8f0', color: '#475569', fontWeight: '800' }}>ALTA</span>
+                              )}
+                            </h4>
+                            <div className="patient-status">
+                              {patient.hasOswestry ? (
+                                <span className="status-badge success">
+                                  <CheckCircle2 size={12} /> ODI Concluído
+                                </span>
+                              ) : (
+                                <span className="status-badge warning">
+                                  <Clock size={12} /> ODI Pendente
+                                </span>
+                              )}
                             </div>
-                            <p className="patient-meta" style={{ marginTop: '0.25rem' }}>
-                              {patient.age} anos | {patient.gender} | Cadastrado em {new Date(patient.createdAt).toLocaleDateString()}
-                            </p>
+
+                            <div className="patient-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleOpenShareModal(patient); }}
+                                className="btn-action share-btn"
+                                title="Compartilhar"
+                              >
+                                <MessageCircle size={18} />
+                              </button>
+
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); openEditModal(patient); }}
+                                className="btn-action edit-btn"
+                                title="Editar"
+                              >
+                                <Edit size={18} />
+                              </button>
+
+                              {String(user?.role || '').toUpperCase() !== 'SECRETARIA' && (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/assessment/select-segment/${patient.id}`); }}
+                                  className="btn-action new-btn"
+                                  title="Nova Avaliação"
+                                >
+                                  <FileText size={18} />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </motion.div>
-                      ))
-                    )}
-                  </div>
+                          <p className="patient-meta" style={{ marginTop: '0.25rem' }}>
+                            {patient.age} anos | {patient.gender} | Cadastrado em {new Date(patient.createdAt).toLocaleDateString()}
+                          </p>
+
+                          {/* Diagnósticos Ativos */}
+                          {patient.diagnoses && patient.diagnoses.filter((d: any) => d.status === "ATIVO").length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '0.5rem' }}>
+                              {patient.diagnoses.filter((d: any) => d.status === "ATIVO").map((d: any) => (
+                                <span key={d.id} style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '6px', background: '#fef2f2', color: '#9d1d1d', border: '1px solid #fecaca', fontWeight: '700' }}>
+                                  {d.diagnosis} ({d.segment})
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Fisioterapeutas */}
+                          {patient.professionals && patient.professionals.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '0.25rem' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600', alignSelf: 'center' }}>Fisio:</span>
+                              {patient.professionals.map((pr: any) => (
+                                <span key={pr.id} style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '6px', background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: '700' }}>
+                                  {pr.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
 

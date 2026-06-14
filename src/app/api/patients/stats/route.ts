@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const startDate = new Date(startYear, startMonth, 1);
     const endDate = new Date(endYear, endMonth + 1, 0, 23, 59, 59);
 
-    // Buscar sessões finalizadas no período
+    // Buscar sessões finalizadas no período com informações de profissional
     const sessions = await prisma.session.findMany({
       where: {
         date: {
@@ -24,25 +24,58 @@ export async function GET(request: Request) {
       },
       select: {
         patientName: true,
-      },
-      distinct: ['patientName']
-    });
-
-    const uniquePatientNames = Array.from(new Set(sessions.map(s => s.patientName.trim().toLowerCase())));
-
-    // 2. Buscar perfis completos desses pacientes
-    const patientProfiles = await prisma.patient.findMany({
-      where: {
-        name: {
-          in: uniquePatientNames,
-          mode: 'insensitive'
+        professional: {
+          select: {
+            id: true,
+            name: true
+          }
         }
       }
     });
 
+    const uniquePatientNames = Array.from(new Set(sessions.map(s => s.patientName.trim().toLowerCase())));
+
+    // Mapear profissionais por paciente
+    const patientProfsMap = new Map<string, Array<{ id: string, name: string }>>();
+    sessions.forEach(s => {
+      if (!s.professional) return;
+      const key = s.patientName.trim().toLowerCase();
+      const existing = patientProfsMap.get(key) || [];
+      if (!existing.some(p => p.id === s.professional.id)) {
+        existing.push({ id: s.professional.id, name: s.professional.name });
+        patientProfsMap.set(key, existing);
+      }
+    });
+
+    // 2. Buscar perfis completos desses pacientes incluindo diagnósticos
+    const patientProfiles = uniquePatientNames.length > 0
+      ? await prisma.patient.findMany({
+          where: {
+            OR: uniquePatientNames.map(name => ({
+              name: {
+                startsWith: name,
+                mode: 'insensitive' as const
+              }
+            }))
+          },
+          include: {
+            diagnoses: true
+          }
+        })
+      : [];
+
+    const formattedPatients = patientProfiles.map((p: any) => {
+      const pNameLower = p.name.trim().toLowerCase();
+      const mapKey = Array.from(patientProfsMap.keys()).find(k => pNameLower.startsWith(k));
+      return {
+        ...p,
+        professionals: mapKey ? (patientProfsMap.get(mapKey) || []) : []
+      };
+    });
+
     // 3. Cruzar dados: Identificar quem foi atendido mas não tem perfil cadastrado
     const profileNamesLower = patientProfiles.map(p => p.name.trim().toLowerCase());
-    const missingProfiles = uniquePatientNames.filter(name => !profileNamesLower.includes(name));
+    const missingProfiles = uniquePatientNames.filter(name => !profileNamesLower.some(pName => pName.startsWith(name)));
 
     // 4. Calcular Estatísticas Avançadas
     const femalePatients = patientProfiles.filter(p => p.gender?.toLowerCase().startsWith('f'));
@@ -198,6 +231,79 @@ export async function GET(request: Request) {
         .sort((a: any, b: any) => b[1] - a[1]);
     };
 
+    // Buscar diagnósticos relacionados aos pacientes com perfil
+    const patientIds = patientProfiles.map(p => p.id);
+    const patientDiagnoses = await prisma.patientDiagnosis.findMany({
+      where: {
+        patient_id: { in: patientIds }
+      }
+    });
+
+    // Função para agrupar e formatar diagnósticos
+    const mergeDiagnoses = (diags: any[]) => {
+      const counts: Record<string, number> = {};
+      const originalLabels: Record<string, string> = {};
+
+      const normalize = (str: string) => {
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      };
+
+      diags.forEach(d => {
+        if (!d.diagnosis) return;
+        const raw = d.diagnosis.trim();
+        const norm = normalize(raw);
+        counts[norm] = (counts[norm] || 0) + 1;
+        if (!originalLabels[norm] || raw.length > originalLabels[norm].length) {
+          originalLabels[norm] = raw;
+        }
+      });
+
+      return Object.entries(counts)
+        .map(([key, count]) => {
+          let label = originalLabels[key] || key;
+          label = label.toLowerCase().split(' ').map(word => {
+            if (['de', 'da', 'do', 'e', 'ou', 'para', 'com'].includes(word)) return word;
+            return word.charAt(0).toUpperCase() + word.slice(1);
+          }).join(' ');
+          if (label.startsWith('/')) label = label.slice(1).trim();
+          const pct = patientProfiles.length > 0 ? parseFloat(((count / patientProfiles.length) * 100).toFixed(1)) : 0;
+          return { name: label, count, pct };
+        })
+        .sort((a, b) => b.count - a.count);
+    };
+
+    // Função para agrupar e formatar segmentos corporais
+    const mergeSegments = (diags: any[]) => {
+      const counts: Record<string, number> = {};
+      const originalLabels: Record<string, string> = {};
+
+      const normalize = (str: string) => {
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      };
+
+      diags.forEach(d => {
+        if (!d.segment) return;
+        const raw = d.segment.trim();
+        const norm = normalize(raw);
+        counts[norm] = (counts[norm] || 0) + 1;
+        if (!originalLabels[norm] || raw.length > originalLabels[norm].length) {
+          originalLabels[norm] = raw;
+        }
+      });
+
+      return Object.entries(counts)
+        .map(([key, count]) => {
+          let label = originalLabels[key] || key;
+          label = label.toLowerCase().split(' ').map(word => {
+            if (['de', 'da', 'do', 'e', 'ou', 'para', 'com'].includes(word)) return word;
+            return word.charAt(0).toUpperCase() + word.slice(1);
+          }).join(' ');
+          const pct = patientProfiles.length > 0 ? parseFloat(((count / patientProfiles.length) * 100).toFixed(1)) : 0;
+          return { name: label, count, pct };
+        })
+        .sort((a, b) => b.count - a.count);
+    };
+
     const stats = {
       totalAttended: uniquePatientNames.length,
       withProfile: patientProfiles.length,
@@ -217,12 +323,14 @@ export async function GET(request: Request) {
       allProfessions: mergeProfessions(patientProfiles),
       allOrigins: mergeGeneralList(patientProfiles.map(p => p.origin).filter(Boolean) as string[]),
       allProvenance: mergeGeneralList(patientProfiles.map(p => p.provenance).filter(Boolean) as string[]),
+      allDiagnoses: mergeDiagnoses(patientDiagnoses),
+      allSegments: mergeSegments(patientDiagnoses),
       heatmapData: patientProfiles
         .filter(p => p.latitude && p.longitude)
         .map(p => ({ lat: p.latitude, lng: p.longitude, weight: 1 }))
     };
 
-    return NextResponse.json({ stats, patients: patientProfiles, missingProfiles });
+    return NextResponse.json({ stats, patients: formattedPatients, missingProfiles });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

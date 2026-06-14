@@ -10,15 +10,125 @@ const isValidUUID = (id: string) => {
          /^[a-z0-9]{20,32}$/i.test(id);
 };
 
-export async function getPatients(query: string = "", limit?: number) {
+export async function getPatients(
+  query: string = "",
+  limit?: number,
+  professionalId?: string,
+  showDischarged: boolean = false
+) {
   try {
-    const patients = await prisma.patient.findMany({
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+
+    // 1. Obter sessões finalizadas nos últimos 30 dias para aplicar restrição temporal (excluindo Pilates)
+    const sessionsLastMonth = await prisma.session.findMany({
       where: {
+        status: { contains: "Finalizado", mode: 'insensitive' },
+        date: { gte: oneMonthAgo },
+        NOT: {
+          serviceType: { contains: "Pilates", mode: 'insensitive' }
+        }
+      },
+      select: {
+        patientName: true,
+        professionalId: true
+      }
+    });
+
+    const uniquePatientNamesOfLastMonth = Array.from(new Set(
+      sessionsLastMonth.map(s => s.patientName.trim().toLowerCase())
+    ));
+
+    const andConditions: any[] = [];
+
+    // 2. Filtro por Fisioterapeuta e Restrição Temporal
+    if (query) {
+      // Se houver busca por texto (busca de nomes específicos), pesquisa de forma global em todo o banco
+      andConditions.push({
         name: {
           contains: query,
           mode: 'insensitive'
         }
-      },
+      });
+    } else {
+      // Sem busca por texto: restringe aos últimos 30 dias (atendidos pelo profissional ou novos sem atendimento)
+      if (professionalId && professionalId !== "all") {
+        const patientNamesForProf = Array.from(new Set(
+          sessionsLastMonth
+            .filter(s => s.professionalId === professionalId)
+            .map(s => s.patientName.trim())
+        ));
+        
+        const startsWithConditions = patientNamesForProf.map(name => ({
+          name: {
+            startsWith: name,
+            mode: 'insensitive' as const
+          }
+        }));
+
+        const newPatientCondition: any = {
+          createdAt: { gte: oneMonthAgo }
+        };
+
+        if (uniquePatientNamesOfLastMonth.length > 0) {
+          newPatientCondition.AND = uniquePatientNamesOfLastMonth.map(name => ({
+            name: {
+              not: {
+                startsWith: name
+              }
+            }
+          }));
+        }
+
+        andConditions.push({
+          OR: [
+            ...startsWithConditions,
+            newPatientCondition
+          ]
+        });
+      } else {
+        const startsWithConditions = uniquePatientNamesOfLastMonth.map(name => ({
+          name: {
+            startsWith: name,
+            mode: 'insensitive' as const
+          }
+        }));
+
+        andConditions.push({
+          OR: [
+            ...startsWithConditions,
+            {
+              createdAt: { gte: oneMonthAgo }
+            }
+          ]
+        });
+      }
+    }
+
+    // 3. Filtro por Alta (Em Atendimento)
+    if (!showDischarged) {
+      andConditions.push({
+        OR: [
+          {
+            diagnoses: {
+              none: {}
+            }
+          },
+          {
+            diagnoses: {
+              some: {
+                status: "ATIVO"
+              }
+            }
+          }
+        ]
+      });
+    }
+
+    const whereClause = andConditions.length > 0 ? { AND: andConditions } : {};
+
+    const patients = await prisma.patient.findMany({
+      where: whereClause,
       include: {
         created_by: {
           select: { name: true }
@@ -30,21 +140,68 @@ export async function getPatients(query: string = "", limit?: number) {
           select: {
             id: true
           }
-        }
+        },
+        diagnoses: true
       },
-
       orderBy: {
         createdAt: 'desc'
       },
       take: limit ?? 50
     });
     
-    // Transform to include a flag
+    // Obter sessões finalizadas (excluindo Pilates) APENAS para os pacientes retornados (com truncamento de 18 caracteres)
+    const truncatedPatientNames = patients.map((p: any) => p.name.substring(0, 18).trim().toLowerCase());
+    
+    const patientSessions = truncatedPatientNames.length > 0 
+      ? await prisma.session.findMany({
+          where: {
+            status: { contains: "Finalizado", mode: 'insensitive' },
+            patientName: {
+              in: truncatedPatientNames,
+              mode: 'insensitive'
+            },
+            NOT: {
+              serviceType: { contains: "Pilates", mode: 'insensitive' }
+            }
+          },
+          select: {
+            patientName: true,
+            professional: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        })
+      : [];
+
+    // Mapear profissionais pelo nome completo do paciente
+    const patientProfsMap = new Map<string, Array<{ id: string, name: string }>>();
+    patientSessions.forEach(s => {
+      if (!s.professional) return;
+      const sessionNameLower = s.patientName.trim().toLowerCase();
+      
+      const matchedPatient = patients.find(p => 
+        p.name.substring(0, 18).trim().toLowerCase() === sessionNameLower
+      );
+      
+      if (matchedPatient) {
+        const key = matchedPatient.name.trim().toLowerCase();
+        const existing = patientProfsMap.get(key) || [];
+        if (!existing.some(p => p.id === s.professional.id)) {
+          existing.push({ id: s.professional.id, name: s.professional.name });
+          patientProfsMap.set(key, existing);
+        }
+      }
+    });
+
+    // Transform to include a flag and professionals
     const formatted = patients.map((p: any) => ({
       ...p,
-      hasOswestry: p.assessments.length > 0
+      hasOswestry: p.assessments.length > 0,
+      professionals: patientProfsMap.get(p.name.trim().toLowerCase()) || []
     }));
-
 
     return { success: true, data: formatted };
   } catch (error) {
@@ -346,11 +503,26 @@ export async function ensurePatientAccessToken(patientId: string) {
 
 export async function getGestaoPatientsPendingRegister() {
   try {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+
     const sessions = await prisma.session.findMany({
+      where: {
+        date: { gte: oneMonthAgo },
+        NOT: {
+          serviceType: { contains: "Pilates", mode: 'insensitive' }
+        }
+      },
       select: { patientName: true },
       distinct: ['patientName']
     });
     const billingSessions = await prisma.billingSession.findMany({
+      where: {
+        date: { gte: oneMonthAgo },
+        NOT: {
+          serviceType: { contains: "Pilates", mode: 'insensitive' }
+        }
+      },
       select: { patientName: true, phone: true },
       distinct: ['patientName'],
       orderBy: [

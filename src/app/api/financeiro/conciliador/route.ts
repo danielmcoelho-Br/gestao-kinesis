@@ -114,8 +114,14 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
+
     const pastIncomes = await prisma.transaction.findMany({
-      where: { type: 'INCOME' },
+      where: {
+        type: 'INCOME',
+        date: { gte: sixMonthsAgo }
+      },
       select: { description: true, category: true },
       orderBy: { date: 'asc' }
     });

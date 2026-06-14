@@ -91,9 +91,12 @@ export async function POST(req: NextRequest) {
 
     // 4. Compile clinical correlations patient-by-patient
     const patientCorrelations = patients.map(p => {
-      const pSessions = periodSessions.filter(
-        s => s.patientName && s.patientName.trim().toLowerCase() === p.name.trim().toLowerCase()
-      );
+      const pSessions = periodSessions.filter(s => {
+        if (!s.patientName) return false;
+        const sName = s.patientName.trim().toLowerCase();
+        const pName = p.name.trim().toLowerCase();
+        return pName.startsWith(sName);
+      });
       
       const totalSessions = pSessions.length;
       const completed = pSessions.filter(s => s.status.toLowerCase().includes("finalizado")).length;

@@ -19,9 +19,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@/lab/*": ["./src/lab/*"],
-      "@/gestao/*": ["./src/gestao/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [
