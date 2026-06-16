@@ -20,7 +20,9 @@ import {
   Sparkles,
   Loader2,
   X,
-  TrendingUp
+  TrendingUp,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { MetricCard } from "@/gestao/components/DashboardComponents";
 import { 
@@ -36,6 +38,7 @@ import {
 } from '@react-google-maps/api';
 import { PatientProfileResponse, Patient } from "@/gestao/types";
 import { ClientStatsService } from "@/gestao/services/clientStatsService";
+import { getDischargedDiagnoses, getProfessionalDiagnosticsFrequency, getProfessionalCasesFrequency, getAverageSessionsPerDiagnosis } from "@/app/(lab)/dashboard/actions";
 
 const months = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -60,6 +63,83 @@ export default function PacientesPage() {
   const [selectedProfessional, setSelectedProfessional] = useState<string>("all");
   const [showDischarged, setShowDischarged] = useState<boolean>(false);
   const [user, setUser] = useState<any>(null);
+
+  // Estados para Altas, Frequências de Diagnósticos, Casos e Média de Atendimentos
+  const [dischargedDiagnoses, setDischargedDiagnoses] = useState<any[]>([]);
+  const [loadingDischarged, setLoadingDischarged] = useState<boolean>(true);
+  const [diagnosticsFrequency, setDiagnosticsFrequency] = useState<any[]>([]);
+  const [loadingFrequency, setLoadingFrequency] = useState<boolean>(true);
+  const [casesFrequency, setCasesFrequency] = useState<any[]>([]);
+  const [loadingCases, setLoadingCases] = useState<boolean>(true);
+  const [averageSessions, setAverageSessions] = useState<any[]>([]);
+  const [loadingAvgSessions, setLoadingAvgSessions] = useState<boolean>(true);
+
+  // Estado para controle de expansão de sanfona por segmento
+  const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
+  const toggleSegment = (key: string) => {
+    setExpandedSegments(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Auxiliar para agrupar Frequência por segmento e calcular porcentagem do total
+  const groupFrequencyBySegment = (items: any[]) => {
+    const groups: Record<string, { total: number; items: any[] }> = {};
+    let totalAll = 0;
+
+    for (const item of items) {
+      const segName = item.segment || "Outros";
+      if (!groups[segName]) {
+        groups[segName] = { total: 0, items: [] };
+      }
+      groups[segName].items.push(item);
+      groups[segName].total += item.count;
+      totalAll += item.count;
+    }
+
+    return Object.entries(groups).map(([segmentName, data]) => {
+      const percentage = totalAll > 0 ? (data.total / totalAll) * 100 : 0;
+      return {
+        segmentName,
+        total: data.total,
+        percentage: Number(percentage.toFixed(1)),
+        items: data.items.map(it => ({
+          ...it,
+          totalPercentage: totalAll > 0 ? Number(((it.count / totalAll) * 100).toFixed(1)) : 0
+        })).sort((a, b) => b.count - a.count)
+      };
+    }).sort((a, b) => b.total - a.total);
+  };
+
+  // Auxiliar para agrupar Média de Sessões por segmento (média ponderada) e calcular porcentagem do total de altas
+  const groupAverageSessionsBySegment = (items: any[]) => {
+    const groups: Record<string, { totalCases: number; totalWeightedSessions: number; items: any[] }> = {};
+    let totalCasesAll = 0;
+
+    for (const item of items) {
+      const segName = item.segment || "Outros";
+      if (!groups[segName]) {
+        groups[segName] = { totalCases: 0, totalWeightedSessions: 0, items: [] };
+      }
+      groups[segName].items.push(item);
+      groups[segName].totalCases += item.casesCount;
+      groups[segName].totalWeightedSessions += item.averageSessions * item.casesCount;
+      totalCasesAll += item.casesCount;
+    }
+
+    return Object.entries(groups).map(([segmentName, data]) => {
+      const percentage = totalCasesAll > 0 ? (data.totalCases / totalCasesAll) * 100 : 0;
+      const weightedAvg = data.totalCases > 0 ? (data.totalWeightedSessions / data.totalCases) : 0;
+      return {
+        segmentName,
+        totalCases: data.totalCases,
+        averageSessions: Number(weightedAvg.toFixed(1)),
+        percentage: Number(percentage.toFixed(1)),
+        items: data.items.map(it => ({
+          ...it,
+          totalCasesPercentage: totalCasesAll > 0 ? Number(((it.casesCount / totalCasesAll) * 100).toFixed(1)) : 0
+        })).sort((a, b) => b.casesCount - a.casesCount)
+      };
+    }).sort((a, b) => b.totalCases - a.totalCases);
+  };
 
   const fetchInactivePatients = async () => {
     setLoadingInactive(true);
@@ -129,6 +209,65 @@ export default function PacientesPage() {
       }
     }
   }, [user, professionals]);
+
+  const fetchAnalyticsData = async (profId: string) => {
+    setLoadingDischarged(true);
+    setLoadingFrequency(true);
+    setLoadingCases(true);
+    setLoadingAvgSessions(true);
+
+    const now = new Date();
+    const currentMonth = now.getMonth(); // 0-indexed
+    const currentYear = now.getFullYear();
+
+    try {
+      const resultDischarged = await getDischargedDiagnoses(profId, currentMonth, currentYear, currentMonth, currentYear);
+      if (resultDischarged.success) {
+        setDischargedDiagnoses(resultDischarged.data || []);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar altas em pacientes:", err);
+    } finally {
+      setLoadingDischarged(false);
+    }
+
+    try {
+      const resultFreq = await getProfessionalDiagnosticsFrequency(profId, currentMonth, currentYear, currentMonth, currentYear);
+      if (resultFreq.success) {
+        setDiagnosticsFrequency(resultFreq.data || []);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar frequências em pacientes:", err);
+    } finally {
+      setLoadingFrequency(false);
+    }
+
+    try {
+      const resultCases = await getProfessionalCasesFrequency(profId, currentMonth, currentYear, currentMonth, currentYear);
+      if (resultCases.success) {
+        setCasesFrequency(resultCases.data || []);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar frequência de casos em pacientes:", err);
+    } finally {
+      setLoadingCases(false);
+    }
+
+    try {
+      const resultAvg = await getAverageSessionsPerDiagnosis(profId, currentMonth, currentYear, currentMonth, currentYear);
+      if (resultAvg.success) {
+        setAverageSessions(resultAvg.data || []);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar média de sessões em pacientes:", err);
+    } finally {
+      setLoadingAvgSessions(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnalyticsData(selectedProfessional);
+  }, [selectedProfessional]);
 
   const fetchStats = async () => {
     if (!initialized) return;
@@ -551,7 +690,8 @@ export default function PacientesPage() {
         )}
 
         {activeView === 'list' && (
-          <div className="fade-in card">
+          <>
+            <div className="fade-in card">
             <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' }}>
               <div style={{ position: 'relative', flex: 1, minWidth: '250px', maxWidth: '400px' }}>
                 <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} size={18} />
@@ -661,7 +801,318 @@ export default function PacientesPage() {
               </table>
             </div>
           </div>
-        )}
+          
+          {/* Histórico de Altas e Frequência de Diagnósticos */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '40px' }} className="no-print">
+            
+            {/* Grid de Colunas para Frequências e Média (50% de largura cada) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
+              
+              {/* Frequência de Diagnósticos */}
+              <div className="fade-in card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '350px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                  <Activity style={{ color: 'var(--primary)' }} size={22} />
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>Frequência de Diagnósticos (Mes)</h3>
+                </div>
+                
+                {loadingFrequency ? (
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Loader2 className="animate-spin" style={{ color: 'var(--primary)' }} size={24} />
+                  </div>
+                ) : diagnosticsFrequency.length === 0 ? (
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', textAlign: 'center', margin: 0 }}>
+                      Nenhum diagnóstico novo registrado para este profissional no período.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
+                    {groupFrequencyBySegment(diagnosticsFrequency).map((group, gIdx) => {
+                      const isExpanded = !!expandedSegments[`diag-${group.segmentName}`];
+                      return (
+                        <div key={`g-diag-${gIdx}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div 
+                            onClick={() => toggleSegment(`diag-${group.segmentName}`)}
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between', 
+                              padding: '0.75rem 1rem', 
+                              background: 'linear-gradient(135deg, #fef2f2 0%, #fff 100%)', 
+                              borderRadius: '12px', 
+                              border: '1px solid #fee2e2',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              transition: 'all 0.2s ease',
+                              fontWeight: '700',
+                              color: '#9d1d1d',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                              <span>{group.segmentName}</span>
+                            </div>
+                            <span style={{ fontWeight: '800', background: '#A31621', color: 'white', borderRadius: '10px', padding: '2px 8px', fontSize: '0.725rem' }}>
+                              {group.total} {group.total === 1 ? 'caso' : 'casos'} ({group.percentage}%)
+                            </span>
+                          </div>
+                          
+                          {isExpanded && (
+                            <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px', borderLeft: '1.5px dotted #fee2e2', marginLeft: '20px' }}>
+                              {group.items.map((item, idx) => (
+                                <div 
+                                  key={`g-diag-item-${idx}`} 
+                                  style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between', 
+                                    padding: '4px 8px',
+                                    fontSize: '0.8rem',
+                                    color: 'var(--text-secondary)'
+                                  }}
+                                >
+                                  <span>• {item.diagnosis}</span>
+                                  <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                                    {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.totalPercentage}%)
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Frequência de Casos */}
+              <div className="fade-in card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '350px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                  <Users style={{ color: '#8b5cf6' }} size={22} />
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>Frequência de Casos (Mes)</h3>
+                </div>
+                
+                {loadingCases ? (
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Loader2 className="animate-spin" style={{ color: '#8b5cf6' }} size={24} />
+                  </div>
+                ) : casesFrequency.length === 0 ? (
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', textAlign: 'center', margin: 0 }}>
+                      Nenhum caso ativo registrado para este profissional no período.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
+                    {groupFrequencyBySegment(casesFrequency).map((group, gIdx) => {
+                      const isExpanded = !!expandedSegments[`cases-${group.segmentName}`];
+                      return (
+                        <div key={`g-cases-${gIdx}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div 
+                            onClick={() => toggleSegment(`cases-${group.segmentName}`)}
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between', 
+                              padding: '0.75rem 1rem', 
+                              background: 'linear-gradient(135deg, #f5f3ff 0%, #fff 100%)', 
+                              borderRadius: '12px', 
+                              border: '1px solid #e0e7ff',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              transition: 'all 0.2s ease',
+                              fontWeight: '700',
+                              color: '#5b21b6',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                              <span>{group.segmentName}</span>
+                            </div>
+                            <span style={{ fontWeight: '800', background: '#6d28d9', color: 'white', borderRadius: '10px', padding: '2px 8px', fontSize: '0.725rem' }}>
+                              {group.total} {group.total === 1 ? 'caso' : 'casos'} ({group.percentage}%)
+                            </span>
+                          </div>
+                          
+                          {isExpanded && (
+                            <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px', borderLeft: '1.5px dotted #e0e7ff', marginLeft: '20px' }}>
+                              {group.items.map((item, idx) => (
+                                <div 
+                                  key={`g-cases-item-${idx}`} 
+                                  style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between', 
+                                    padding: '4px 8px',
+                                    fontSize: '0.8rem',
+                                    color: 'var(--text-secondary)'
+                                  }}
+                                >
+                                  <span>• {item.diagnosis}</span>
+                                  <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                                    {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.totalPercentage}%)
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Média de Atendimentos por Diagnóstico */}
+              <div className="fade-in card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '350px', gridColumn: 'span 2' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                  <TrendingUp style={{ color: '#10b981' }} size={22} />
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>Média de Atendimentos por Diagnóstico (Todo período)</h3>
+                </div>
+                
+                {loadingAvgSessions ? (
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Loader2 className="animate-spin" style={{ color: '#10b981' }} size={24} />
+                  </div>
+                ) : averageSessions.length === 0 ? (
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', textAlign: 'center', margin: 0 }}>
+                      Nenhuma média calculada (sem altas concluídas) no período.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
+                    {groupAverageSessionsBySegment(averageSessions).map((group, gIdx) => {
+                      const isExpanded = !!expandedSegments[`avg-${group.segmentName}`];
+                      return (
+                        <div key={`g-avg-${gIdx}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div 
+                            onClick={() => toggleSegment(`avg-${group.segmentName}`)}
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between', 
+                              padding: '0.75rem 1rem', 
+                              background: 'linear-gradient(135deg, #ecfdf5 0%, #fff 100%)', 
+                              borderRadius: '12px', 
+                              border: '1px solid #d1fae5',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              transition: 'all 0.2s ease',
+                              fontWeight: '700',
+                              color: '#065f46',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                              <span>{group.segmentName}</span>
+                            </div>
+                            <span style={{ fontWeight: '800', background: '#059669', color: 'white', borderRadius: '10px', padding: '2px 8px', fontSize: '0.725rem' }}>
+                              Média: {group.averageSessions} {group.averageSessions === 1 ? 'sessão' : 'sessões'} ({group.totalCases} {group.totalCases === 1 ? 'alta' : 'altas'} - {group.percentage}%)
+                            </span>
+                          </div>
+                          
+                          {isExpanded && (
+                            <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px', borderLeft: '1.5px dotted #d1fae5', marginLeft: '20px' }}>
+                              {group.items.map((item, idx) => (
+                                <div 
+                                  key={`g-avg-item-${idx}`} 
+                                  style={{ 
+                                    display: 'flex', 
+                                    flexDirection: 'column', 
+                                    gap: '2px',
+                                    padding: '4px 8px',
+                                    fontSize: '0.8rem',
+                                    color: 'var(--text-secondary)'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span>• {item.diagnosis}</span>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                      ({item.casesCount} {item.casesCount === 1 ? 'alta' : 'altas'} - {item.totalCasesPercentage}%)
+                                    </span>
+                                  </div>
+                                  <div style={{ paddingLeft: '8px' }}>
+                                    <span style={{ background: '#f0fdf4', color: '#166534', fontWeight: '700', borderRadius: '6px', padding: '1px 6px', fontSize: '0.725rem', border: '1px solid #bbf7d0' }}>
+                                      {item.averageSessions} {item.averageSessions === 1 ? 'sessão/alta' : 'sessões/alta'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Altas Realizadas */}
+            <div className="fade-in card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                <CheckCircle2 style={{ color: '#10b981' }} size={24} />
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>Altas Realizadas (Mes)</h3>
+              </div>
+              
+              {loadingDischarged ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <Loader2 className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto' }} size={24} />
+                  <p style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>Carregando histórico de altas...</p>
+                </div>
+              ) : dischargedDiagnoses.length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
+                  Nenhuma alta clínica registrada para este profissional no período selecionado.
+                </p>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="report-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--border-color)', background: '#fafafa' }}>
+                        <th style={{ padding: '12px', fontWeight: 'bold' }}>Paciente</th>
+                        <th style={{ padding: '12px', fontWeight: 'bold' }}>Segmento</th>
+                        <th style={{ padding: '12px', fontWeight: 'bold' }}>Diagnóstico</th>
+                        <th style={{ padding: '12px', fontWeight: 'bold' }}>Data de Início</th>
+                        <th style={{ padding: '12px', fontWeight: 'bold' }}>Data de Alta</th>
+                        <th style={{ padding: '12px', fontWeight: 'bold', textAlign: 'center' }}>Sessões</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dischargedDiagnoses.map((diag) => (
+                        <tr key={diag.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '12px', fontWeight: '600' }}>{diag.patientName}</td>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: '8px', background: '#f1f5f9', color: '#475569', fontWeight: '600', fontSize: '0.75rem' }}>
+                              {diag.segment}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px', fontWeight: '600' }}>{diag.diagnosis}</td>
+                          <td style={{ padding: '12px' }}>{new Date(diag.startDate).toLocaleDateString('pt-BR')}</td>
+                          <td style={{ padding: '12px', fontWeight: '600' }}>
+                            {diag.dischargeDate ? new Date(diag.dischargeDate).toLocaleDateString('pt-BR') : 'N/A'}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <span style={{ background: '#eff6ff', color: '#1e40af', fontWeight: '800', borderRadius: '8px', padding: '2px 8px', fontSize: '0.75rem', border: '1px solid #bfdbfe' }}>
+                              {diag.sessionCount} {diag.sessionCount === 1 ? 'sessão' : 'sessões'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </>
+      )}
 
         {activeView === 'map' && (
           <div className="fade-in card" style={{ height: '75vh', display: 'flex', flexDirection: 'column' }}>

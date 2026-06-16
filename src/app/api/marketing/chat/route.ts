@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages = [] } = body;
+    const { messages = [], customRules = "" } = body;
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -23,6 +23,13 @@ Seu papel é ajudar o Daniel (administrador) a:
 
 Responda de forma profissional, simpática, acolhedora e focada em marketing ético de saúde baseado em evidências.
 Mantenha suas respostas organizadas, usando emojis de forma equilibrada e bullet points quando apropriado.
+
+🚨 REGRA CRÍTICA ANTI-ALUCINAÇÃO DE ESTUDOS/FONTES:
+Você NUNCA deve inventar estudos científicos fictícios, autores, datas de publicação ou nomes de revistas médicas imaginárias (como "Journal of Physiotherapy" ou estudos clínicos inexistentes).
+- Se o usuário forneceu um texto, artigo ou link real na conversa, baseie-se exclusivamente nele para citar fontes.
+- Se o usuário não forneceu nenhuma fonte específica, baseie-se apenas em conceitos anatômicos e fisiológicos gerais bem consolidados de fisioterapia e pilates, explicando o embasamento como conceitos e diretrizes clínicas gerais (ex: "Baseado em diretrizes gerais de reabilitação lombar" ou "Fundamentos de biomecânica do movimento"), SEM citar nomes de artigos, autores, ou anos de publicações fictícias.
+
+${customRules ? `Regras adicionais fornecidas pelo usuário que você DEVE seguir rigorosamente:\n${customRules}` : ""}
 `;
 
     // Map roles to Gemini API format ("user" / "model")

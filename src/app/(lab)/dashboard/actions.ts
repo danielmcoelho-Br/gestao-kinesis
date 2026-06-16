@@ -1043,4 +1043,449 @@ export async function deletePatientDiagnosis(id: string) {
   }
 }
 
+export async function getDischargedDiagnoses(
+  professionalId: string = "all",
+  startMonth?: number,
+  startYear?: number,
+  endMonth?: number,
+  endYear?: number
+) {
+  try {
+    const whereCondition: any = {
+      status: "ALTA",
+    };
+
+    if (startMonth !== undefined && startYear !== undefined && endMonth !== undefined && endYear !== undefined) {
+      const startPeriod = new Date(startYear, startMonth, 1, 0, 0, 0, 0);
+      const endPeriod = new Date(endYear, endMonth + 1, 0, 23, 59, 59, 999);
+      whereCondition.discharge_date = {
+        gte: startPeriod,
+        lte: endPeriod
+      };
+    }
+
+    const diagnoses = await prisma.patientDiagnosis.findMany({
+      where: whereCondition,
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      },
+      orderBy: {
+        discharge_date: 'desc'
+      }
+    });
+
+    const uniqueTruncatedNames = Array.from(new Set(
+      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+    ));
+
+    const sessions = uniqueTruncatedNames.length > 0
+      ? await prisma.session.findMany({
+          where: {
+            patientName: {
+              in: uniqueTruncatedNames,
+              mode: 'insensitive'
+            },
+            status: { contains: "Finalizado", mode: 'insensitive' },
+            NOT: {
+              serviceType: { contains: "Pilates", mode: 'insensitive' }
+            }
+          },
+          select: {
+            date: true,
+            professionalId: true,
+            patientName: true,
+            professional: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        })
+      : [];
+
+    const sessionsMap = new Map<string, typeof sessions>();
+    for (const s of sessions) {
+      const key = s.patientName.trim().toLowerCase();
+      if (!sessionsMap.has(key)) {
+        sessionsMap.set(key, []);
+      }
+      sessionsMap.get(key)!.push(s);
+    }
+
+    const formatted = [];
+
+    for (const diag of diagnoses) {
+      const patientName = diag.patient.name;
+      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+      const patientSessions = sessionsMap.get(truncatedName) || [];
+
+      // Filter sessions within the diagnosis period
+      const diagStart = new Date(diag.start_date);
+      const diagEnd = diag.discharge_date ? new Date(diag.discharge_date) : new Date();
+
+      // Set time boundaries to cover the full days
+      diagStart.setHours(0, 0, 0, 0);
+      diagEnd.setHours(23, 59, 59, 999);
+
+      const periodSessions = patientSessions.filter(s => {
+        const sDate = new Date(s.date);
+        return sDate >= diagStart && sDate <= diagEnd;
+      });
+
+      // If filtering by professional, ensure the patient has had sessions with this professional
+      if (professionalId !== "all") {
+        const hasSessionWithProf = periodSessions.some(s => s.professionalId === professionalId);
+        if (!hasSessionWithProf) {
+          continue;
+        }
+      }
+
+      formatted.push({
+        id: diag.id,
+        patientName: diag.patient.name,
+        patientId: diag.patient.id,
+        diagnosis: diag.diagnosis,
+        segment: diag.segment,
+        startDate: diag.start_date,
+        dischargeDate: diag.discharge_date,
+        sessionCount: periodSessions.length
+      });
+    }
+
+    return { success: true, data: formatted };
+  } catch (error: any) {
+    console.error("Error in getDischargedDiagnoses:", error);
+    return { success: false, error: error.message || "Erro ao buscar altas" };
+  }
+}
+
+export async function getProfessionalDiagnosticsFrequency(
+  professionalId: string = "all",
+  startMonth?: number,
+  startYear?: number,
+  endMonth?: number,
+  endYear?: number
+) {
+  try {
+    let startPeriod: Date;
+    let endPeriod: Date;
+
+    if (startMonth !== undefined && startYear !== undefined && endMonth !== undefined && endYear !== undefined) {
+      startPeriod = new Date(startYear, startMonth, 1, 0, 0, 0, 0);
+      endPeriod = new Date(endYear, endMonth + 1, 0, 23, 59, 59, 999);
+    } else {
+      const now = new Date();
+      startPeriod = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      endPeriod = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const diagnoses = await prisma.patientDiagnosis.findMany({
+      where: {
+        start_date: {
+          gte: startPeriod,
+          lte: endPeriod
+        }
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    const uniqueTruncatedNames = Array.from(new Set(
+      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+    ));
+
+    const professionalSessionsSet = new Set<string>();
+
+    if (professionalId !== "all" && uniqueTruncatedNames.length > 0) {
+      const sessions = await prisma.session.findMany({
+        where: {
+          professionalId: professionalId,
+          patientName: {
+            in: uniqueTruncatedNames,
+            mode: 'insensitive'
+          }
+        },
+        select: {
+          patientName: true
+        }
+      });
+      for (const s of sessions) {
+        professionalSessionsSet.add(s.patientName.trim().toLowerCase());
+      }
+    }
+
+    const frequencyMap: { [key: string]: { segment: string; count: number } } = {};
+
+    for (const diag of diagnoses) {
+      const patientName = diag.patient.name;
+      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+
+      if (professionalId !== "all") {
+        if (!professionalSessionsSet.has(truncatedName)) {
+          continue;
+        }
+      }
+
+      const key = diag.diagnosis;
+      if (!frequencyMap[key]) {
+        frequencyMap[key] = { segment: diag.segment, count: 0 };
+      }
+      frequencyMap[key].count += 1;
+    }
+
+    const sorted = Object.entries(frequencyMap)
+      .map(([diagnosis, item]) => ({ segment: item.segment, diagnosis, count: item.count }))
+      .sort((a, b) => b.count - a.count);
+
+    return { success: true, data: sorted };
+  } catch (error: any) {
+    console.error("Error in getProfessionalDiagnosticsFrequency:", error);
+    return { success: false, error: error.message || "Erro ao buscar frequência de diagnósticos" };
+  }
+}
+
+export async function getProfessionalCasesFrequency(
+  professionalId: string = "all",
+  startMonth?: number,
+  startYear?: number,
+  endMonth?: number,
+  endYear?: number
+) {
+  try {
+    let startPeriod: Date;
+    let endPeriod: Date;
+
+    if (startMonth !== undefined && startYear !== undefined && endMonth !== undefined && endYear !== undefined) {
+      startPeriod = new Date(startYear, startMonth, 1, 0, 0, 0, 0);
+      endPeriod = new Date(endYear, endMonth + 1, 0, 23, 59, 59, 999);
+    } else {
+      const now = new Date();
+      startPeriod = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      endPeriod = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const diagnoses = await prisma.patientDiagnosis.findMany({
+      where: {
+        start_date: {
+          lte: endPeriod
+        },
+        OR: [
+          { discharge_date: null },
+          { discharge_date: { gte: startPeriod } },
+          { status: "ATIVO" }
+        ]
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    const uniqueTruncatedNames = Array.from(new Set(
+      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+    ));
+
+    const patientWithSessionsSet = new Set<string>();
+
+    if (uniqueTruncatedNames.length > 0) {
+      const sessionsWhereClause: any = {
+        patientName: {
+          in: uniqueTruncatedNames,
+          mode: 'insensitive'
+        },
+        status: { contains: "Finalizado", mode: 'insensitive' },
+        date: {
+          gte: startPeriod,
+          lte: endPeriod
+        },
+        NOT: {
+          serviceType: { contains: "Pilates", mode: 'insensitive' }
+        }
+      };
+
+      if (professionalId !== "all") {
+        sessionsWhereClause.professionalId = professionalId;
+      }
+
+      const sessions = await prisma.session.findMany({
+        where: sessionsWhereClause,
+        select: {
+          patientName: true
+        }
+      });
+
+      for (const s of sessions) {
+        patientWithSessionsSet.add(s.patientName.trim().toLowerCase());
+      }
+    }
+
+    const frequencyMap: { [key: string]: { segment: string; count: number } } = {};
+
+    for (const diag of diagnoses) {
+      const patientName = diag.patient.name;
+      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+
+      if (!patientWithSessionsSet.has(truncatedName)) {
+        continue;
+      }
+
+      const key = diag.diagnosis;
+      if (!frequencyMap[key]) {
+        frequencyMap[key] = { segment: diag.segment, count: 0 };
+      }
+      frequencyMap[key].count += 1;
+    }
+
+    const sorted = Object.entries(frequencyMap)
+      .map(([diagnosis, item]) => ({ segment: item.segment, diagnosis, count: item.count }))
+      .sort((a, b) => b.count - a.count);
+
+    return { success: true, data: sorted };
+  } catch (error: any) {
+    console.error("Error in getProfessionalCasesFrequency:", error);
+    return { success: false, error: error.message || "Erro ao buscar frequência de casos" };
+  }
+}
+
+export async function getAverageSessionsPerDiagnosis(
+  professionalId: string = "all",
+  startMonth?: number,
+  startYear?: number,
+  endMonth?: number,
+  endYear?: number
+) {
+  try {
+    const whereCondition: any = {
+      status: "ALTA"
+    };
+
+    let startPeriod: Date;
+    let endPeriod: Date;
+
+    if (startMonth !== undefined && startYear !== undefined && endMonth !== undefined && endYear !== undefined) {
+      startPeriod = new Date(startYear, startMonth, 1, 0, 0, 0, 0);
+      endPeriod = new Date(endYear, endMonth + 1, 0, 23, 59, 59, 999);
+      whereCondition.discharge_date = {
+        gte: startPeriod,
+        lte: endPeriod
+      };
+    } else {
+      const now = new Date();
+      startPeriod = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      endPeriod = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const diagnoses = await prisma.patientDiagnosis.findMany({
+      where: whereCondition,
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      }
+    });
+
+    const uniqueTruncatedNames = Array.from(new Set(
+      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+    ));
+
+    const sessions = uniqueTruncatedNames.length > 0
+      ? await prisma.session.findMany({
+          where: {
+            patientName: {
+              in: uniqueTruncatedNames,
+              mode: 'insensitive'
+            },
+            status: { contains: "Finalizado", mode: 'insensitive' },
+            NOT: {
+              serviceType: { contains: "Pilates", mode: 'insensitive' }
+            }
+          },
+          select: {
+            date: true,
+            professionalId: true,
+            patientName: true
+          }
+        })
+      : [];
+
+    const sessionsMap = new Map<string, typeof sessions>();
+    for (const s of sessions) {
+      const key = s.patientName.trim().toLowerCase();
+      if (!sessionsMap.has(key)) {
+        sessionsMap.set(key, []);
+      }
+      sessionsMap.get(key)!.push(s);
+    }
+
+    const diagnosisSessions: { [key: string]: { segment: string; sessionsArray: number[] } } = {};
+
+    for (const diag of diagnoses) {
+      const patientName = diag.patient.name;
+      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+      const patientSessions = sessionsMap.get(truncatedName) || [];
+
+      // Filtrar sessões no período do diagnóstico (início até a alta)
+      const diagStart = new Date(diag.start_date);
+      const diagEnd = diag.discharge_date ? new Date(diag.discharge_date) : new Date();
+
+      diagStart.setHours(0, 0, 0, 0);
+      diagEnd.setHours(23, 59, 59, 999);
+
+      const periodSessions = patientSessions.filter(s => {
+        const sDate = new Date(s.date);
+        return sDate >= diagStart && sDate <= diagEnd;
+      });
+
+      // Se filtrado por profissional, certificar-se de que o paciente teve sessões com esse profissional
+      if (professionalId !== "all") {
+        const hasSessionWithProf = periodSessions.some(s => s.professionalId === professionalId);
+        if (!hasSessionWithProf) {
+          continue;
+        }
+      }
+
+      const key = diag.diagnosis;
+      if (!diagnosisSessions[key]) {
+        diagnosisSessions[key] = { segment: diag.segment, sessionsArray: [] };
+      }
+      diagnosisSessions[key].sessionsArray.push(periodSessions.length);
+    }
+
+    const result = Object.entries(diagnosisSessions).map(([diagnosis, item]) => {
+      const totalSessions = item.sessionsArray.reduce((sum, val) => sum + val, 0);
+      const averageSessions = item.sessionsArray.length > 0 ? Number((totalSessions / item.sessionsArray.length).toFixed(1)) : 0;
+      return {
+        segment: item.segment,
+        diagnosis,
+        averageSessions,
+        casesCount: item.sessionsArray.length
+      };
+    }).sort((a, b) => b.casesCount - a.casesCount);
+
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error("Error in getAverageSessionsPerDiagnosis:", error);
+    return { success: false, error: error.message || "Erro ao calcular média de sessões" };
+  }
+}
+
 

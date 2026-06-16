@@ -98,7 +98,7 @@ export default function DashboardPage() {
   const [professionalsList, setProfessionalsList] = useState<any[]>([]);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>("all");
   const [showDischarged, setShowDischarged] = useState<boolean>(false);
-
+  
   // Gestão de Diagnósticos States
   const [segments, setSegments] = useState<any[]>([]);
   const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
@@ -685,18 +685,6 @@ export default function DashboardPage() {
                                 <span style={{ marginLeft: '8px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '8px', background: '#e2e8f0', color: '#475569', fontWeight: '800' }}>ALTA</span>
                               )}
                             </h4>
-                            <div className="patient-status">
-                              {patient.hasOswestry ? (
-                                <span className="status-badge success">
-                                  <CheckCircle2 size={12} /> ODI Concluído
-                                </span>
-                              ) : (
-                                <span className="status-badge warning">
-                                  <Clock size={12} /> ODI Pendente
-                                </span>
-                              )}
-                            </div>
-
                             <div className="patient-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleOpenShareModal(patient); }}
@@ -713,20 +701,10 @@ export default function DashboardPage() {
                               >
                                 <Edit size={18} />
                               </button>
-
-                              {String(user?.role || '').toUpperCase() !== 'SECRETARIA' && (
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/assessment/select-segment/${patient.id}`); }}
-                                  className="btn-action new-btn"
-                                  title="Nova Avaliação"
-                                >
-                                  <FileText size={18} />
-                                </button>
-                              )}
                             </div>
                           </div>
                           <p className="patient-meta" style={{ marginTop: '0.25rem' }}>
-                            {patient.age} anos | {patient.gender} | Cadastrado em {new Date(patient.createdAt).toLocaleDateString()}
+                            {patient.age} anos | {patient.gender}
                           </p>
 
                           {/* Diagnósticos Ativos */}
@@ -835,6 +813,7 @@ export default function DashboardPage() {
                   ))
                 )}
               </div>
+            </div>
 
               {/* Gestão de Diagnósticos (Admin) */}
               {user && ['ADMINISTRADOR', 'ADMIN', 'GERENTE'].includes(String(user.role || '').toUpperCase()) && (
@@ -1095,8 +1074,8 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          </div>
         </div>
+
       </main>
 
       {/* WhatsApp Selection Modal */}

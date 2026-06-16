@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { theme, tone = "Educativo", quantity = 3 } = body;
+    const { theme, tone = "Educativo", quantity = 3, customRules = "" } = body;
 
     if (!theme) {
       return NextResponse.json({ error: "O tema (theme) é obrigatório." }, { status: 400 });
@@ -30,6 +30,7 @@ Diretrizes para a sequência de stories:
 3. Slide final (Chamada para Ação - CTA): Faça um convite claro (Ex: agendar uma avaliação, enviar uma dúvida na caixinha de perguntas, ver o link na bio). Recomenda-se usar um sticker de caixinha de perguntas (question) ou de enquete.
 
 Tom de voz geral: Acolhedor, profissional, baseado em evidências científicas, mas simples e direto. Use emojis de forma moderada e quebras de linhas limpas para leitura em telas móveis.
+${customRules ? `Regras adicionais de estilo, tom ou restrições que você DEVE obedecer rigorosamente: ${customRules}` : ""}
 
 Você deve responder estritamente com um objeto JSON contendo o tema e a array de stories.
 O JSON deve possuir exatamente a seguinte estrutura:

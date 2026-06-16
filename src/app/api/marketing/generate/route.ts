@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { weekStart, focusAreas = [], customKeywords = "", customSource = "", customImage = null } = body;
+    const { weekStart, focusAreas = [], customKeywords = "", customSource = "", customImage = null, customRules = "" } = body;
 
     if (!weekStart) {
       return NextResponse.json({ error: "weekStart é obrigatório." }, { status: 400 });
@@ -33,6 +33,12 @@ Informações de entrada do usuário para direcionar os temas:
 - Áreas de foco desejadas: ${focusAreas.length > 0 ? focusAreas.join(", ") : "Ortopedia, Geriatria, Reumatologia, Pilates"}
 - Palavras-chave ou ideias adicionais: ${customKeywords || 'Nenhuma'}
 - Notícia fonte ou texto bruto fornecido pelo usuário (use isso como base para reescrever se presente): ${customSource || 'Nenhuma'}
+${customRules ? `- Regras adicionais de estilo, tom ou restrições que você DEVE obedecer rigorosamente: ${customRules}` : ""}
+
+🚨 REGRA CRÍTICA ANTI-ALUCINAÇÃO DE ESTUDOS/FONTES:
+Você NUNCA deve inventar estudos científicos fictícios, autores, datas de publicação ou nomes de revistas médicas imaginárias (como "Journal of Physiotherapy 2024" ou "Estudo da USP de 2023"). 
+- Se o usuário forneceu um texto/link real nas informações de entrada, cite EXCLUSIVAMENTE a fonte fornecida.
+- Se o usuário não forneceu nenhuma fonte específica, baseie-se em conceitos biomecânicos e anatômicos consolidados e descreva o embasamento como um tema geral (ex: "Baseado em princípios gerais de ergonomia e postura no ambiente de trabalho" ou "Conceitos clássicos de fortalecimento de core no Pilates"), sem citar nomes de pesquisas, autores ou jornais fictícios.
 
 Sua equipe é composta pelos seguintes agentes virtuais:
 1. **🔎 Agente Pesquisador:** Levanta temas científicos de alta relevância ou notícias recentes nas áreas de foco, ou sintetiza a notícia/texto bruto fornecida pelo usuário.
@@ -43,7 +49,7 @@ Sua equipe é composta pelos seguintes agentes virtuais:
 Você deve responder estritamente com um objeto JSON contendo uma chave "posts", que é uma array de exatamente 3 objetos. Cada objeto deve possuir exatamente as seguintes chaves:
 - "dayOfWeek": O dia correspondente ("Segunda-feira", "Quarta-feira" ou "Sexta-feira")
 - "title": Título curto e chamativo do post
-- "sourceTopic": O assunto científico, estudo ou notícia que serviu de base (explicando em 1 ou 2 frases)
+- "sourceTopic": O assunto, tema geral de saúde ou conceito clínico que serviu de base (explicando em 1 ou 2 frases, respeitando a regra de nunca inventar artigos ou revistas acadêmicas fictícias)
 - "content": A legenda completa gerada para o feed do Instagram (com parágrafos estruturados, emojis e hashtags)
 - "imagePrompt": O prompt em inglês bem detalhado para gerar a imagem ilustrativa no DALL-E
 - "storyContent": Uma sugestão criativa e interativa de Story para o Instagram para esse mesmo dia, utilizando a mesma proposta/tema do post (pode incluir sugestões de enquetes, caixas de perguntas, texto curto ou roteiro rápido para falar nos stories).
@@ -118,6 +124,9 @@ Responda APENAS o JSON válido. Não coloque blocos de código markdown (\`\`\`j
         weekStart: {
           gte: startOfWeek,
           lt: endOfWeek
+        },
+        status: {
+          not: "ARCHIVED"
         }
       }
     });

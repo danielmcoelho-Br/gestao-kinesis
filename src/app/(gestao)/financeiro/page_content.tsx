@@ -138,6 +138,8 @@ export default function FinanceiroPageContent() {
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'model'; parts: { text: string }[] }[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [chatInput, setChatInput] = useState("");
+  const [customRules, setCustomRules] = useState("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Month Lock States
   const [monthLocked, setMonthLocked] = useState(false);
@@ -1515,7 +1517,8 @@ export default function FinanceiroPageContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: newMessages,
-          financialContext
+          financialContext,
+          customRules
         })
       });
 
@@ -1529,6 +1532,15 @@ export default function FinanceiroPageContent() {
       setAiLoading(false);
     }
   };
+
+  useEffect(() => {
+    const savedRules = localStorage.getItem("kinesis_finance_custom_rules");
+    if (savedRules) setCustomRules(savedRules);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("kinesis_finance_custom_rules", customRules);
+  }, [customRules]);
 
   useEffect(() => {
     if (showAIConsultant && chatMessages.length === 0) {
@@ -3594,12 +3606,21 @@ export default function FinanceiroPageContent() {
                 </h3>
                 <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', margin: '2px 0 0 0' }}>Análise e Insights - Kinesis Clínica</p>
               </div>
-              <button 
-                onClick={() => setShowAIConsultant(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}
-              >
-                <X size={20} />
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button 
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px', fontSize: '1.1rem' }}
+                  title="Ajustar Diretrizes"
+                >
+                  ⚙️
+                </button>
+                <button 
+                  onClick={() => setShowAIConsultant(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Chat History */}
@@ -3612,6 +3633,39 @@ export default function FinanceiroPageContent() {
               gap: '16px',
               backgroundColor: '#f8fafc'
             }}>
+              {/* Settings Area if open */}
+              {isSettingsOpen && (
+                <div style={{
+                  background: '#ffffff',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--primary)' }}>Regras de Análise Financeira (Persistente)</span>
+                  <textarea
+                    value={customRules}
+                    onChange={(e) => setCustomRules(e.target.value)}
+                    placeholder="Regras adicionais para o Consultor Financeiro (ex: 'Sempre considere fundo de reserva', 'Exiba os valores em formato simplificado')..."
+                    style={{
+                      width: '100%',
+                      height: '80px',
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '0.75rem',
+                      outline: 'none',
+                      resize: 'vertical'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>
+                    Salvo automaticamente no navegador.
+                  </span>
+                </div>
+              )}
               {chatMessages.map((msg, idx) => {
                 const isModel = msg.role === 'model';
                 return (

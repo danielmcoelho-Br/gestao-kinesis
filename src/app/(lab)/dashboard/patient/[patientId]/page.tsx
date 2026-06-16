@@ -212,24 +212,29 @@ export default function PatientHistoryPage() {
       return;
     }
 
-    const res = await addPatientDiagnosis(patientId, {
-      segment,
-      diagnosis: diagnosisName,
-      start_date: new Date(diagStartDate)
-    });
+    try {
+      const res = await addPatientDiagnosis(patientId, {
+        segment,
+        diagnosis: diagnosisName,
+        start_date: new Date(diagStartDate)
+      });
 
-    if (res.success) {
-      toast.success("Diagnóstico adicionado com sucesso!");
-      setIsAddDiagOpen(false);
-      setSelectedSegment("");
-      setSelectedDiagnosis("");
-      setCustomSegment("");
-      setCustomDiagnosis("");
-      setDiagStartDate(new Date().toISOString().split('T')[0]);
-      fetchDiagnoses();
-      fetchSuggestions();
-    } else {
-      toast.error(res.error || "Erro ao adicionar diagnóstico.");
+      if (res.success) {
+        toast.success("Diagnóstico adicionado com sucesso!");
+        setIsAddDiagOpen(false);
+        setSelectedSegment("");
+        setSelectedDiagnosis("");
+        setCustomSegment("");
+        setCustomDiagnosis("");
+        setDiagStartDate(new Date().toISOString().split('T')[0]);
+        fetchDiagnoses();
+        fetchSuggestions();
+      } else {
+        toast.error(res.error || "Erro ao adicionar diagnóstico.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao salvar diagnóstico:", err);
+      toast.error("Sessão expirada ou erro de rede. Por favor, recarregue a página.");
     }
   };
 
@@ -237,27 +242,37 @@ export default function PatientHistoryPage() {
     e.preventDefault();
     if (!diagToDischarge) return;
 
-    const res = await updatePatientDiagnosisStatus(diagToDischarge.id, "ALTA", new Date(dischargeDate));
-    if (res.success) {
-      toast.success("Alta registrada com sucesso!");
-      setDiagToDischarge(null);
-      setDischargeDate(new Date().toISOString().split('T')[0]);
-      fetchDiagnoses();
-    } else {
-      toast.error(res.error || "Erro ao registrar alta.");
+    try {
+      const res = await updatePatientDiagnosisStatus(diagToDischarge.id, "ALTA", new Date(dischargeDate));
+      if (res.success) {
+        toast.success("Alta registrada com sucesso!");
+        setDiagToDischarge(null);
+        setDischargeDate(new Date().toISOString().split('T')[0]);
+        fetchDiagnoses();
+      } else {
+        toast.error(res.error || "Erro ao registrar alta.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao registrar alta:", err);
+      toast.error("Sessão expirada ou erro de rede. Por favor, recarregue a página.");
     }
   };
 
   const handleDeleteDiagConfirm = async () => {
     if (!diagToDelete) return;
 
-    const res = await deletePatientDiagnosis(diagToDelete.id);
-    if (res.success) {
-      toast.success("Diagnóstico excluído com sucesso!");
-      setDiagToDelete(null);
-      fetchDiagnoses();
-    } else {
-      toast.error(res.error || "Erro ao excluir diagnóstico.");
+    try {
+      const res = await deletePatientDiagnosis(diagToDelete.id);
+      if (res.success) {
+        toast.success("Diagnóstico excluído com sucesso!");
+        setDiagToDelete(null);
+        fetchDiagnoses();
+      } else {
+        toast.error(res.error || "Erro ao excluir diagnóstico.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao excluir diagnóstico:", err);
+      toast.error("Sessão expirada ou erro de rede. Por favor, recarregue a página.");
     }
   };
 

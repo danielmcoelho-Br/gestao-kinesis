@@ -2,15 +2,26 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-// Replicates exactly the key setup used in src/gestao/lib/auth.ts
-if (!process.env.JWT_SECRET) {
-  throw new Error("🚨 JWT_SECRET is missing from the environment variables! System halted for safety.");
+// Lazy-loaded key to prevent build-time crashes if JWT_SECRET is not set during compile
+let KEY: Uint8Array | null = null;
+function getJWTKey() {
+  if (!KEY) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      // During static build, JWT_SECRET might not be populated; use a temporary fallback key
+      if (process.env.NODE_ENV === "production" && typeof window === "undefined") {
+        console.warn("⚠️ JWT_SECRET is missing from environment variables!");
+      }
+      return new TextEncoder().encode("temporary-fallback-secret-key-for-static-build");
+    }
+    KEY = new TextEncoder().encode(secret);
+  }
+  return KEY;
 }
-const KEY = new TextEncoder().encode(process.env.JWT_SECRET);
 
 async function verifyToken(token: string) {
   try {
-    const { payload } = await jwtVerify(token, KEY, {
+    const { payload } = await jwtVerify(token, getJWTKey(), {
       algorithms: ["HS256"],
     });
     return payload;

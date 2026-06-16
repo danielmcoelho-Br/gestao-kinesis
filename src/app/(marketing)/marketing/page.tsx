@@ -60,6 +60,7 @@ export default function MarketingPage() {
   const [customKeywords, setCustomKeywords] = useState("");
   const [customSource, setCustomSource] = useState("");
   const [customImage, setCustomImage] = useState<string | null>(null);
+  const [customRules, setCustomRules] = useState("");
 
   // Editing state
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export default function MarketingPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [showAIChat, setShowAIChat] = useState(false);
+  const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
 
   // Stories Studio State
   const [storyTheme, setStoryTheme] = useState("");
@@ -439,17 +441,59 @@ export default function MarketingPage() {
     }
   }, [activeTab]);
 
-  // Load Stories from localStorage on init
+  // Load settings and data from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem("kinesis_stories");
-    if (saved) {
-      try {
-        setStoryList(JSON.parse(saved));
-      } catch (e) {
-        console.error("Erro ao ler localstorage para stories:", e);
-      }
+    const savedStories = localStorage.getItem("kinesis_stories");
+    if (savedStories) {
+      try { setStoryList(JSON.parse(savedStories)); } catch (e) {}
+    }
+
+    const savedRules = localStorage.getItem("kinesis_custom_rules");
+    if (savedRules) setCustomRules(savedRules);
+
+    const savedFocus = localStorage.getItem("kinesis_focus_areas");
+    if (savedFocus) {
+      try { setFocusAreas(JSON.parse(savedFocus)); } catch (e) {}
+    }
+
+    const savedKeywords = localStorage.getItem("kinesis_custom_keywords");
+    if (savedKeywords) setCustomKeywords(savedKeywords);
+
+    const savedSource = localStorage.getItem("kinesis_custom_source");
+    if (savedSource) setCustomSource(savedSource);
+
+    const savedChat = localStorage.getItem("kinesis_chat_messages");
+    if (savedChat) {
+      try { setChatMessages(JSON.parse(savedChat)); } catch (e) {}
     }
   }, []);
+
+  // Save focus areas to localStorage on change
+  useEffect(() => {
+    localStorage.setItem("kinesis_focus_areas", JSON.stringify(focusAreas));
+  }, [focusAreas]);
+
+  // Save custom rules to localStorage on change
+  useEffect(() => {
+    localStorage.setItem("kinesis_custom_rules", customRules);
+  }, [customRules]);
+
+  // Save keywords to localStorage on change
+  useEffect(() => {
+    localStorage.setItem("kinesis_custom_keywords", customKeywords);
+  }, [customKeywords]);
+
+  // Save custom source to localStorage on change
+  useEffect(() => {
+    localStorage.setItem("kinesis_custom_source", customSource);
+  }, [customSource]);
+
+  // Save chat messages to localStorage on change
+  useEffect(() => {
+    if (chatMessages.length > 1) {
+      localStorage.setItem("kinesis_chat_messages", JSON.stringify(chatMessages));
+    }
+  }, [chatMessages]);
 
   // Trigger sequential image generation for any posts missing an image
   useEffect(() => {
@@ -549,7 +593,8 @@ export default function MarketingPage() {
           focusAreas,
           customKeywords,
           customSource,
-          customImage
+          customImage,
+          customRules
         })
       });
 
@@ -734,7 +779,10 @@ export default function MarketingPage() {
       const res = await fetch("/api/marketing/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages })
+        body: JSON.stringify({ 
+          messages: updatedMessages,
+          customRules
+        })
       });
 
       if (res.ok) {
@@ -784,7 +832,8 @@ export default function MarketingPage() {
         body: JSON.stringify({
           theme: storyTheme,
           tone: storyTone,
-          quantity: storyQuantity
+          quantity: storyQuantity,
+          customRules
         })
       });
 
@@ -980,9 +1029,9 @@ export default function MarketingPage() {
       </div>
 
       {activeTab === "calendar" ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }} className="lg:grid-cols-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Collapsible/Sidebar configuration for guidelines */}
-          <div className="lg:col-span-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             <div className="card-modern" style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
@@ -1141,7 +1190,7 @@ export default function MarketingPage() {
           </div>
 
           {/* Right Column - Posts Calendar & Generation status */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
             {/* Simulation pipeline box */}
             {generating && (
               <div className="card-modern" style={{ padding: '16px', borderRadius: '12px', background: '#f8fafc', border: '1px dashed #cbd5e1' }}>
@@ -1206,7 +1255,7 @@ export default function MarketingPage() {
                 <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Configure os temas e clique em "Gerar Planejamento" na barra lateral!</p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
                 {posts.map(post => {
                   const isEditing = editingPostId === post.id;
                   const currentSubTab = cardSubTabs[post.id] || "feed";
@@ -1228,7 +1277,9 @@ export default function MarketingPage() {
                         display: 'flex', 
                         flexDirection: 'column',
                         overflow: 'hidden',
-                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05)'
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05)',
+                        maxWidth: '450px',
+                        width: '100%'
                       }}
                     >
                       {/* Top banner of post card */}
@@ -1271,323 +1322,51 @@ export default function MarketingPage() {
                         </select>
                       </div>
 
-                      {/* Content Section: side-by-side mockup and details */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', padding: '20px' }} className="md:grid-cols-12">
+                      {/* Content Section: details only */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
                         
-                        {/* Column 1: Simulator Mockup */}
-                        <div className="md:col-span-5 flex flex-col items-center gap-3">
-                          {/* Inner Tabs switcher */}
-                          <div style={{ display: 'flex', width: '100%', background: '#f1f5f9', padding: '3px', borderRadius: '8px', marginBottom: '4px' }}>
-                            <button
-                              onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "feed" }))}
-                              style={{
-                                flex: 1,
-                                padding: '6px',
-                                border: 'none',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                                background: currentSubTab === "feed" ? '#fff' : 'transparent',
-                                color: currentSubTab === "feed" ? 'var(--primary)' : '#64748b',
-                                boxShadow: currentSubTab === "feed" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                transition: 'all 0.2s'
-                              }}
-                            >
-                              Feed Post
-                            </button>
-                            <button
-                              onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "story" }))}
-                              style={{
-                                flex: 1,
-                                padding: '6px',
-                                border: 'none',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                                background: currentSubTab === "story" ? '#fff' : 'transparent',
-                                color: currentSubTab === "story" ? 'var(--primary)' : '#64748b',
-                                boxShadow: currentSubTab === "story" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                transition: 'all 0.2s'
-                              }}
-                            >
-                              Story Post
-                            </button>
-                          </div>
-
-                          {currentSubTab === "feed" ? (
-                            /* Feed Mockup */
-                            <div style={{ width: '100%', maxWidth: '300px', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', background: '#fff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
-                              {/* Mock Header */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', fontSize: '0.65rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center' }}>K</div>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontSize: '0.7rem', fontWeight: '750', color: '#1e293b' }}>kinesis_clinica</span>
-                                  <span style={{ fontSize: '0.55rem', color: '#64748b' }}>Clínica Kinesis</span>
-                                </div>
-                              </div>
-                              
-                              {/* Mock Image with paste support */}
-                              {isEditing ? (
-                                <div 
-                                  onClick={() => document.getElementById(`edit-file-input-${post.id}`)?.click()}
-                                  onDragOver={(e) => e.preventDefault()}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    const file = e.dataTransfer.files?.[0];
-                                    if (file && file.type.startsWith("image/")) {
-                                      const reader = new FileReader();
-                                      reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                      reader.readAsDataURL(file);
-                                    }
-                                  }}
-                                  onPaste={(e) => {
-                                    const items = e.clipboardData.items;
-                                    for (let i = 0; i < items.length; i++) {
-                                      if (items[i].type.indexOf("image") !== -1) {
-                                        const file = items[i].getAsFile();
-                                        if (file) {
-                                          const reader = new FileReader();
-                                          reader.onload = (event) => {
-                                            if (event.target?.result) {
-                                              setEditImageUrl(event.target.result as string);
-                                              toast.success("Imagem colada!");
-                                            }
-                                          };
-                                          reader.readAsDataURL(file);
-                                        }
-                                        e.preventDefault();
-                                        break;
-                                      }
-                                    }
-                                  }}
-                                  tabIndex={0}
-                                  title="Clique para carregar, ou selecione esta caixa e aperte Ctrl+V para colar uma imagem!"
-                                  style={{ 
-                                    width: '100%', 
-                                    height: '260px', 
-                                    background: editImageUrl ? `url(${editImageUrl}) center/cover no-repeat` : 'linear-gradient(135deg, #1e293b 0%, #312e81 100%)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    position: 'relative',
-                                    outline: 'none',
-                                    border: '2px dashed var(--primary)'
-                                  }}
-                                >
-                                  <div style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    background: 'rgba(0,0,0,0.5)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '6px',
-                                    color: '#fff',
-                                    opacity: editImageUrl ? 0 : 1,
-                                    transition: 'opacity 0.2s',
-                                    zIndex: 5
-                                  }}
-                                  onMouseEnter={(e) => { if (editImageUrl) e.currentTarget.style.opacity = '1'; }}
-                                  onMouseLeave={(e) => { if (editImageUrl) e.currentTarget.style.opacity = '0'; }}
-                                  >
-                                    <Plus size={20} />
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 'bold' }}>Colar (Ctrl+V) ou Clique para carregar</span>
-                                  </div>
-                                  <input 
-                                    type="file" 
-                                    id={`edit-file-input-${post.id}`} 
-                                    accept="image/*" 
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        const reader = new FileReader();
-                                        reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                        reader.readAsDataURL(file);
-                                      }
-                                    }}
-                                    style={{ display: 'none' }} 
-                                  />
-                                </div>
-                              ) : (
-                                <div style={{ 
-                                  width: '100%', 
-                                  height: '260px', 
-                                  background: post.imageUrl ? `url(${post.imageUrl}) center/cover no-repeat` : 'linear-gradient(135deg, var(--primary, #A31621) 0%, #1e293b 100%)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  position: 'relative'
-                                }}>
-                                  {!post.imageUrl && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'rgba(255, 255, 255, 0.75)' }}>
-                                      <Sparkles size={24} />
-                                      <span style={{ fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.08em' }}>KINESIS CLÍNICA</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Mock Actions */}
-                              <div style={{ display: 'flex', gap: '10px', padding: '10px 12px', borderBottom: '1px solid #f8fafc', color: '#475569' }}>
-                                <Heart size={16} />
-                                <MessageCircle size={16} />
-                                <Share2 size={16} />
-                              </div>
-                              {/* Mock Description text short */}
-                              <div style={{ padding: '8px 12px', fontSize: '0.65rem', color: '#475569', borderTop: '1px solid #f8fafc', maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                <strong>kinesis_clinica</strong> {post.content.substring(0, 100)}...
-                              </div>
-                            </div>
-                          ) : (
-                            /* Story Mockup (Vertical mobile screen) */
-                            <div style={{
-                              width: '200px',
-                              height: '356px',
-                              borderRadius: '16px',
-                              border: '6px solid #1e293b',
-                              position: 'relative',
-                              overflow: 'hidden',
-                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                              background: isEditing 
-                                ? (editImageUrl ? `url(${editImageUrl}) center/cover no-repeat` : bgGradient)
-                                : (post.imageUrl ? `url(${post.imageUrl}) center/cover no-repeat` : 'linear-gradient(135deg, var(--primary, #A31621) 0%, #1e293b 100%)'),
-                              display: 'flex',
-                              flexDirection: 'column',
-                              justifyContent: 'space-between',
-                              padding: '12px'
-                            }}>
-                              {/* Drag and drop for Story when editing */}
-                              {isEditing && (
-                                <>
-                                <div 
-                                  onClick={() => document.getElementById(`edit-story-file-input-${post.id}`)?.click()}
-                                  onDragOver={(e) => e.preventDefault()}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    const file = e.dataTransfer.files?.[0];
-                                    if (file && file.type.startsWith("image/")) {
-                                      const reader = new FileReader();
-                                      reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                      reader.readAsDataURL(file);
-                                    }
-                                  }}
-                                  onPaste={(e) => {
-                                    const items = e.clipboardData.items;
-                                    for (let i = 0; i < items.length; i++) {
-                                      if (items[i].type.indexOf("image") !== -1) {
-                                        const file = items[i].getAsFile();
-                                        if (file) {
-                                          const reader = new FileReader();
-                                          reader.onload = (event) => {
-                                            if (event.target?.result) {
-                                              setEditImageUrl(event.target.result as string);
-                                              toast.success("Imagem colada!");
-                                            }
-                                          };
-                                          reader.readAsDataURL(file);
-                                        }
-                                        e.preventDefault();
-                                        break;
-                                      }
-                                    }
-                                  }}
-                                  tabIndex={0}
-                                  style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    background: 'rgba(0,0,0,0.5)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '6px',
-                                    color: '#fff',
-                                    cursor: 'pointer',
-                                    opacity: editImageUrl ? 0 : 1,
-                                    zIndex: 5,
-                                    textAlign: 'center',
-                                    padding: '10px'
-                                  }}
-                                  onMouseEnter={(e) => { if (editImageUrl) e.currentTarget.style.opacity = '1'; }}
-                                  onMouseLeave={(e) => { if (editImageUrl) e.currentTarget.style.opacity = '0'; }}
-                                >
-                                  <Plus size={16} />
-                                  <span style={{ fontSize: '0.55rem', fontWeight: 'bold' }}>Colar (Ctrl+V) ou Carregar Imagem</span>
-                                </div>
-                                <input 
-                                  type="file" 
-                                  id={`edit-story-file-input-${post.id}`} 
-                                  accept="image/*" 
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      const reader = new FileReader();
-                                      reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                      reader.readAsDataURL(file);
-                                    }
-                                  }}
-                                  style={{ display: 'none' }} 
-                                />
-                                </>
-                              )}
-                              
-                              {/* Story indicators */}
-                              <div style={{ position: 'absolute', top: '4px', left: '6px', right: '6px', display: 'flex', gap: '2px' }}>
-                                <div style={{ flex: 1, height: '2px', background: '#fff', borderRadius: '1px' }}></div>
-                                <div style={{ flex: 1, height: '2px', background: 'rgba(255,255,255,0.4)', borderRadius: '1px' }}></div>
-                              </div>
-                              {/* Header info */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', zIndex: 2 }}>
-                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', fontSize: '0.45rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>K</div>
-                                <span style={{ fontSize: '0.55rem', fontWeight: '750', color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>kinesis_clinica</span>
-                              </div>
-                              {/* Center Content overlay text */}
-                              <div style={{
-                                background: 'rgba(0,0,0,0.55)',
-                                color: '#fff',
-                                padding: '6px 8px',
-                                borderRadius: '6px',
-                                fontSize: '0.6rem',
-                                fontWeight: 'bold',
-                                textAlign: 'center',
-                                margin: '0 8px',
-                                zIndex: 2,
-                                whiteSpace: 'pre-wrap'
-                              }}>
-                                {isEditing ? editStoryContent : (post.storyContent ? post.storyContent.substring(0, 180) + "..." : "Carregando sugestão...")}
-                              </div>
-                              {/* Sticker Mockup */}
-                              <div style={{ display: 'flex', justifyContent: 'center', zIndex: 2 }}>
-                                <div style={{
-                                  background: '#fff',
-                                  borderRadius: '8px',
-                                  padding: '6px',
-                                  boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-                                  textAlign: 'center',
-                                  width: '100px'
-                                }}>
-                                  <div style={{ fontSize: '0.45rem', fontWeight: '800', color: '#64748b', marginBottom: '3px' }}>ENQUETE</div>
-                                  <div style={{ display: 'flex', gap: '3px' }}>
-                                    <div style={{ flex: 1, padding: '2px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.45rem', fontWeight: '700', color: '#334155' }}>Sim!</div>
-                                    <div style={{ flex: 1, padding: '2px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.45rem', fontWeight: '700', color: '#334155' }}>Não</div>
-                                  </div>
-                                </div>
-                              </div>
-                              {/* Empty space for bottom spacer */}
-                              <div></div>
-                            </div>
-                          )}
-                          
-                          {/* Image generation/action */}
+                        {/* Tab Switcher: Feed / Story */}
+                        <div style={{ display: 'flex', width: '100%', maxWidth: '240px', background: '#f1f5f9', padding: '3px', borderRadius: '8px', alignSelf: 'flex-start' }}>
+                          <button
+                            onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "feed" }))}
+                            style={{
+                              flex: 1,
+                              padding: '6px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              background: currentSubTab === "feed" ? '#fff' : 'transparent',
+                              color: currentSubTab === "feed" ? 'var(--primary)' : '#64748b',
+                              boxShadow: currentSubTab === "feed" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            Feed Post
+                          </button>
+                          <button
+                            onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "story" }))}
+                            style={{
+                              flex: 1,
+                              padding: '6px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              background: currentSubTab === "story" ? '#fff' : 'transparent',
+                              color: currentSubTab === "story" ? 'var(--primary)' : '#64748b',
+                              boxShadow: currentSubTab === "story" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            Story Post
+                          </button>
                         </div>
 
-                        {/* Column 2: Text details and edits */}
-                        <div className="md:col-span-7 flex flex-col gap-4">
+                        {/* Text details and edits */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
                           {/* Theme source topic */}
                           {post.sourceTopic && (
                             <div style={{ display: 'flex', gap: '6px', padding: '6px 10px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.75rem', color: '#64748b', border: '1px solid #f1f5f9' }}>
@@ -1744,9 +1523,9 @@ export default function MarketingPage() {
         </div>
       ) : activeTab === "stories" ? (
         /* Stories Creator Studio Tab (Instagram Visual Simulator) */
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }} className="lg:grid-cols-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Left panel: Creator Input and suggestions */}
-          <div className="lg:col-span-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             <div className="card-modern" style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
               <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 16px 0' }}>
                 <Smartphone size={18} color="var(--primary)" />
@@ -1895,7 +1674,7 @@ export default function MarketingPage() {
           </div>
 
           {/* Right panel: Premium visual simulator */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
             {storyGenerating ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '80px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                 <Loader2 className="animate-spin" size={40} color="var(--primary)" />
@@ -1943,9 +1722,9 @@ export default function MarketingPage() {
                 </div>
 
                 {/* Active story simulator */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }} className="md:grid-cols-12">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Phone Simulator block */}
-                  <div className="md:col-span-5 flex justify-center">
+                  <div className="lg:col-span-5 flex justify-center">
                     <div style={{
                       width: '240px',
                       height: '426px',
@@ -2134,7 +1913,7 @@ export default function MarketingPage() {
                   </div>
 
                   {/* Controls / Story Slide description */}
-                  <div className="md:col-span-7 flex flex-col gap-4">
+                  <div className="lg:col-span-7 flex flex-col gap-4">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase' }}>
                         Slide {activeStoryPreviewIndex + 1} de {storyList.length}
@@ -2278,7 +2057,9 @@ export default function MarketingPage() {
                       display: 'flex', 
                       flexDirection: 'column',
                       overflow: 'hidden',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                      maxWidth: '450px',
+                      width: '100%'
                     }}
                   >
                     {/* Header banner */}
@@ -2321,230 +2102,51 @@ export default function MarketingPage() {
                       </select>
                     </div>
 
-                    {/* Content Section: side-by-side mockup and details */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', padding: '20px' }} className="md:grid-cols-12">
-                      {/* Column 1: Simulator Mockup */}
-                      <div className="md:col-span-5 flex flex-col items-center gap-3">
-                        {/* Inner Tabs switcher */}
-                        <div style={{ display: 'flex', width: '100%', background: '#f1f5f9', padding: '3px', borderRadius: '8px', marginBottom: '4px' }}>
-                          <button
-                            onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "feed" }))}
-                            style={{
-                              flex: 1,
-                              padding: '6px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '0.75rem',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              background: currentSubTab === "feed" ? '#fff' : 'transparent',
-                              color: currentSubTab === "feed" ? 'var(--primary)' : '#64748b',
-                              boxShadow: currentSubTab === "feed" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                            }}
-                          >
-                            Feed Post
-                          </button>
-                          <button
-                            onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "story" }))}
-                            style={{
-                              flex: 1,
-                              padding: '6px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '0.75rem',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              background: currentSubTab === "story" ? '#fff' : 'transparent',
-                              color: currentSubTab === "story" ? 'var(--primary)' : '#64748b',
-                              boxShadow: currentSubTab === "story" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                            }}
-                          >
-                            Story Post
-                          </button>
-                        </div>
-
-                        {currentSubTab === "feed" ? (
-                          /* Feed Mockup */
-                          <div style={{ width: '100%', maxWidth: '300px', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', background: '#fff', opacity: 0.7 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#64748b', color: '#fff', fontSize: '0.65rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>K</div>
-                              <span style={{ fontSize: '0.7rem', fontWeight: '750', color: '#1e293b' }}>kinesis_clinica</span>
-                            </div>
-                            <div style={{ 
-                              width: '100%', 
-                              height: '220px', 
-                              background: isEditing 
-                                ? (editImageUrl ? `url(${editImageUrl}) center/cover no-repeat` : 'linear-gradient(135deg, #64748b 0%, #334155 100%)')
-                                : (post.imageUrl ? `url(${post.imageUrl}) center/cover no-repeat` : 'linear-gradient(135deg, #64748b 0%, #334155 100%)')
-                            }}>
-                              {/* Edit mockup paster for Archived posts */}
-                              {isEditing && (
-                                <div 
-                                  onClick={() => document.getElementById(`edit-archived-file-input-${post.id}`)?.click()}
-                                  onDragOver={(e) => e.preventDefault()}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    const file = e.dataTransfer.files?.[0];
-                                    if (file && file.type.startsWith("image/")) {
-                                      const reader = new FileReader();
-                                      reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                      reader.readAsDataURL(file);
-                                    }
-                                  }}
-                                  onPaste={(e) => {
-                                    const items = e.clipboardData.items;
-                                    for (let i = 0; i < items.length; i++) {
-                                      if (items[i].type.indexOf("image") !== -1) {
-                                        const file = items[i].getAsFile();
-                                        if (file) {
-                                          const reader = new FileReader();
-                                          reader.onload = (event) => {
-                                            if (event.target?.result) {
-                                              setEditImageUrl(event.target.result as string);
-                                              toast.success("Imagem colada!");
-                                            }
-                                          };
-                                          reader.readAsDataURL(file);
-                                        }
-                                        e.preventDefault();
-                                        break;
-                                      }
-                                    }
-                                  }}
-                                  tabIndex={0}
-                                  style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    background: 'rgba(0,0,0,0.5)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#fff',
-                                    fontSize: '0.65rem',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  Colar (Ctrl+V) ou Carregar
-                                  <input 
-                                    type="file" 
-                                    id={`edit-archived-file-input-${post.id}`} 
-                                    accept="image/*" 
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        const reader = new FileReader();
-                                        reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                        reader.readAsDataURL(file);
-                                      }
-                                    }}
-                                    style={{ display: 'none' }} 
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          /* Story Mockup */
-                          <div style={{
-                            width: '180px',
-                            height: '320px',
-                            borderRadius: '12px',
-                            border: '4px solid #475569',
-                            background: isEditing 
-                              ? (editImageUrl ? `url(${editImageUrl}) center/cover no-repeat` : bgGradient)
-                              : (post.imageUrl ? `url(${post.imageUrl}) center/cover no-repeat` : bgGradient),
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            padding: '10px',
-                            opacity: 0.7,
-                            position: 'relative'
-                          }}>
-                            {isEditing && (
-                              <>
-                              <div 
-                                onClick={() => document.getElementById(`edit-archived-story-file-input-${post.id}`)?.click()}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={(e) => {
-                                  e.preventDefault();
-                                  const file = e.dataTransfer.files?.[0];
-                                  if (file && file.type.startsWith("image/")) {
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                    reader.readAsDataURL(file);
-                                  }
-                                }}
-                                onPaste={(e) => {
-                                  const items = e.clipboardData.items;
-                                  for (let i = 0; i < items.length; i++) {
-                                    if (items[i].type.indexOf("image") !== -1) {
-                                      const file = items[i].getAsFile();
-                                      if (file) {
-                                        const reader = new FileReader();
-                                        reader.onload = (event) => {
-                                          if (event.target?.result) {
-                                            setEditImageUrl(event.target.result as string);
-                                            toast.success("Imagem colada!");
-                                          }
-                                        };
-                                        reader.readAsDataURL(file);
-                                      }
-                                      e.preventDefault();
-                                      break;
-                                    }
-                                  }
-                                }}
-                                tabIndex={0}
-                                style={{
-                                  position: 'absolute',
-                                  inset: 0,
-                                  background: 'rgba(0,0,0,0.5)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: '#fff',
-                                  fontSize: '0.65rem',
-                                  fontWeight: 'bold',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Colar ou Carregar
-                              </div>
-                              <input 
-                                type="file" 
-                                id={`edit-archived-story-file-input-${post.id}`} 
-                                accept="image/*" 
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) => setEditImageUrl(ev.target?.result as string);
-                                    reader.readAsDataURL(file);
-                                  }
-                                }}
-                                style={{ display: 'none' }} 
-                              />
-                              </>
-                            )}
-                            <div></div>
-                            <div style={{
-                              background: 'rgba(0,0,0,0.6)',
-                              color: '#fff',
-                              padding: '5px 8px',
-                              borderRadius: '6px',
-                              fontSize: '0.55rem',
-                              textAlign: 'center'
-                            }}>
-                              {isEditing ? editStoryContent : (post.storyContent || "Nenhuma sugestão...")}
-                            </div>
-                            <div></div>
-                          </div>
-                        )}
+                    {/* Content Section: details only */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
+                      
+                      {/* Tab Switcher: Feed / Story */}
+                      <div style={{ display: 'flex', width: '100%', maxWidth: '240px', background: '#f1f5f9', padding: '3px', borderRadius: '8px', alignSelf: 'flex-start' }}>
+                        <button
+                          onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "feed" }))}
+                          style={{
+                            flex: 1,
+                            padding: '6px',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            background: currentSubTab === "feed" ? '#fff' : 'transparent',
+                            color: currentSubTab === "feed" ? 'var(--primary)' : '#64748b',
+                            boxShadow: currentSubTab === "feed" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          Feed Post
+                        </button>
+                        <button
+                          onClick={() => setCardSubTabs(prev => ({ ...prev, [post.id]: "story" }))}
+                          style={{
+                            flex: 1,
+                            padding: '6px',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            background: currentSubTab === "story" ? '#fff' : 'transparent',
+                            color: currentSubTab === "story" ? 'var(--primary)' : '#64748b',
+                            boxShadow: currentSubTab === "story" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          Story Post
+                        </button>
                       </div>
 
-                      {/* Column 2: Details */}
-                      <div className="md:col-span-7 flex flex-col gap-4">
+                      {/* Text details and edits */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
                         {currentSubTab === "feed" ? (
                           <div>
                             <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b' }}>LEGENDA DO FEED</label>
@@ -2676,13 +2278,109 @@ export default function MarketingPage() {
                 </h3>
                 <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', margin: '2px 0 0 0' }}>Consultor Virtual de Redes Sociais</p>
               </div>
-              <button 
-                onClick={() => setShowAIChat(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}
-              >
-                <X size={20} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    if (confirm("Tem certeza que deseja limpar todo o histórico do chat?")) {
+                      const defaultMessage = [{
+                        role: "assistant" as const,
+                        content: "Olá! Sou seu Assistente de Marketing de IA da Clínica Kinesis. \n\nPosso ajudar você a criar ideias para posts de redes sociais, refinar legendas, sugerir imagens, prompts e planejar estratégias para atrair mais pacientes. \n\nComo posso ajudar você hoje?"
+                      }];
+                      setChatMessages(defaultMessage);
+                      localStorage.setItem("kinesis_chat_messages", JSON.stringify(defaultMessage));
+                    }
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    fontSize: '0.7rem',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Limpar histórico de chat"
+                >
+                  <Trash2 size={14} />
+                  Limpar
+                </button>
+                <button
+                  onClick={() => setIsChatSettingsOpen(!isChatSettingsOpen)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    fontSize: '1.1rem',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Diretrizes da IA"
+                >
+                  ⚙️
+                </button>
+                <button 
+                  onClick={() => setShowAIChat(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
+
+            {isChatSettingsOpen && (
+              <div style={{
+                background: '#ffffff',
+                borderBottom: '1px solid #e2e8f0',
+                padding: '16px 20px',
+                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.03)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#db2777' }}>Diretrizes Personalizadas (Marketing)</span>
+                <textarea
+                  value={customRules}
+                  onChange={(e) => setCustomRules(e.target.value)}
+                  placeholder="Regras de estilo da IA de marketing, ex: 'Sempre use português do Brasil', 'Não use hashtags', 'Nunca cite preços'..."
+                  style={{
+                    width: '100%',
+                    height: '80px',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.75rem',
+                    outline: 'none',
+                    resize: 'vertical'
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => {
+                      localStorage.setItem("kinesis_custom_rules", customRules);
+                      toast.success("Diretrizes de marketing salvas!");
+                      setIsChatSettingsOpen(false);
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '0.75rem',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Chat Messages Panel */}
             <div style={{ flex: 1, padding: '20px', overflowY: 'auto', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '16px' }}>
