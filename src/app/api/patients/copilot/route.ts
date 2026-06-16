@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ReengagementService } from "@/gestao/services/reengagementService";
+import { normalizeName } from "@/lib/utils";
 
 // Helper function to calculate average age
 const calculateAvgAge = (list: any[]) => {
@@ -100,10 +101,17 @@ export async function POST(request: NextRequest) {
     });
 
     const uniquePatientNames = Array.from(new Set(sessions.map(s => s.patientName.trim().toLowerCase())));
-    const patientProfiles = uniquePatientNames.length > 0
+    const uniquePatientNamesVariants = Array.from(new Set(
+      uniquePatientNames.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
+
+    const patientProfiles = uniquePatientNamesVariants.length > 0
       ? await prisma.patient.findMany({
           where: {
-            OR: uniquePatientNames.map(name => ({
+            OR: uniquePatientNamesVariants.map(name => ({
               name: {
                 startsWith: name,
                 mode: 'insensitive' as const
@@ -113,10 +121,11 @@ export async function POST(request: NextRequest) {
         })
       : [];
 
-    const profileNamesLower = patientProfiles.map(p => p.name.trim().toLowerCase());
-    const missingProfilesCount = uniquePatientNames.filter(name => 
-      !profileNamesLower.some(pName => pName.startsWith(name))
-    ).length;
+    const profileNamesNorm = patientProfiles.map(p => normalizeName(p.name));
+    const missingProfilesCount = uniquePatientNames.filter(name => {
+      const normName = normalizeName(name);
+      return !profileNamesNorm.some(pName => pName.startsWith(normName));
+    }).length;
 
     // 2. Fetch diagnoses
     const patientIds = patientProfiles.map(p => p.id);

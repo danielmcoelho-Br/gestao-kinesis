@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeName } from "@/lib/utils";
+
 
 export async function GET(request: Request) {
   try {
@@ -34,12 +36,18 @@ export async function GET(request: Request) {
     });
 
     const uniquePatientNames = Array.from(new Set(sessions.map(s => s.patientName.trim().toLowerCase())));
+    const uniquePatientNamesVariants = Array.from(new Set(
+      uniquePatientNames.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
 
-    // Mapear profissionais por paciente
+    // Mapear profissionais por paciente (usando chave normalizada)
     const patientProfsMap = new Map<string, Array<{ id: string, name: string }>>();
     sessions.forEach(s => {
       if (!s.professional) return;
-      const key = s.patientName.trim().toLowerCase();
+      const key = normalizeName(s.patientName);
       const existing = patientProfsMap.get(key) || [];
       if (!existing.some(p => p.id === s.professional.id)) {
         existing.push({ id: s.professional.id, name: s.professional.name });
@@ -47,11 +55,11 @@ export async function GET(request: Request) {
       }
     });
 
-    // 2. Buscar perfis completos desses pacientes incluindo diagnósticos
-    const patientProfiles = uniquePatientNames.length > 0
+    // 2. Buscar perfis completos desses pacientes incluindo diagnósticos (usando variantes com/sem acento)
+    const patientProfiles = uniquePatientNamesVariants.length > 0
       ? await prisma.patient.findMany({
           where: {
-            OR: uniquePatientNames.map(name => ({
+            OR: uniquePatientNamesVariants.map(name => ({
               name: {
                 startsWith: name,
                 mode: 'insensitive' as const
@@ -65,17 +73,21 @@ export async function GET(request: Request) {
       : [];
 
     const formattedPatients = patientProfiles.map((p: any) => {
-      const pNameLower = p.name.trim().toLowerCase();
-      const mapKey = Array.from(patientProfsMap.keys()).find(k => pNameLower.startsWith(k));
+      const pNameNorm = normalizeName(p.name);
+      // Localizar chave normalizada correspondente no map
+      const mapKey = Array.from(patientProfsMap.keys()).find(k => pNameNorm.startsWith(k));
       return {
         ...p,
         professionals: mapKey ? (patientProfsMap.get(mapKey) || []) : []
       };
     });
 
-    // 3. Cruzar dados: Identificar quem foi atendido mas não tem perfil cadastrado
-    const profileNamesLower = patientProfiles.map(p => p.name.trim().toLowerCase());
-    const missingProfiles = uniquePatientNames.filter(name => !profileNamesLower.some(pName => pName.startsWith(name)));
+    // 3. Cruzar dados: Identificar quem foi atendido mas não tem perfil cadastrado (usando comparação normalizada)
+    const profileNamesNorm = patientProfiles.map(p => normalizeName(p.name));
+    const missingProfiles = uniquePatientNames.filter(name => {
+      const normName = normalizeName(name);
+      return !profileNamesNorm.some(pName => pName.startsWith(normName));
+    });
 
     // 4. Calcular Estatísticas Avançadas
     const femalePatients = patientProfiles.filter(p => p.gender?.toLowerCase().startsWith('f'));

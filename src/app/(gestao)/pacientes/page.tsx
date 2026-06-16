@@ -103,6 +103,7 @@ export default function PacientesPage() {
         percentage: Number(percentage.toFixed(1)),
         items: data.items.map(it => ({
           ...it,
+          segmentPercentage: data.total > 0 ? Number(((it.count / data.total) * 100).toFixed(1)) : 0,
           totalPercentage: totalAll > 0 ? Number(((it.count / totalAll) * 100).toFixed(1)) : 0
         })).sort((a, b) => b.count - a.count)
       };
@@ -135,11 +136,13 @@ export default function PacientesPage() {
         percentage: Number(percentage.toFixed(1)),
         items: data.items.map(it => ({
           ...it,
+          segmentCasesPercentage: data.totalCases > 0 ? Number(((it.casesCount / data.totalCases) * 100).toFixed(1)) : 0,
           totalCasesPercentage: totalCasesAll > 0 ? Number(((it.casesCount / totalCasesAll) * 100).toFixed(1)) : 0
         })).sort((a, b) => b.casesCount - a.casesCount)
       };
     }).sort((a, b) => b.totalCases - a.totalCases);
   };
+
 
   const fetchInactivePatients = async () => {
     setLoadingInactive(true);
@@ -874,7 +877,7 @@ export default function PacientesPage() {
                                 >
                                   <span>• {item.diagnosis}</span>
                                   <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                                    {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.totalPercentage}%)
+                                    {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.segmentPercentage}% no segmento / {item.totalPercentage}% no total)
                                   </span>
                                 </div>
                               ))}
@@ -887,7 +890,6 @@ export default function PacientesPage() {
                 )}
               </div>
 
-              {/* Frequência de Casos */}
               <div className="fade-in card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '350px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
                   <Users style={{ color: '#8b5cf6' }} size={22} />
@@ -953,7 +955,7 @@ export default function PacientesPage() {
                                 >
                                   <span>• {item.diagnosis}</span>
                                   <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                                    {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.totalPercentage}%)
+                                    {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.segmentPercentage}% no segmento / {item.totalPercentage}% no total)
                                   </span>
                                 </div>
                               ))}
@@ -966,7 +968,6 @@ export default function PacientesPage() {
                 )}
               </div>
 
-              {/* Média de Atendimentos por Diagnóstico */}
               <div className="fade-in card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '350px', gridColumn: 'span 2' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
                   <TrendingUp style={{ color: '#10b981' }} size={22} />
@@ -1033,7 +1034,7 @@ export default function PacientesPage() {
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <span>• {item.diagnosis}</span>
                                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                                      ({item.casesCount} {item.casesCount === 1 ? 'alta' : 'altas'} - {item.totalCasesPercentage}%)
+                                      ({item.casesCount} {item.casesCount === 1 ? 'alta' : 'altas'} - {item.segmentCasesPercentage}% no segmento / {item.totalCasesPercentage}% no total)
                                     </span>
                                   </div>
                                   <div style={{ paddingLeft: '8px' }}>
@@ -1054,7 +1055,6 @@ export default function PacientesPage() {
 
             </div>
 
-            {/* Altas Realizadas */}
             <div className="fade-in card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
                 <CheckCircle2 style={{ color: '#10b981' }} size={24} />

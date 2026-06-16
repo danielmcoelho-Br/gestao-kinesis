@@ -194,7 +194,10 @@ export default function DashboardPage() {
   const fetchAllPatients = async () => {
     const result = await getPatients("", 1000);
     if (result.success && result.data) {
-      setAllPatients(result.data);
+      const sorted = (result.data || []).sort((a: any, b: any) => 
+        a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+      );
+      setAllPatients(sorted);
     }
   };
 
@@ -433,7 +436,10 @@ export default function DashboardPage() {
     
     const result = await getPatients(query, 50, activeProfId, activeShowAltas);
     if (result.success) {
-      setPatients(result.data || []);
+      const sorted = (result.data || []).sort((a: any, b: any) => 
+        a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+      );
+      setPatients(sorted);
     }
     setLoading(false);
   };

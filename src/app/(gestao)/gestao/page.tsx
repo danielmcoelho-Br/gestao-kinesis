@@ -61,6 +61,7 @@ export default function Dashboard() {
         percentage: Number(percentage.toFixed(1)),
         items: data.items.map(it => ({
           ...it,
+          segmentPercentage: data.total > 0 ? Number(((it.count / data.total) * 100).toFixed(1)) : 0,
           totalPercentage: totalAll > 0 ? Number(((it.count / totalAll) * 100).toFixed(1)) : 0
         })).sort((a, b) => b.count - a.count)
       };
@@ -93,11 +94,13 @@ export default function Dashboard() {
         percentage: Number(percentage.toFixed(1)),
         items: data.items.map(it => ({
           ...it,
+          segmentCasesPercentage: data.totalCases > 0 ? Number(((it.casesCount / data.totalCases) * 100).toFixed(1)) : 0,
           totalCasesPercentage: totalCasesAll > 0 ? Number(((it.casesCount / totalCasesAll) * 100).toFixed(1)) : 0
         })).sort((a, b) => b.casesCount - a.casesCount)
       };
     }).sort((a, b) => b.totalCases - a.totalCases);
   };
+
 
   // Busca de dados otimizada
   const fetchStats = async () => {
@@ -398,7 +401,7 @@ export default function Dashboard() {
                             >
                               <span>• {item.diagnosis}</span>
                               <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                                {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.totalPercentage}%)
+                                {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.segmentPercentage}% no segmento / {item.totalPercentage}% no total)
                               </span>
                             </div>
                           ))}
@@ -477,7 +480,7 @@ export default function Dashboard() {
                             >
                               <span>• {item.diagnosis}</span>
                               <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                                {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.totalPercentage}%)
+                                {item.count} {item.count === 1 ? 'caso' : 'casos'} ({item.segmentPercentage}% no segmento / {item.totalPercentage}% no total)
                               </span>
                             </div>
                           ))}
@@ -557,7 +560,7 @@ export default function Dashboard() {
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <span>• {item.diagnosis}</span>
                                 <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                                  ({item.casesCount} {item.casesCount === 1 ? 'alta' : 'altas'} - {item.totalCasesPercentage}%)
+                                  ({item.casesCount} {item.casesCount === 1 ? 'alta' : 'altas'} - {item.segmentCasesPercentage}% no segmento / {item.totalCasesPercentage}% no total)
                                 </span>
                               </div>
                               <div style={{ paddingLeft: '8px' }}>

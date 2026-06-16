@@ -3,12 +3,15 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createPatientSchema, updatePatientSchema, addPatientDocumentSchema } from "@/lab/lib/schemas";
+import { normalizeName } from "@/lib/utils";
 
 const isValidUUID = (id: string) => {
   if (typeof id !== "string") return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || 
          /^[a-z0-9]{20,32}$/i.test(id);
 };
+
+
 
 export async function getPatients(
   query: string = "",
@@ -38,6 +41,12 @@ export async function getPatients(
     const uniquePatientNamesOfLastMonth = Array.from(new Set(
       sessionsLastMonth.map(s => s.patientName.trim().toLowerCase())
     ));
+    const uniquePatientNamesOfLastMonthVariants = Array.from(new Set(
+      uniquePatientNamesOfLastMonth.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
 
     const andConditions: any[] = [];
 
@@ -56,10 +65,16 @@ export async function getPatients(
         const patientNamesForProf = Array.from(new Set(
           sessionsLastMonth
             .filter(s => s.professionalId === professionalId)
-            .map(s => s.patientName.trim())
+            .map(s => s.patientName.trim().toLowerCase())
+        ));
+        const patientNamesForProfVariants = Array.from(new Set(
+          patientNamesForProf.flatMap(name => [
+            name,
+            name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          ])
         ));
         
-        const startsWithConditions = patientNamesForProf.map(name => ({
+        const startsWithConditions = patientNamesForProfVariants.map(name => ({
           name: {
             startsWith: name,
             mode: 'insensitive' as const
@@ -70,8 +85,8 @@ export async function getPatients(
           createdAt: { gte: oneMonthAgo }
         };
 
-        if (uniquePatientNamesOfLastMonth.length > 0) {
-          newPatientCondition.AND = uniquePatientNamesOfLastMonth.map(name => ({
+        if (uniquePatientNamesOfLastMonthVariants.length > 0) {
+          newPatientCondition.AND = uniquePatientNamesOfLastMonthVariants.map(name => ({
             name: {
               not: {
                 startsWith: name
@@ -87,7 +102,7 @@ export async function getPatients(
           ]
         });
       } else {
-        const startsWithConditions = uniquePatientNamesOfLastMonth.map(name => ({
+        const startsWithConditions = uniquePatientNamesOfLastMonthVariants.map(name => ({
           name: {
             startsWith: name,
             mode: 'insensitive' as const
@@ -151,13 +166,19 @@ export async function getPatients(
     
     // Obter sessões finalizadas (excluindo Pilates) APENAS para os pacientes retornados (com truncamento de 18 caracteres)
     const truncatedPatientNames = patients.map((p: any) => p.name.substring(0, 18).trim().toLowerCase());
+    const truncatedPatientNamesVariants = Array.from(new Set(
+      truncatedPatientNames.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
     
-    const patientSessions = truncatedPatientNames.length > 0 
+    const patientSessions = truncatedPatientNamesVariants.length > 0 
       ? await prisma.session.findMany({
           where: {
             status: { contains: "Finalizado", mode: 'insensitive' },
             patientName: {
-              in: truncatedPatientNames,
+              in: truncatedPatientNamesVariants,
               mode: 'insensitive'
             },
             NOT: {
@@ -176,18 +197,18 @@ export async function getPatients(
         })
       : [];
 
-    // Mapear profissionais pelo nome completo do paciente
+    // Mapear profissionais pelo nome completo do paciente (usando comparação normalizada)
     const patientProfsMap = new Map<string, Array<{ id: string, name: string }>>();
     patientSessions.forEach(s => {
       if (!s.professional) return;
-      const sessionNameLower = s.patientName.trim().toLowerCase();
+      const sessionNameNorm = normalizeName(s.patientName.substring(0, 18));
       
       const matchedPatient = patients.find(p => 
-        p.name.substring(0, 18).trim().toLowerCase() === sessionNameLower
+        normalizeName(p.name.substring(0, 18)) === sessionNameNorm
       );
       
       if (matchedPatient) {
-        const key = matchedPatient.name.trim().toLowerCase();
+        const key = normalizeName(matchedPatient.name);
         const existing = patientProfsMap.get(key) || [];
         if (!existing.some(p => p.id === s.professional.id)) {
           existing.push({ id: s.professional.id, name: s.professional.name });
@@ -196,14 +217,15 @@ export async function getPatients(
       }
     });
 
-    // Transform to include a flag and professionals
+    // Transform to include a flag and professionals (usando comparação normalizada)
     const formatted = patients.map((p: any) => ({
       ...p,
       hasOswestry: p.assessments.length > 0,
-      professionals: patientProfsMap.get(p.name.trim().toLowerCase()) || []
+      professionals: patientProfsMap.get(normalizeName(p.name)) || []
     }));
 
     return { success: true, data: formatted };
+
   } catch (error) {
     console.error("Error fetching patients:", error);
     return { success: false, error: "Falha ao buscar pacientes" };
@@ -534,7 +556,7 @@ export async function getGestaoPatientsPendingRegister() {
     const nameToPhoneMap = new Map<string, string>();
     billingSessions.forEach(bs => {
       if (bs.phone) {
-        nameToPhoneMap.set(bs.patientName.trim().toLowerCase(), bs.phone);
+        nameToPhoneMap.set(normalizeName(bs.patientName), bs.phone);
       }
     });
 
@@ -546,13 +568,13 @@ export async function getGestaoPatientsPendingRegister() {
     const existingPatients = await prisma.patient.findMany({
       select: { name: true }
     });
-    const existingNamesLower = new Set(existingPatients.map(p => p.name.trim().toLowerCase()));
+    const existingNamesLower = new Set(existingPatients.map(p => normalizeName(p.name)));
 
     const pending = allGestaoNames
-      .filter(name => !existingNamesLower.has(name.trim().toLowerCase()))
+      .filter(name => !existingNamesLower.has(normalizeName(name)))
       .map(name => ({
         name,
-        phone: nameToPhoneMap.get(name.trim().toLowerCase()) || null
+        phone: nameToPhoneMap.get(normalizeName(name)) || null
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1082,12 +1104,18 @@ export async function getDischargedDiagnoses(
     const uniqueTruncatedNames = Array.from(new Set(
       diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
     ));
+    const nameVariants = Array.from(new Set(
+      uniqueTruncatedNames.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
 
-    const sessions = uniqueTruncatedNames.length > 0
+    const sessions = nameVariants.length > 0
       ? await prisma.session.findMany({
           where: {
             patientName: {
-              in: uniqueTruncatedNames,
+              in: nameVariants,
               mode: 'insensitive'
             },
             status: { contains: "Finalizado", mode: 'insensitive' },
@@ -1111,7 +1139,7 @@ export async function getDischargedDiagnoses(
 
     const sessionsMap = new Map<string, typeof sessions>();
     for (const s of sessions) {
-      const key = s.patientName.trim().toLowerCase();
+      const key = normalizeName(s.patientName.substring(0, 18));
       if (!sessionsMap.has(key)) {
         sessionsMap.set(key, []);
       }
@@ -1122,7 +1150,7 @@ export async function getDischargedDiagnoses(
 
     for (const diag of diagnoses) {
       const patientName = diag.patient.name;
-      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+      const truncatedName = normalizeName(patientName.substring(0, 18));
       const patientSessions = sessionsMap.get(truncatedName) || [];
 
       // Filter sessions within the diagnosis period
@@ -1205,15 +1233,21 @@ export async function getProfessionalDiagnosticsFrequency(
     const uniqueTruncatedNames = Array.from(new Set(
       diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
     ));
+    const nameVariants = Array.from(new Set(
+      uniqueTruncatedNames.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
 
     const professionalSessionsSet = new Set<string>();
 
-    if (professionalId !== "all" && uniqueTruncatedNames.length > 0) {
+    if (professionalId !== "all" && nameVariants.length > 0) {
       const sessions = await prisma.session.findMany({
         where: {
           professionalId: professionalId,
           patientName: {
-            in: uniqueTruncatedNames,
+            in: nameVariants,
             mode: 'insensitive'
           }
         },
@@ -1222,7 +1256,7 @@ export async function getProfessionalDiagnosticsFrequency(
         }
       });
       for (const s of sessions) {
-        professionalSessionsSet.add(s.patientName.trim().toLowerCase());
+        professionalSessionsSet.add(normalizeName(s.patientName.substring(0, 18)));
       }
     }
 
@@ -1230,7 +1264,7 @@ export async function getProfessionalDiagnosticsFrequency(
 
     for (const diag of diagnoses) {
       const patientName = diag.patient.name;
-      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+      const truncatedName = normalizeName(patientName.substring(0, 18));
 
       if (professionalId !== "all") {
         if (!professionalSessionsSet.has(truncatedName)) {
@@ -1300,13 +1334,19 @@ export async function getProfessionalCasesFrequency(
     const uniqueTruncatedNames = Array.from(new Set(
       diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
     ));
+    const nameVariants = Array.from(new Set(
+      uniqueTruncatedNames.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
 
     const patientWithSessionsSet = new Set<string>();
 
-    if (uniqueTruncatedNames.length > 0) {
+    if (nameVariants.length > 0) {
       const sessionsWhereClause: any = {
         patientName: {
-          in: uniqueTruncatedNames,
+          in: nameVariants,
           mode: 'insensitive'
         },
         status: { contains: "Finalizado", mode: 'insensitive' },
@@ -1331,7 +1371,7 @@ export async function getProfessionalCasesFrequency(
       });
 
       for (const s of sessions) {
-        patientWithSessionsSet.add(s.patientName.trim().toLowerCase());
+        patientWithSessionsSet.add(normalizeName(s.patientName.substring(0, 18)));
       }
     }
 
@@ -1339,7 +1379,7 @@ export async function getProfessionalCasesFrequency(
 
     for (const diag of diagnoses) {
       const patientName = diag.patient.name;
-      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+      const truncatedName = normalizeName(patientName.substring(0, 18));
 
       if (!patientWithSessionsSet.has(truncatedName)) {
         continue;
@@ -1406,12 +1446,18 @@ export async function getAverageSessionsPerDiagnosis(
     const uniqueTruncatedNames = Array.from(new Set(
       diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
     ));
+    const nameVariants = Array.from(new Set(
+      uniqueTruncatedNames.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
 
-    const sessions = uniqueTruncatedNames.length > 0
+    const sessions = nameVariants.length > 0
       ? await prisma.session.findMany({
           where: {
             patientName: {
-              in: uniqueTruncatedNames,
+              in: nameVariants,
               mode: 'insensitive'
             },
             status: { contains: "Finalizado", mode: 'insensitive' },
@@ -1429,7 +1475,7 @@ export async function getAverageSessionsPerDiagnosis(
 
     const sessionsMap = new Map<string, typeof sessions>();
     for (const s of sessions) {
-      const key = s.patientName.trim().toLowerCase();
+      const key = normalizeName(s.patientName.substring(0, 18));
       if (!sessionsMap.has(key)) {
         sessionsMap.set(key, []);
       }
@@ -1440,7 +1486,7 @@ export async function getAverageSessionsPerDiagnosis(
 
     for (const diag of diagnoses) {
       const patientName = diag.patient.name;
-      const truncatedName = patientName.substring(0, 18).trim().toLowerCase();
+      const truncatedName = normalizeName(patientName.substring(0, 18));
       const patientSessions = sessionsMap.get(truncatedName) || [];
 
       // Filtrar sessões no período do diagnóstico (início até a alta)
