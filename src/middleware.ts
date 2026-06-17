@@ -53,7 +53,8 @@ export async function middleware(request: NextRequest) {
   if (
     pathname === "/login" ||
     pathname.startsWith("/api/auth") ||
-    pathname === "/api/financeiro/seufisio-sync"
+    pathname === "/api/financeiro/seufisio-sync" ||
+    pathname.startsWith("/api/diag")
   ) {
     return NextResponse.next();
   }
