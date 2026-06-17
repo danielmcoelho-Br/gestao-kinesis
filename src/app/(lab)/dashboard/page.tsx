@@ -96,7 +96,9 @@ export default function DashboardPage() {
 
   // Filtros de Fisioterapeuta e Alta
   const [professionalsList, setProfessionalsList] = useState<any[]>([]);
+  const [hasLoadedProfs, setHasLoadedProfs] = useState(false);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>("all");
+  const [isInitialized, setIsInitialized] = useState(false);
   const [showDischarged, setShowDischarged] = useState<boolean>(false);
   
   // Gestão de Diagnósticos States
@@ -181,6 +183,17 @@ export default function DashboardPage() {
   };
 
   const [user, setUser] = useState<any>(null);
+
+  // Carregar dados do localStorage no mount (evita incompatibilidade de hidratação)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedUser = localStorage.getItem("user");
+      if (savedUser) setUser(JSON.parse(savedUser));
+      
+      const savedRecent = localStorage.getItem("kinesis_recent_patients");
+      if (savedRecent) setRecentPatients(JSON.parse(savedRecent));
+    }
+  }, []);
 
   const fetchGroups = async () => {
     setLoadingGroups(true);
@@ -387,48 +400,52 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) setUser(JSON.parse(savedUser));
-    
-    const savedRecent = localStorage.getItem("kinesis_recent_patients");
-    if (savedRecent) setRecentPatients(JSON.parse(savedRecent));
-
     // Carregar profissionais
     fetch("/api/profissionais")
       .then(res => res.json())
-      .then(data => setProfessionalsList(Array.isArray(data) ? data : []))
-      .catch(() => setProfessionalsList([]));
+      .then(data => {
+        setProfessionalsList(Array.isArray(data) ? data : []);
+        setHasLoadedProfs(true);
+      })
+      .catch(() => {
+        setProfessionalsList([]);
+        setHasLoadedProfs(true);
+      });
 
     fetchGroups();
     fetchSegments();
   }, []);
 
-  // Definir filtro padrão caso o usuário logado seja Fisioterapeuta
+  // Definir filtro padrão caso o usuário logado seja Fisioterapeuta e marcar como inicializado
   useEffect(() => {
-    if (user && professionalsList.length > 0) {
-      const matched = professionalsList.find(p => p.name.toLowerCase() === user.name.toLowerCase());
-      if (matched) {
-        setSelectedProfessionalId(matched.id);
-        fetchPatients(search, matched.id, showDischarged);
-      } else {
-        fetchPatients(search, selectedProfessionalId, showDischarged);
+    if (hasLoadedProfs) {
+      let initialProfId = "all";
+      if (user) {
+        const matched = professionalsList.find(p => p.name.toLowerCase() === user.name.toLowerCase());
+        if (matched) {
+          initialProfId = matched.id;
+        }
       }
-    } else {
-      fetchPatients(search, selectedProfessionalId, showDischarged);
+      setSelectedProfessionalId(initialProfId);
+      setIsInitialized(true);
     }
-  }, [user, professionalsList]);
+  }, [user, professionalsList, hasLoadedProfs]);
 
-  // Re-buscar quando os filtros mudarem
+  // Re-buscar quando filtros ou busca mudarem, sem double load e com debounce para busca
   useEffect(() => {
-    fetchPatients(search, selectedProfessionalId, showDischarged);
-  }, [selectedProfessionalId, showDischarged]);
+    if (!isInitialized) return;
+    
+    if (!search) {
+      fetchPatients(search, selectedProfessionalId, showDischarged);
+      return;
+    }
 
-  useEffect(() => {
     const timer = setTimeout(() => {
       fetchPatients(search, selectedProfessionalId, showDischarged);
     }, 300);
+    
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, selectedProfessionalId, showDischarged, isInitialized]);
 
   const fetchPatients = async (query: string = "", profId?: string, showAltas?: boolean) => {
     const activeProfId = profId !== undefined ? profId : selectedProfessionalId;

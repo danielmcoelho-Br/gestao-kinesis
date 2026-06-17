@@ -37,6 +37,7 @@ model Session {
 
   @@index([professionalId])
   @@index([date])
+  @@index([patientName])
 }
 
 model Transaction {

@@ -52,14 +52,13 @@ export async function getPatients(
 
     // 2. Filtro por Fisioterapeuta e Restrição Temporal
     if (query) {
-      // Se houver busca por texto (busca de nomes específicos), pesquisa de forma global em todo o banco com flexibilidade de acentuação
-      const allPatients = await prisma.patient.findMany({
-        select: { id: true, name: true }
-      });
-      const normalizedQuery = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      const matchedPatientIds = allPatients
-        .filter(p => p.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(normalizedQuery))
-        .map(p => p.id);
+      // Se houver busca por texto (busca de nomes específicos), pesquisa de forma global em todo o banco com flexibilidade de acentuação usando SQL unaccent
+      const searchPattern = `%${query}%`;
+      const matchedPatients = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Patient" 
+        WHERE unaccent(name) ILIKE unaccent(${searchPattern})
+      `;
+      const matchedPatientIds = matchedPatients.map(p => p.id);
 
       andConditions.push({
         id: { in: matchedPatientIds }
@@ -170,7 +169,14 @@ export async function getPatients(
     });
     
     // Obter sessões finalizadas (excluindo Pilates) APENAS para os pacientes retornados (com truncamento de 18 caracteres)
-    const truncatedPatientNames = patients.map((p: any) => p.name.substring(0, 18).trim().toLowerCase());
+    const truncatedPatientNames = patients.flatMap((p: any) => {
+      const name = p.name.substring(0, 18).trim();
+      return [
+        name,
+        name.toLowerCase(),
+        name.toUpperCase()
+      ];
+    });
     const truncatedPatientNamesVariants = Array.from(new Set(
       truncatedPatientNames.flatMap(name => [
         name,
@@ -181,13 +187,12 @@ export async function getPatients(
     const patientSessions = truncatedPatientNamesVariants.length > 0 
       ? await prisma.session.findMany({
           where: {
-            status: { contains: "Finalizado", mode: 'insensitive' },
+            status: { startsWith: "Finalizado" },
             patientName: {
-              in: truncatedPatientNamesVariants,
-              mode: 'insensitive'
+              in: truncatedPatientNamesVariants
             },
             NOT: {
-              serviceType: { contains: "Pilates", mode: 'insensitive' }
+              serviceType: { contains: "Pilates" }
             }
           },
           select: {
@@ -1137,7 +1142,14 @@ export async function getDischargedDiagnoses(
     });
 
     const uniqueTruncatedNames = Array.from(new Set(
-      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+      diagnoses.flatMap(d => {
+        const name = d.patient.name.substring(0, 18).trim();
+        return [
+          name,
+          name.toLowerCase(),
+          name.toUpperCase()
+        ];
+      })
     ));
     const nameVariants = Array.from(new Set(
       uniqueTruncatedNames.flatMap(name => [
@@ -1150,12 +1162,11 @@ export async function getDischargedDiagnoses(
       ? await prisma.session.findMany({
           where: {
             patientName: {
-              in: nameVariants,
-              mode: 'insensitive'
+              in: nameVariants
             },
-            status: { contains: "Finalizado", mode: 'insensitive' },
+            status: { startsWith: "Finalizado" },
             NOT: {
-              serviceType: { contains: "Pilates", mode: 'insensitive' }
+              serviceType: { contains: "Pilates" }
             }
           },
           select: {
@@ -1479,7 +1490,14 @@ export async function getAverageSessionsPerDiagnosis(
     });
 
     const uniqueTruncatedNames = Array.from(new Set(
-      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+      diagnoses.flatMap(d => {
+        const name = d.patient.name.substring(0, 18).trim();
+        return [
+          name,
+          name.toLowerCase(),
+          name.toUpperCase()
+        ];
+      })
     ));
     const nameVariants = Array.from(new Set(
       uniqueTruncatedNames.flatMap(name => [
@@ -1492,12 +1510,11 @@ export async function getAverageSessionsPerDiagnosis(
       ? await prisma.session.findMany({
           where: {
             patientName: {
-              in: nameVariants,
-              mode: 'insensitive'
+              in: nameVariants
             },
-            status: { contains: "Finalizado", mode: 'insensitive' },
+            status: { startsWith: "Finalizado" },
             NOT: {
-              serviceType: { contains: "Pilates", mode: 'insensitive' }
+              serviceType: { contains: "Pilates" }
             }
           },
           select: {
