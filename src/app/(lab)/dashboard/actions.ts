@@ -52,12 +52,17 @@ export async function getPatients(
 
     // 2. Filtro por Fisioterapeuta e Restrição Temporal
     if (query) {
-      // Se houver busca por texto (busca de nomes específicos), pesquisa de forma global em todo o banco
+      // Se houver busca por texto (busca de nomes específicos), pesquisa de forma global em todo o banco com flexibilidade de acentuação
+      const allPatients = await prisma.patient.findMany({
+        select: { id: true, name: true }
+      });
+      const normalizedQuery = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const matchedPatientIds = allPatients
+        .filter(p => p.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(normalizedQuery))
+        .map(p => p.id);
+
       andConditions.push({
-        name: {
-          contains: query,
-          mode: 'insensitive'
-        }
+        id: { in: matchedPatientIds }
       });
     } else {
       // Sem busca por texto: restringe aos últimos 30 dias (atendidos pelo profissional ou novos sem atendimento)
@@ -120,8 +125,8 @@ export async function getPatients(
       }
     }
 
-    // 3. Filtro por Alta (Em Atendimento)
-    if (!showDischarged) {
+    // 3. Filtro por Alta (Em Atendimento) - Se houver query de busca de texto, não aplica o filtro de alta para busca global
+    if (!showDischarged && !query) {
       andConditions.push({
         OR: [
           {
