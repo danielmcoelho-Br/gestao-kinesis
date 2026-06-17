@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
-import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3, Download, X, Send, Sparkles, Loader2, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3, Download, X, XCircle, Send, Sparkles, Loader2, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
 import { 
   MetricCard, 
   StatusBox, 
@@ -25,6 +25,8 @@ export default function Dashboard() {
   // Estados para Altas, Frequência de Diagnósticos, Casos e Média de Atendimentos
   const [dischargedDiagnoses, setDischargedDiagnoses] = useState<any[]>([]);
   const [loadingDischarged, setLoadingDischarged] = useState<boolean>(true);
+  const [dropoutDiagnoses, setDropoutDiagnoses] = useState<any[]>([]);
+  const [loadingDropouts, setLoadingDropouts] = useState<boolean>(true);
   const [diagnosticsFrequency, setDiagnosticsFrequency] = useState<any[]>([]);
   const [loadingFrequency, setLoadingFrequency] = useState<boolean>(true);
   const [casesFrequency, setCasesFrequency] = useState<any[]>([]);
@@ -127,12 +129,13 @@ export default function Dashboard() {
 
   const fetchDischargedAndFrequency = async (profId: string) => {
     setLoadingDischarged(true);
+    setLoadingDropouts(true);
     setLoadingFrequency(true);
     setLoadingCases(true);
     setLoadingAvgSessions(true);
     
     try {
-      const resultDischarged = await getDischargedDiagnoses(profId, startMonth, startYear, endMonth, endYear);
+      const resultDischarged = await getDischargedDiagnoses(profId, startMonth, startYear, endMonth, endYear, "ALTA");
       if (resultDischarged.success) {
         setDischargedDiagnoses(resultDischarged.data || []);
       }
@@ -140,6 +143,17 @@ export default function Dashboard() {
       console.error("Erro ao buscar altas na gestão:", err);
     } finally {
       setLoadingDischarged(false);
+    }
+
+    try {
+      const resultDropouts = await getDischargedDiagnoses(profId, startMonth, startYear, endMonth, endYear, "DESISTENCIA");
+      if (resultDropouts.success) {
+        setDropoutDiagnoses(resultDropouts.data || []);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar desistências na gestão:", err);
+    } finally {
+      setLoadingDropouts(false);
     }
 
     try {
@@ -626,6 +640,62 @@ export default function Dashboard() {
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <span style={{ background: '#eff6ff', color: '#1e40af', fontWeight: '800', borderRadius: '8px', padding: '2px 8px', fontSize: '0.75rem', border: '1px solid #bfdbfe' }}>
+                          {diag.sessionCount} {diag.sessionCount === 1 ? 'sessão' : 'sessões'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Desistências Realizadas */}
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+            <XCircle style={{ color: '#ef4444' }} size={24} />
+            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>Desistências Realizadas (Mes)</h3>
+          </div>
+          
+          {loadingDropouts ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              <Loader2 className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto' }} size={24} />
+              <p style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>Carregando histórico de desistências...</p>
+            </div>
+          ) : dropoutDiagnoses.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
+              Nenhuma desistência registrada para este profissional no período selecionado.
+            </p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>Paciente</th>
+                    <th>Segmento</th>
+                    <th>Diagnóstico</th>
+                    <th>Data de Início</th>
+                    <th>Data de Desistência</th>
+                    <th style={{ textAlign: 'center' }}>Sessões</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dropoutDiagnoses.map((diag) => (
+                    <tr key={diag.id}>
+                      <td style={{ fontWeight: '600' }}>{diag.patientName}</td>
+                      <td>
+                        <span style={{ padding: '2px 8px', borderRadius: '8px', background: 'rgba(0,0,0,0.04)', color: 'var(--text-primary)', fontWeight: '600', fontSize: '0.75rem' }}>
+                          {diag.segment}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: '600' }}>{diag.diagnosis}</td>
+                      <td>{new Date(diag.startDate).toLocaleDateString('pt-BR')}</td>
+                      <td style={{ fontWeight: '600' }}>
+                        {diag.dischargeDate ? new Date(diag.dischargeDate).toLocaleDateString('pt-BR') : 'N/A'}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{ background: '#fef2f2', color: '#991b1b', fontWeight: '800', borderRadius: '8px', padding: '2px 8px', fontSize: '0.75rem', border: '1px solid #fca5a5' }}>
                           {diag.sessionCount} {diag.sessionCount === 1 ? 'sessão' : 'sessões'}
                         </span>
                       </td>

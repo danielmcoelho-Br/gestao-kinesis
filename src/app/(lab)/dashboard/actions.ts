@@ -1070,11 +1070,12 @@ export async function getDischargedDiagnoses(
   startMonth?: number,
   startYear?: number,
   endMonth?: number,
-  endYear?: number
+  endYear?: number,
+  status: string = "ALTA"
 ) {
   try {
     const whereCondition: any = {
-      status: "ALTA",
+      status: status,
     };
 
     if (startMonth !== undefined && startYear !== undefined && endMonth !== undefined && endYear !== undefined) {

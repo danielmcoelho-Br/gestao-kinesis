@@ -24,6 +24,7 @@ import {
   FileText,
   Video,
   X,
+  XCircle,
   CalendarRange,
   Clock,
   Sparkles,
@@ -90,6 +91,7 @@ export default function PatientHistoryPage() {
   // Discharge State
   const [diagToDischarge, setDiagToDischarge] = useState<any>(null);
   const [dischargeDate, setDischargeDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [isDropout, setIsDropout] = useState(false);
 
   // Delete State
   const [diagToDelete, setDiagToDelete] = useState<any>(null);
@@ -243,17 +245,19 @@ export default function PatientHistoryPage() {
     if (!diagToDischarge) return;
 
     try {
-      const res = await updatePatientDiagnosisStatus(diagToDischarge.id, "ALTA", new Date(dischargeDate));
+      const status = isDropout ? "DESISTENCIA" : "ALTA";
+      const res = await updatePatientDiagnosisStatus(diagToDischarge.id, status, new Date(dischargeDate));
       if (res.success) {
-        toast.success("Alta registrada com sucesso!");
+        toast.success(isDropout ? "Desistência registrada com sucesso!" : "Alta registrada com sucesso!");
         setDiagToDischarge(null);
         setDischargeDate(new Date().toISOString().split('T')[0]);
+        setIsDropout(false);
         fetchDiagnoses();
       } else {
-        toast.error(res.error || "Erro ao registrar alta.");
+        toast.error(res.error || (isDropout ? "Erro ao registrar desistência." : "Erro ao registrar alta."));
       }
     } catch (err: any) {
-      console.error("Erro ao registrar alta:", err);
+      console.error("Erro ao registrar status de diagnóstico:", err);
       toast.error("Sessão expirada ou erro de rede. Por favor, recarregue a página.");
     }
   };
@@ -938,12 +942,24 @@ export default function PatientHistoryPage() {
                               required
                             />
                           </div>
+                          <div className="form-group" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <input 
+                              type="checkbox" 
+                              id="isDropoutCheckbox"
+                              checked={isDropout}
+                              onChange={(e) => setIsDropout(e.target.checked)}
+                              style={{ width: 'auto', margin: 0, cursor: 'pointer' }}
+                            />
+                            <label htmlFor="isDropoutCheckbox" style={{ margin: 0, cursor: 'pointer', fontWeight: 500, fontSize: '0.9rem' }}>
+                              Desistência de Tratamento
+                            </label>
+                          </div>
                           <div className="form-actions">
-                            <button type="button" className="btn-cancel" onClick={() => setDiagToDischarge(null)}>
+                            <button type="button" className="btn-cancel" onClick={() => { setDiagToDischarge(null); setIsDropout(false); }}>
                               Cancelar
                             </button>
-                            <button type="submit" className="btn-submit discharge-confirm-btn">
-                              Confirmar Alta
+                            <button type="submit" className={`btn-submit discharge-confirm-btn ${isDropout ? 'dropout-submit' : ''}`} style={isDropout ? { backgroundColor: '#ef4444' } : {}}>
+                              {isDropout ? 'Confirmar Desistência' : 'Confirmar Alta'}
                             </button>
                           </div>
                         </form>
@@ -1006,7 +1022,7 @@ export default function PatientHistoryPage() {
                         )}
 
                         {/* Discharged Diagnoses (History) */}
-                        {diagnoses.filter(d => d.status === "ALTA").length > 0 && (
+                        {diagnoses.filter(d => d.status === "ALTA" || d.status === "DESISTENCIA").length > 0 && (
                           <div className="history-diagnoses-section">
                             <button 
                               type="button"
@@ -1014,7 +1030,7 @@ export default function PatientHistoryPage() {
                               onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
                             >
                               <Archive size={16} />
-                              <span>Histórico de Altas ({diagnoses.filter(d => d.status === "ALTA").length})</span>
+                              <span>Histórico de Altas/Desistências ({diagnoses.filter(d => d.status === "ALTA" || d.status === "DESISTENCIA").length})</span>
                               {isHistoryExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
 
@@ -1025,31 +1041,50 @@ export default function PatientHistoryPage() {
                                 className="history-list"
                               >
                                 <div className="diagnoses-grid">
-                                  {diagnoses.filter(d => d.status === "ALTA").map(diag => (
-                                    <div key={diag.id} className="diagnosis-card discharged-card">
-                                      <div className="diag-card-header">
-                                        <span className="segment-badge discharged-badge">{diag.segment}</span>
-                                        <button 
-                                          className="action-btn-delete muted-delete" 
-                                          title="Excluir"
-                                          onClick={() => setDiagToDelete(diag)}
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
+                                  {diagnoses.filter(d => d.status === "ALTA" || d.status === "DESISTENCIA").map(diag => {
+                                    const isDropoutDiag = diag.status === "DESISTENCIA";
+                                    return (
+                                      <div key={diag.id} className={`diagnosis-card discharged-card ${isDropoutDiag ? 'dropout-card' : ''}`}>
+                                        <div className="diag-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            <span className="segment-badge discharged-badge">{diag.segment}</span>
+                                            {isDropoutDiag && (
+                                              <span className="dropout-badge" style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '0.125rem 0.375rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 600 }}>
+                                                Desistência
+                                              </span>
+                                            )}
+                                          </div>
+                                          <button 
+                                            className="action-btn-delete muted-delete" 
+                                            title="Excluir"
+                                            onClick={() => setDiagToDelete(diag)}
+                                          >
+                                            <Trash2 size={16} />
+                                          </button>
+                                        </div>
+                                        <h4 className="diag-name text-muted">{diag.diagnosis}</h4>
+                                        <div className="diag-dates-group">
+                                          <p className="diag-date text-muted">
+                                            <Calendar size={14} />
+                                            De: {new Date(diag.start_date).toLocaleDateString('pt-BR')}
+                                          </p>
+                                          <p className="diag-date text-muted">
+                                            {isDropoutDiag ? (
+                                              <>
+                                                <XCircle size={14} style={{ color: '#ef4444' }} />
+                                                Desistência: {diag.discharge_date ? new Date(diag.discharge_date).toLocaleDateString('pt-BR') : 'N/A'}
+                                              </>
+                                            ) : (
+                                              <>
+                                                <CheckCircle2 size={14} style={{ color: '#10B981' }} />
+                                                Alta: {diag.discharge_date ? new Date(diag.discharge_date).toLocaleDateString('pt-BR') : 'N/A'}
+                                              </>
+                                            )}
+                                          </p>
+                                        </div>
                                       </div>
-                                      <h4 className="diag-name text-muted">{diag.diagnosis}</h4>
-                                      <div className="diag-dates-group">
-                                        <p className="diag-date text-muted">
-                                          <Calendar size={14} />
-                                          De: {new Date(diag.start_date).toLocaleDateString('pt-BR')}
-                                        </p>
-                                        <p className="diag-date text-muted">
-                                          <CheckCircle2 size={14} style={{ color: '#10B981' }} />
-                                          Alta: {diag.discharge_date ? new Date(diag.discharge_date).toLocaleDateString('pt-BR') : 'N/A'}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               </motion.div>
                             )}
