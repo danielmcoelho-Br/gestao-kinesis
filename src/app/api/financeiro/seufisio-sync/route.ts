@@ -193,6 +193,32 @@ export async function POST(req: NextRequest) {
       await prisma.session.createMany({
         data: sessionsToCreate
       });
+
+      // 6.5. Garantir que todos os pacientes da sincronização existam na tabela de Pacientes (Patient)
+      const uniquePatientNames = Array.from(new Set(
+        sessionsToCreate.map(s => s.patientName)
+      ));
+      
+      if (uniquePatientNames.length > 0) {
+        const existingPatients = await prisma.patient.findMany({
+          where: {
+            name: { in: uniquePatientNames }
+          },
+          select: { name: true }
+        });
+        const existingNames = new Set(existingPatients.map(p => p.name));
+        const namesToCreate = uniquePatientNames.filter(name => !existingNames.has(name));
+        
+        if (namesToCreate.length > 0) {
+          await prisma.patient.createMany({
+            data: namesToCreate.map(name => ({
+              name: name
+            })),
+            skipDuplicates: true
+          });
+          console.log(`Sync API: created ${namesToCreate.length} missing patients in Patient table.`);
+        }
+      }
     }
 
     // 7. Write to ImportLog
