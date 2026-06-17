@@ -86,7 +86,10 @@ export async function getPatients(
         }));
 
         const newPatientCondition: any = {
-          createdAt: { gte: oneMonthAgo }
+          OR: [
+            { createdAt: { gte: oneMonthAgo } },
+            { diagnoses: { some: { status: "ATIVO" } } }
+          ]
         };
 
         if (uniquePatientNamesOfLastMonthVariants.length > 0) {
@@ -118,6 +121,13 @@ export async function getPatients(
             ...startsWithConditions,
             {
               createdAt: { gte: oneMonthAgo }
+            },
+            {
+              diagnoses: {
+                some: {
+                  status: "ATIVO"
+                }
+              }
             }
           ]
         });
