@@ -53,7 +53,8 @@ export async function middleware(request: NextRequest) {
   if (
     pathname === "/login" ||
     pathname.startsWith("/api/auth") ||
-    pathname === "/api/financeiro/seufisio-sync"
+    pathname === "/api/financeiro/seufisio-sync" ||
+    pathname.startsWith("/api/diag")
   ) {
     return NextResponse.next();
   }
@@ -118,7 +119,7 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith("/api/stats") ||
       pathname.startsWith("/api/patients/stats") ||
       pathname.startsWith("/api/admin/") ||
-      pathname.startsWith("/api/profissionais") ||
+      (pathname.startsWith("/api/profissionais") && request.method !== "GET") ||
       pathname.startsWith("/api/financeiro") ||
       (role === "FISIOTERAPEUTA" && (
         pathname.startsWith("/api/cobrancas") ||
