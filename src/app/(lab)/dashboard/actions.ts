@@ -1057,6 +1057,35 @@ export async function updatePatientDiagnosisStatus(id: string, status: string, d
   }
 }
 
+export async function updatePatientDiagnosis(
+  id: string,
+  data: {
+    segment: string;
+    diagnosis: string;
+    start_date: Date;
+    status: string;
+    discharge_date: Date | null;
+  }
+) {
+  try {
+    const updated = await prisma.patientDiagnosis.update({
+      where: { id },
+      data: {
+        segment: data.segment,
+        diagnosis: data.diagnosis,
+        start_date: new Date(data.start_date),
+        status: data.status,
+        discharge_date: data.discharge_date ? new Date(data.discharge_date) : null
+      }
+    });
+    revalidatePath(`/dashboard/patient/${updated.patient_id}`);
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("Error updating patient diagnosis:", error);
+    return { success: false, error: `Falha ao salvar alterações: ${error.message || "Erro desconhecido"}` };
+  }
+}
+
 export async function deletePatientDiagnosis(id: string) {
   try {
     const deleted = await prisma.patientDiagnosis.delete({

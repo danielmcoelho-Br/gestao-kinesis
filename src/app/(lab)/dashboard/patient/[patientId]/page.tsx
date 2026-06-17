@@ -13,6 +13,7 @@ import {
   History,
   TrendingUp,
   Trash2,
+  Pencil,
   AlertTriangle,
   ExternalLink,
   MessageCircle,
@@ -47,6 +48,7 @@ import {
   getPatientDiagnoses,
   addPatientDiagnosis,
   updatePatientDiagnosisStatus,
+  updatePatientDiagnosis,
   deletePatientDiagnosis,
   getClinicalSegmentsAndSuggestions
 } from "../../actions";
@@ -92,6 +94,16 @@ export default function PatientHistoryPage() {
   const [diagToDischarge, setDiagToDischarge] = useState<any>(null);
   const [dischargeDate, setDischargeDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isDropout, setIsDropout] = useState(false);
+
+  // Edit Diagnosis State
+  const [diagToEdit, setDiagToEdit] = useState<any>(null);
+  const [editSegment, setEditSegment] = useState("");
+  const [editDiagnosis, setEditDiagnosis] = useState("");
+  const [customEditSegment, setCustomEditSegment] = useState("");
+  const [customEditDiagnosis, setCustomEditDiagnosis] = useState("");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editStatus, setEditStatus] = useState("ATIVO");
+  const [editDischargeDate, setEditDischargeDate] = useState("");
 
   // Delete State
   const [diagToDelete, setDiagToDelete] = useState<any>(null);
@@ -259,6 +271,67 @@ export default function PatientHistoryPage() {
     } catch (err: any) {
       console.error("Erro ao registrar status de diagnóstico:", err);
       toast.error("Sessão expirada ou erro de rede. Por favor, recarregue a página.");
+    }
+  };
+
+  const handleEditClick = (diag: any) => {
+    setDiagToEdit(diag);
+    
+    // Check if the segment exists in our segments list
+    const segmentList = getSegmentsList();
+    if (segmentList.includes(diag.segment)) {
+      setEditSegment(diag.segment);
+      setCustomEditSegment("");
+    } else {
+      setEditSegment("Outros");
+      setCustomEditSegment(diag.segment);
+    }
+    
+    // Check if the diagnosis exists in the segment suggestions
+    const diagList = getDiagnosesForSegment(diag.segment);
+    if (diagList.includes(diag.diagnosis)) {
+      setEditDiagnosis(diag.diagnosis);
+      setCustomEditDiagnosis("");
+    } else {
+      setEditDiagnosis("Outro");
+      setCustomEditDiagnosis(diag.diagnosis);
+    }
+    
+    setEditStartDate(new Date(diag.start_date).toISOString().split('T')[0]);
+    setEditStatus(diag.status);
+    setEditDischargeDate(diag.discharge_date ? new Date(diag.discharge_date).toISOString().split('T')[0] : "");
+  };
+
+  const handleEditConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!diagToEdit) return;
+
+    try {
+      const finalSegment = editSegment === "Outros" ? customEditSegment : editSegment;
+      const finalDiagnosis = (editSegment === "Outros" || editDiagnosis === "Outro") ? customEditDiagnosis : editDiagnosis;
+      const finalStatus = editStatus;
+      const finalDischargeDate = (editStatus === "ALTA" || editStatus === "DESISTENCIA") 
+        ? (editDischargeDate ? new Date(editDischargeDate) : new Date())
+        : null;
+
+      const res = await updatePatientDiagnosis(diagToEdit.id, {
+        segment: finalSegment,
+        diagnosis: finalDiagnosis,
+        start_date: new Date(editStartDate),
+        status: finalStatus,
+        discharge_date: finalDischargeDate
+      });
+
+      if (res.success) {
+        toast.success("Diagnóstico atualizado com sucesso!");
+        setDiagToEdit(null);
+        fetchDiagnoses();
+      } else {
+        toast.error(res.error || "Erro ao atualizar diagnóstico.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao atualizar diagnóstico:", err);
+      toast.error("Erro ao processar atualização.");
     }
   };
 
@@ -967,6 +1040,131 @@ export default function PatientHistoryPage() {
                     </div>
                   )}
 
+                  {/* Editar Diagnóstico Form Overlay */}
+                  {diagToEdit && (
+                    <div className="modal-backdrop" onClick={() => setDiagToEdit(null)}>
+                      <div className="discharge-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', width: '90%' }}>
+                        <h4 style={{ color: '#9d1d1d', marginBottom: '0.5rem' }}>Editar Diagnóstico Clínico</h4>
+                        <p className="discharge-subtitle" style={{ marginBottom: '1.5rem' }}>
+                          Paciente: <strong>{patient?.name}</strong>
+                        </p>
+                        
+                        <form onSubmit={handleEditConfirm}>
+                          <div className="form-group" style={{ marginBottom: '1rem' }}>
+                            <label>Segmento Corporal</label>
+                            <select 
+                              value={editSegment}
+                              onChange={(e) => {
+                                setEditSegment(e.target.value);
+                                setEditDiagnosis("");
+                              }}
+                              required
+                            >
+                              <option value="">Selecione...</option>
+                              {getSegmentsList().map(seg => (
+                                <option key={seg} value={seg}>{seg}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {editSegment === "Outros" && (
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                              <label>Nome do Segmento</label>
+                              <input 
+                                type="text" 
+                                value={customEditSegment}
+                                onChange={(e) => setCustomEditSegment(e.target.value)}
+                                placeholder="Ex: Cotovelo, Punho..."
+                                required
+                              />
+                            </div>
+                          )}
+
+                          {editSegment && editSegment !== "Outros" && (
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                              <label>Diagnóstico</label>
+                              <select 
+                                value={editDiagnosis}
+                                onChange={(e) => setEditDiagnosis(e.target.value)}
+                                required
+                              >
+                                <option value="">Selecione...</option>
+                                {getDiagnosesForSegment(editSegment).map(diag => (
+                                  <option key={diag} value={diag}>{diag}</option>
+                                ))}
+                                <option value="Outro">Outro...</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {(editSegment === "Outros" || editDiagnosis === "Outro") && (
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                              <label>Especificar Diagnóstico</label>
+                              <input 
+                                type="text" 
+                                value={customEditDiagnosis}
+                                onChange={(e) => setCustomEditDiagnosis(e.target.value)}
+                                placeholder="Digite o diagnóstico"
+                                required
+                              />
+                            </div>
+                          )}
+
+                          <div className="form-group" style={{ marginBottom: '1rem' }}>
+                            <label>Data de Início</label>
+                            <input 
+                              type="date" 
+                              value={editStartDate}
+                              onChange={(e) => setEditStartDate(e.target.value)}
+                              required
+                            />
+                          </div>
+
+                          <div className="form-group" style={{ marginBottom: '1rem' }}>
+                            <label>Status do Tratamento</label>
+                            <select 
+                              value={editStatus}
+                              onChange={(e) => {
+                                setEditStatus(e.target.value);
+                                if (e.target.value === "ATIVO") {
+                                  setEditDischargeDate("");
+                                } else if (!editDischargeDate) {
+                                  setEditDischargeDate(new Date().toISOString().split('T')[0]);
+                                }
+                              }}
+                              required
+                            >
+                              <option value="ATIVO">Em Tratamento (Ativo)</option>
+                              <option value="ALTA">Alta de Tratamento</option>
+                              <option value="DESISTENCIA">Desistência de Tratamento</option>
+                            </select>
+                          </div>
+
+                          {(editStatus === "ALTA" || editStatus === "DESISTENCIA") && (
+                            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                              <label>Data de Conclusão / Alta</label>
+                              <input 
+                                type="date" 
+                                value={editDischargeDate}
+                                onChange={(e) => setEditDischargeDate(e.target.value)}
+                                required
+                              />
+                            </div>
+                          )}
+
+                          <div className="form-actions" style={{ marginTop: '1.5rem' }}>
+                            <button type="button" className="btn-cancel" onClick={() => setDiagToEdit(null)}>
+                              Cancelar
+                            </button>
+                            <button type="submit" className="btn-submit" style={{ backgroundColor: '#9d1d1d' }}>
+                              Salvar Alterações
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Diagnoses Content */}
                   <div className="diagnoses-content">
                     {loadingDiagnoses ? (
@@ -995,6 +1193,14 @@ export default function PatientHistoryPage() {
                                       >
                                         <CheckCircle2 size={14} />
                                         <span>Alta</span>
+                                      </button>
+                                      <button 
+                                        className="action-btn-edit" 
+                                        title="Editar Diagnóstico"
+                                        onClick={() => handleEditClick(diag)}
+                                      >
+                                        <Pencil size={12} />
+                                        <span>Editar</span>
                                       </button>
                                       <button 
                                         className="action-btn-delete" 
@@ -1054,13 +1260,23 @@ export default function PatientHistoryPage() {
                                               </span>
                                             )}
                                           </div>
-                                          <button 
-                                            className="action-btn-delete muted-delete" 
-                                            title="Excluir"
-                                            onClick={() => setDiagToDelete(diag)}
-                                          >
-                                            <Trash2 size={16} />
-                                          </button>
+                                          <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                            <button 
+                                              className="action-btn-delete" 
+                                              style={{ color: '#9ca3af', padding: '4px' }}
+                                              title="Editar"
+                                              onClick={() => handleEditClick(diag)}
+                                            >
+                                              <Pencil size={14} />
+                                            </button>
+                                            <button 
+                                              className="action-btn-delete muted-delete" 
+                                              title="Excluir"
+                                              onClick={() => setDiagToDelete(diag)}
+                                            >
+                                              <Trash2 size={16} />
+                                            </button>
+                                          </div>
                                         </div>
                                         <h4 className="diag-name text-muted">{diag.diagnosis}</h4>
                                         <div className="diag-dates-group">
@@ -2807,6 +3023,24 @@ export default function PatientHistoryPage() {
         .action-btn-discharge:hover {
           background-color: #d1fae5;
           border-color: #34d399;
+        }
+        .action-btn-edit {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          background-color: #f3f4f6;
+          color: #4b5563;
+          border: 1px solid #d1d5db;
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .action-btn-edit:hover {
+          background-color: #e5e7eb;
+          border-color: #9ca3af;
         }
         .action-btn-delete {
           color: #9ca3af;
