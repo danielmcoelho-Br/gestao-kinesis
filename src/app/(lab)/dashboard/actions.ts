@@ -20,39 +20,10 @@ export async function getPatients(
   showDischarged: boolean = false
 ) {
   try {
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-
-    // 1. Obter sessões finalizadas nos últimos 30 dias para aplicar restrição temporal (excluindo Pilates)
-    const sessionsLastMonth = await prisma.session.findMany({
-      where: {
-        status: { contains: "Finalizado", mode: 'insensitive' },
-        date: { gte: oneMonthAgo },
-        NOT: {
-          serviceType: { contains: "Pilates", mode: 'insensitive' }
-        }
-      },
-      select: {
-        patientName: true,
-        professionalId: true
-      }
-    });
-
-    const uniquePatientNamesOfLastMonth = Array.from(new Set(
-      sessionsLastMonth.map(s => s.patientName.trim().toLowerCase())
-    ));
-    const uniquePatientNamesOfLastMonthVariants = Array.from(new Set(
-      uniquePatientNamesOfLastMonth.flatMap(name => [
-        name,
-        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      ])
-    ));
-
     const andConditions: any[] = [];
 
-    // 2. Filtro por Fisioterapeuta e Restrição Temporal
+    // 1. Otimização de busca por nome (global, unaccent)
     if (query) {
-      // Se houver busca por texto (busca de nomes específicos), pesquisa de forma global em todo o banco com flexibilidade de acentuação usando SQL unaccent
       const searchPattern = `%${query}%`;
       const matchedPatients = await prisma.$queryRaw<{ id: string }[]>`
         SELECT id FROM "Patient" 
@@ -63,78 +34,9 @@ export async function getPatients(
       andConditions.push({
         id: { in: matchedPatientIds }
       });
-    } else {
-      // Sem busca por texto: restringe aos últimos 30 dias (atendidos pelo profissional ou novos sem atendimento)
-      if (professionalId && professionalId !== "all") {
-        const patientNamesForProf = Array.from(new Set(
-          sessionsLastMonth
-            .filter(s => s.professionalId === professionalId)
-            .map(s => s.patientName.trim().toLowerCase())
-        ));
-        const patientNamesForProfVariants = Array.from(new Set(
-          patientNamesForProf.flatMap(name => [
-            name,
-            name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-          ])
-        ));
-        
-        const startsWithConditions = patientNamesForProfVariants.map(name => ({
-          name: {
-            startsWith: name,
-            mode: 'insensitive' as const
-          }
-        }));
-
-        const newPatientCondition: any = {
-          OR: [
-            { createdAt: { gte: oneMonthAgo } },
-            { diagnoses: { some: { status: "ATIVO" } } }
-          ]
-        };
-
-        if (uniquePatientNamesOfLastMonthVariants.length > 0) {
-          newPatientCondition.AND = uniquePatientNamesOfLastMonthVariants.map(name => ({
-            name: {
-              not: {
-                startsWith: name
-              }
-            }
-          }));
-        }
-
-        andConditions.push({
-          OR: [
-            ...startsWithConditions,
-            newPatientCondition
-          ]
-        });
-      } else {
-        const startsWithConditions = uniquePatientNamesOfLastMonthVariants.map(name => ({
-          name: {
-            startsWith: name,
-            mode: 'insensitive' as const
-          }
-        }));
-
-        andConditions.push({
-          OR: [
-            ...startsWithConditions,
-            {
-              createdAt: { gte: oneMonthAgo }
-            },
-            {
-              diagnoses: {
-                some: {
-                  status: "ATIVO"
-                }
-              }
-            }
-          ]
-        });
-      }
     }
 
-    // 3. Filtro por Alta (Em Atendimento) - Se houver query de busca de texto, não aplica o filtro de alta para busca global
+    // 2. Filtro por Alta (Em Atendimento)
     if (!showDischarged && !query) {
       andConditions.push({
         OR: [
@@ -177,71 +79,10 @@ export async function getPatients(
       },
       take: limit ?? 50
     });
-    
-    // Obter sessões finalizadas (excluindo Pilates) APENAS para os pacientes retornados (com truncamento de 18 caracteres)
-    const truncatedPatientNames = patients.flatMap((p: any) => {
-      const name = p.name.substring(0, 18).trim();
-      return [
-        name,
-        name.toLowerCase(),
-        name.toUpperCase()
-      ];
-    });
-    const truncatedPatientNamesVariants = Array.from(new Set(
-      truncatedPatientNames.flatMap(name => [
-        name,
-        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      ])
-    ));
-    
-    const patientSessions = truncatedPatientNamesVariants.length > 0 
-      ? await prisma.session.findMany({
-          where: {
-            status: { startsWith: "Finalizado" },
-            patientName: {
-              in: truncatedPatientNamesVariants
-            },
-            NOT: {
-              serviceType: { contains: "Pilates" }
-            }
-          },
-          select: {
-            patientName: true,
-            professional: {
-              select: {
-                id: true,
-                name: true
-              }
-            }
-          }
-        })
-      : [];
-
-    // Mapear profissionais pelo nome completo do paciente (usando comparação normalizada)
-    const patientProfsMap = new Map<string, Array<{ id: string, name: string }>>();
-    patientSessions.forEach(s => {
-      if (!s.professional) return;
-      const sessionNameNorm = normalizeName(s.patientName.substring(0, 18));
-      
-      const matchedPatient = patients.find(p => 
-        normalizeName(p.name.substring(0, 18)) === sessionNameNorm
-      );
-      
-      if (matchedPatient) {
-        const key = normalizeName(matchedPatient.name);
-        const existing = patientProfsMap.get(key) || [];
-        if (!existing.some(p => p.id === s.professional.id)) {
-          existing.push({ id: s.professional.id, name: s.professional.name });
-          patientProfsMap.set(key, existing);
-        }
-      }
-    });
-
-    // Transform to include a flag and professionals (usando comparação normalizada)
+    // Transform to include a flag
     const formatted = patients.map((p: any) => ({
       ...p,
-      hasOswestry: p.assessments.length > 0,
-      professionals: patientProfsMap.get(normalizeName(p.name)) || []
+      hasOswestry: p.assessments.length > 0
     }));
 
     return { success: true, data: formatted };
