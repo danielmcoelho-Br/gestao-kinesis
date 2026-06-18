@@ -94,7 +94,11 @@ export default function DashboardPage() {
   const [pendingGestaoPatients, setPendingGestaoPatients] = useState<any[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
 
-  // Filtro de Alta
+  // Filtros de Fisioterapeuta e Alta
+  const [professionalsList, setProfessionalsList] = useState<any[]>([]);
+  const [hasLoadedProfs, setHasLoadedProfs] = useState(false);
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>("all");
+  const [isInitialized, setIsInitialized] = useState(false);
   const [showDischarged, setShowDischarged] = useState<boolean>(false);
   
   // Gestão de Diagnósticos States
@@ -396,28 +400,58 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    // Carregar profissionais
+    fetch("/api/profissionais")
+      .then(res => res.json())
+      .then(data => {
+        setProfessionalsList(Array.isArray(data) ? data : []);
+        setHasLoadedProfs(true);
+      })
+      .catch(() => {
+        setProfessionalsList([]);
+        setHasLoadedProfs(true);
+      });
+
     fetchGroups();
     fetchSegments();
   }, []);
 
-  // Re-buscar quando filtros ou busca mudarem
+  // Definir filtro padrão caso o usuário logado seja Fisioterapeuta e marcar como inicializado
   useEffect(() => {
+    if (hasLoadedProfs) {
+      let initialProfId = "all";
+      if (user) {
+        const matched = professionalsList.find(p => p.name.toLowerCase() === user.name.toLowerCase());
+        if (matched) {
+          initialProfId = matched.id;
+        }
+      }
+      setSelectedProfessionalId(initialProfId);
+      setIsInitialized(true);
+    }
+  }, [user, professionalsList, hasLoadedProfs]);
+
+  // Re-buscar quando filtros ou busca mudarem, sem double load e com debounce para busca
+  useEffect(() => {
+    if (!isInitialized) return;
+    
     if (!search) {
-      fetchPatients(search, showDischarged);
+      fetchPatients(search, selectedProfessionalId, showDischarged);
       return;
     }
 
     const timer = setTimeout(() => {
-      fetchPatients(search, showDischarged);
+      fetchPatients(search, selectedProfessionalId, showDischarged);
     }, 300);
     
     return () => clearTimeout(timer);
-  }, [search, showDischarged]);
+  }, [search, selectedProfessionalId, showDischarged, isInitialized]);
 
-  const fetchPatients = async (query: string = "", showAltas?: boolean) => {
+  const fetchPatients = async (query: string = "", profId?: string, showAltas?: boolean) => {
+    const activeProfId = profId !== undefined ? profId : selectedProfessionalId;
     const activeShowAltas = showAltas !== undefined ? showAltas : showDischarged;
     
-    const result = await getPatients(query, 50, "all", activeShowAltas);
+    const result = await getPatients(query, 50, activeProfId, activeShowAltas);
     if (result.success) {
       const sorted = (result.data || []).sort((a: any, b: any) => 
         a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
@@ -608,8 +642,32 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Filtro por Alta */}
+              {/* Filtros adicionais (Fisioterapeuta e Alta) */}
               <div style={{ display: 'flex', gap: '12px', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <select
+                    value={selectedProfessionalId}
+                    onChange={(e) => setSelectedProfessionalId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.625rem 1rem',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-color)',
+                      background: 'white',
+                      fontWeight: '600',
+                      color: 'var(--text-primary)',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    <option value="all">Todos os Fisioterapeutas</option>
+                    {professionalsList.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-muted)' }}>
                   <input 
                     type="checkbox" 
@@ -678,6 +736,18 @@ export default function DashboardPage() {
                               {patient.diagnoses.filter((d: any) => d.status === "ATIVO").map((d: any) => (
                                 <span key={d.id} style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '6px', background: '#fef2f2', color: '#9d1d1d', border: '1px solid #fecaca', fontWeight: '700' }}>
                                   {d.diagnosis} ({d.segment})
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Fisioterapeutas */}
+                          {patient.professionals && patient.professionals.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '0.25rem' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600', alignSelf: 'center' }}>Fisio:</span>
+                              {patient.professionals.map((pr: any) => (
+                                <span key={pr.id} style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '6px', background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: '700' }}>
+                                  {pr.name}
                                 </span>
                               ))}
                             </div>

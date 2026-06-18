@@ -20,6 +20,9 @@ export async function getPatients(
   showDischarged: boolean = false
 ) {
   try {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+
     const andConditions: any[] = [];
 
     // 1. Otimização de busca por nome (global, unaccent)
@@ -34,9 +37,102 @@ export async function getPatients(
       andConditions.push({
         id: { in: matchedPatientIds }
       });
+    } else {
+      // 2. Filtro por Fisioterapeuta e Restrição Temporal de 30 dias (apenas se não houver busca ativa)
+      const sessionsLastMonth = await prisma.session.findMany({
+        where: {
+          status: { startsWith: "Finalizado" },
+          date: { gte: oneMonthAgo },
+          NOT: {
+            serviceType: { contains: "Pilates" }
+          }
+        },
+        select: {
+          patientName: true,
+          professionalId: true
+        }
+      });
+
+      const uniquePatientNamesOfLastMonth = Array.from(new Set(
+        sessionsLastMonth.map(s => s.patientName.trim().toLowerCase())
+      ));
+      const uniquePatientNamesOfLastMonthVariants = Array.from(new Set(
+        uniquePatientNamesOfLastMonth.flatMap(name => [
+          name,
+          name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        ])
+      ));
+
+      if (professionalId && professionalId !== "all") {
+        const patientNamesForProf = Array.from(new Set(
+          sessionsLastMonth
+            .filter(s => s.professionalId === professionalId)
+            .map(s => s.patientName.trim().toLowerCase())
+        ));
+        const patientNamesForProfVariants = Array.from(new Set(
+          patientNamesForProf.flatMap(name => [
+            name,
+            name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          ])
+        ));
+        
+        const startsWithConditions = patientNamesForProfVariants.map(name => ({
+          name: {
+            startsWith: name,
+            mode: 'insensitive' as const
+          }
+        }));
+
+        const newPatientCondition: any = {
+          OR: [
+            { createdAt: { gte: oneMonthAgo } },
+            { diagnoses: { some: { status: "ATIVO" } } }
+          ]
+        };
+
+        if (uniquePatientNamesOfLastMonthVariants.length > 0) {
+          newPatientCondition.AND = uniquePatientNamesOfLastMonthVariants.map(name => ({
+            name: {
+              not: {
+                startsWith: name
+              }
+            }
+          }));
+        }
+
+        andConditions.push({
+          OR: [
+            ...startsWithConditions,
+            newPatientCondition
+          ]
+        });
+      } else {
+        const startsWithConditions = uniquePatientNamesOfLastMonthVariants.map(name => ({
+          name: {
+            startsWith: name,
+            mode: 'insensitive' as const
+          }
+        }));
+
+        andConditions.push({
+          OR: [
+            ...startsWithConditions,
+            {
+              createdAt: { gte: oneMonthAgo }
+            },
+            {
+              diagnoses: {
+                some: {
+                  status: "ATIVO"
+                }
+              }
+            }
+          ]
+        });
+      }
     }
 
-    // 2. Filtro por Alta (Em Atendimento)
+    // 3. Filtro por Alta (Em Atendimento)
     if (!showDischarged && !query) {
       andConditions.push({
         OR: [
@@ -79,10 +175,64 @@ export async function getPatients(
       },
       take: limit ?? 50
     });
-    // Transform to include a flag
+    
+    // 4. Mapear profissionais que atenderam os pacientes retornados nos últimos 30 dias
+    const patientNamesList = patients.map(p => p.name.substring(0, 18).trim().toLowerCase());
+    const patientNamesVariants = Array.from(new Set(
+      patientNamesList.flatMap(name => [
+        name,
+        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      ])
+    ));
+
+    const patientSessions = patientNamesVariants.length > 0
+      ? await prisma.session.findMany({
+          where: {
+            status: { startsWith: "Finalizado" },
+            date: { gte: oneMonthAgo },
+            patientName: {
+              in: patientNamesVariants
+            },
+            NOT: {
+              serviceType: { contains: "Pilates" }
+            }
+          },
+          select: {
+            patientName: true,
+            professional: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        })
+      : [];
+
+    const patientProfsMap = new Map<string, Array<{ id: string, name: string }>>();
+    patientSessions.forEach(s => {
+      if (!s.professional) return;
+      const sessionNameNorm = normalizeName(s.patientName.substring(0, 18));
+      
+      const matchedPatient = patients.find(p => 
+        normalizeName(p.name.substring(0, 18)) === sessionNameNorm
+      );
+      
+      if (matchedPatient) {
+        const key = normalizeName(matchedPatient.name);
+        const existing = patientProfsMap.get(key) || [];
+        if (!existing.some(p => p.id === s.professional.id)) {
+          existing.push({ id: s.professional.id, name: s.professional.name });
+          patientProfsMap.set(key, existing);
+        }
+      }
+    });
+
+    // Transform to include a flag and professionals (usando comparação normalizada)
     const formatted = patients.map((p: any) => ({
       ...p,
-      hasOswestry: p.assessments.length > 0
+      hasOswestry: p.assessments.length > 0,
+      professionals: patientProfsMap.get(normalizeName(p.name)) || []
     }));
 
     return { success: true, data: formatted };
