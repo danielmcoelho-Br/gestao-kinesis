@@ -2,8 +2,25 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/gestao/lib/auth";
+
+async function checkAuth() {
+    const session = await getSession();
+    return session;
+}
+
+async function checkAdmin() {
+    const session = await getSession();
+    if (!session || !['ADMIN', 'ADMINISTRADOR', 'ADMINISTRATOR'].includes(String(session.role || '').toUpperCase())) {
+        return false;
+    }
+    return true;
+}
 
 export async function getTemplates() {
+    if (!await checkAuth()) {
+        return { success: false, error: "Acesso não autorizado. Por favor, faça login." };
+    }
     try {
         const templates = await prisma.assessmentTemplate.findMany({
             orderBy: { title: 'asc' }
@@ -16,6 +33,9 @@ export async function getTemplates() {
 }
 
 export async function createTemplate(data: any) {
+    if (!await checkAdmin()) {
+        return { success: false, error: "Acesso não autorizado. Apenas administradores podem gerenciar modelos." };
+    }
     try {
         const template = await prisma.assessmentTemplate.create({
             data: {
@@ -42,6 +62,9 @@ export async function createTemplate(data: any) {
 }
 
 export async function updateTemplate(id: string, data: any, adminName: string) {
+    if (!await checkAdmin()) {
+        return { success: false, error: "Acesso não autorizado. Apenas administradores podem gerenciar modelos." };
+    }
     try {
         const current = await prisma.assessmentTemplate.findUnique({ where: { id } });
         if (!current) throw new Error("Modelo não encontrado");
@@ -80,6 +103,9 @@ export async function updateTemplate(id: string, data: any, adminName: string) {
 }
 
 export async function deleteTemplate(id: string) {
+    if (!await checkAdmin()) {
+        return { success: false, error: "Acesso não autorizado. Apenas administradores podem gerenciar modelos." };
+    }
     try {
         await prisma.assessmentTemplate.delete({ where: { id } });
         revalidatePath("/dashboard/admin/assessments");

@@ -1,9 +1,20 @@
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
-// Using a fallback secret for development if environment variable is missing
-const secretKey = process.env.JWT_SECRET || "kinesis-super-secret-patient-key-2026";
-const key = new TextEncoder().encode(secretKey);
+let KEY: Uint8Array | null = null;
+function getPatientKey() {
+  if (!KEY) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      if (process.env.NODE_ENV === "production" && typeof window === "undefined") {
+        console.warn("⚠️ JWT_SECRET is missing from environment variables!");
+      }
+      return new TextEncoder().encode("kinesis-super-secret-patient-key-2026");
+    }
+    KEY = new TextEncoder().encode(secret);
+  }
+  return KEY;
+}
 
 export type PatientSessionPayload = {
   id: string;
@@ -13,16 +24,22 @@ export type PatientSessionPayload = {
 };
 
 export async function encryptPatient(payload: PatientSessionPayload) {
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+    throw new Error("Erro Crítico: JWT_SECRET não configurado!");
+  }
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d") // Patient session lasts 30 days
-    .sign(key);
+    .sign(getPatientKey());
 }
 
 export async function decryptPatient(input: string): Promise<PatientSessionPayload | null> {
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+    throw new Error("Erro Crítico: JWT_SECRET não configurado!");
+  }
   try {
-    const { payload } = await jwtVerify(input, key, {
+    const { payload } = await jwtVerify(input, getPatientKey(), {
       algorithms: ["HS256"],
     });
     return payload as PatientSessionPayload;

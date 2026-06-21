@@ -4,9 +4,16 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
+import { getSession } from "@/gestao/lib/auth";
+
 export async function updateProfile(id: string, data: any) {
     if (!id || typeof id !== 'string') {
         return { success: false, error: "Sessão inválida. Por favor, saia e entre novamente." };
+    }
+
+    const session = await getSession();
+    if (!session || session.id !== id) {
+        return { success: false, error: "Acesso não autorizado. A sessão não coincide com o perfil." };
     }
 
     try {

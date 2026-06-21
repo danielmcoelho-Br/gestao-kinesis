@@ -2,8 +2,20 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/gestao/lib/auth";
+
+async function checkAdmin() {
+    const session = await getSession();
+    if (!session || !['ADMIN', 'ADMINISTRADOR', 'ADMINISTRATOR'].includes(String(session.role || '').toUpperCase())) {
+        return false;
+    }
+    return true;
+}
 
 export async function getUsers() {
+    if (!await checkAdmin()) {
+        return { success: false, error: "Acesso não autorizado. Apenas administradores podem gerenciar usuários." };
+    }
     try {
         const users = await prisma.user.findMany({
             orderBy: { name: 'asc' }
@@ -18,6 +30,9 @@ export async function getUsers() {
 import bcrypt from "bcryptjs";
 
 export async function createUser(data: any) {
+    if (!await checkAdmin()) {
+        return { success: false, error: "Acesso não autorizado. Apenas administradores podem gerenciar usuários." };
+    }
     try {
         const hashedPassword = await bcrypt.hash(data.password, 10);
         const user = await prisma.user.create({
@@ -48,6 +63,9 @@ export async function createUser(data: any) {
 }
 
 export async function updateUser(id: string, data: any, adminName: string) {
+    if (!await checkAdmin()) {
+        return { success: false, error: "Acesso não autorizado. Apenas administradores podem gerenciar usuários." };
+    }
     try {
         const current = await prisma.user.findUnique({ where: { id } }) as any;
         if (!current) throw new Error("Usuário não encontrado");
@@ -95,6 +113,9 @@ export async function updateUser(id: string, data: any, adminName: string) {
 }
 
 export async function deleteUser(id: string) {
+    if (!await checkAdmin()) {
+        return { success: false, error: "Acesso não autorizado. Apenas administradores podem gerenciar usuários." };
+    }
     try {
         await prisma.user.delete({ where: { id } });
         revalidatePath("/dashboard/admin/users");
