@@ -1817,7 +1817,7 @@ export default function FinanceiroPageContent() {
       {activeTab.startsWith('fluxo') && (
       <div style={{ marginBottom: '30px' }}>
         <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b' }}>Resumo por Favorecido</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
           {allowedFavorecidos.map(fav => {
             const rawTotals = activeTab === 'fluxo_bb' ? favTotalsBB : favTotalsInter;
             const liquidatedTotals = activeTab === 'fluxo_bb' ? liquidatedFavTotalsBB : liquidatedFavTotalsInter;
