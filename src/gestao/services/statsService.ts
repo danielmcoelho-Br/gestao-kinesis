@@ -139,37 +139,56 @@ export class StatsService {
     
     const profFilter = professionalId ? { professionalId } : {};
 
+    const sessionSelect = {
+      status: true,
+      serviceType: true,
+      value: true,
+      clinicPercentage: true,
+      patientName: true,
+      date: true,
+      professionalId: true
+    };
+
     // 1. Current Period (Range)
     const currentSessions = await prisma.session.findMany({ 
-      where: { ...profFilter, date: { gte: startDate, lte: endDate } } 
+      where: { ...profFilter, date: { gte: startDate, lte: endDate } },
+      select: sessionSelect
     });
     const current = this.getSeparatedStats(currentSessions);
 
     // 2. Comparisons (Prev Month and Same Month Last Year - BASED ON START OF RANGE)
     const prevMonthDate = new Date(startYear, startMonth - 1, 1);
     const pmSessions = await prisma.session.findMany({ 
-      where: { ...profFilter, date: { gte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1), lte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0, 23, 59, 59) } } 
+      where: { ...profFilter, date: { gte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1), lte: new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0, 23, 59, 59) } },
+      select: sessionSelect
     });
     const lastMonth = this.getSeparatedStats(pmSessions);
 
     const pySessions = await prisma.session.findMany({ 
-      where: { ...profFilter, date: { gte: new Date(startYear - 1, startMonth, 1), lte: new Date(startYear - 1, startMonth + 1, 0, 23, 59, 59) } } 
+      where: { ...profFilter, date: { gte: new Date(startYear - 1, startMonth, 1), lte: new Date(startYear - 1, startMonth + 1, 0, 23, 59, 59) } },
+      select: sessionSelect
     });
     const lastYear = this.getSeparatedStats(pySessions);
 
-    // 3. FETCH ALL AVAILABLE YEARS
-    const sessionYears = await prisma.session.groupBy({
-      by: ['date'],
-      _count: true,
+    // 3. FETCH ALL AVAILABLE YEARS (Optimized via database min/max query)
+    const bounds = await prisma.session.aggregate({
+      _min: { date: true },
+      _max: { date: true }
     });
-    const availableYears = Array.from(new Set(sessionYears.map(s => s.date.getFullYear()))).sort((a, b) => b - a);
+    const minYear = bounds._min.date ? bounds._min.date.getFullYear() : startYear;
+    const maxYear = bounds._max.date ? bounds._max.date.getFullYear() : startYear;
+    const availableYears: number[] = [];
+    for (let y = maxYear; y >= minYear; y--) {
+      availableYears.push(y);
+    }
 
     const history = await Promise.all(availableYears.map(async (y) => {
       const yearSessions = await prisma.session.findMany({ 
         where: { 
           ...profFilter, 
           date: { gte: new Date(y, 0, 1), lte: new Date(y, 11, 31, 23, 59, 59) } 
-        } 
+        },
+        select: sessionSelect
       });
 
       const data = Array.from({ length: 12 }, (_, m) => {
