@@ -91,11 +91,10 @@ export async function getPatients(
         };
 
         if (uniquePatientNamesOfLastMonthVariants.length > 0) {
-          newPatientCondition.AND = uniquePatientNamesOfLastMonthVariants.map(name => ({
+          newPatientCondition.NOT = uniquePatientNamesOfLastMonthVariants.map(name => ({
             name: {
-              not: {
-                startsWith: name
-              }
+              startsWith: name,
+              mode: 'insensitive' as const
             }
           }));
         }
@@ -177,7 +176,14 @@ export async function getPatients(
     });
     
     // 4. Mapear profissionais que atenderam os pacientes retornados nos últimos 30 dias
-    const patientNamesList = patients.map(p => p.name.substring(0, 18).trim().toLowerCase());
+    const patientNamesList = patients.flatMap(p => {
+      const name = p.name.substring(0, 18).trim();
+      return [
+        name,
+        name.toLowerCase(),
+        name.toUpperCase()
+      ];
+    });
     const patientNamesVariants = Array.from(new Set(
       patientNamesList.flatMap(name => [
         name,
@@ -1144,11 +1150,15 @@ export async function getDischargedDiagnoses(
 
     const uniqueTruncatedNames = Array.from(new Set(
       diagnoses.flatMap(d => {
-        const name = d.patient.name.substring(0, 18).trim();
+        const fullName = d.patient.name.trim();
+        const truncatedName = fullName.substring(0, 18).trim();
         return [
-          name,
-          name.toLowerCase(),
-          name.toUpperCase()
+          fullName,
+          fullName.toLowerCase(),
+          fullName.toUpperCase(),
+          truncatedName,
+          truncatedName.toLowerCase(),
+          truncatedName.toUpperCase()
         ];
       })
     ));
@@ -1278,7 +1288,18 @@ export async function getProfessionalDiagnosticsFrequency(
     });
 
     const uniqueTruncatedNames = Array.from(new Set(
-      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+      diagnoses.flatMap(d => {
+        const fullName = d.patient.name.trim();
+        const truncatedName = fullName.substring(0, 18).trim();
+        return [
+          fullName,
+          fullName.toLowerCase(),
+          fullName.toUpperCase(),
+          truncatedName,
+          truncatedName.toLowerCase(),
+          truncatedName.toUpperCase()
+        ];
+      })
     ));
     const nameVariants = Array.from(new Set(
       uniqueTruncatedNames.flatMap(name => [
@@ -1379,7 +1400,18 @@ export async function getProfessionalCasesFrequency(
     });
 
     const uniqueTruncatedNames = Array.from(new Set(
-      diagnoses.map(d => d.patient.name.substring(0, 18).trim().toLowerCase())
+      diagnoses.flatMap(d => {
+        const fullName = d.patient.name.trim();
+        const truncatedName = fullName.substring(0, 18).trim();
+        return [
+          fullName,
+          fullName.toLowerCase(),
+          fullName.toUpperCase(),
+          truncatedName,
+          truncatedName.toLowerCase(),
+          truncatedName.toUpperCase()
+        ];
+      })
     ));
     const nameVariants = Array.from(new Set(
       uniqueTruncatedNames.flatMap(name => [
@@ -1492,11 +1524,15 @@ export async function getAverageSessionsPerDiagnosis(
 
     const uniqueTruncatedNames = Array.from(new Set(
       diagnoses.flatMap(d => {
-        const name = d.patient.name.substring(0, 18).trim();
+        const fullName = d.patient.name.trim();
+        const truncatedName = fullName.substring(0, 18).trim();
         return [
-          name,
-          name.toLowerCase(),
-          name.toUpperCase()
+          fullName,
+          fullName.toLowerCase(),
+          fullName.toUpperCase(),
+          truncatedName,
+          truncatedName.toLowerCase(),
+          truncatedName.toUpperCase()
         ];
       })
     ));

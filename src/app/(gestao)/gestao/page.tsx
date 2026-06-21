@@ -33,6 +33,7 @@ export default function Dashboard() {
   const [loadingCases, setLoadingCases] = useState<boolean>(true);
   const [averageSessions, setAverageSessions] = useState<any[]>([]);
   const [loadingAvgSessions, setLoadingAvgSessions] = useState<boolean>(true);
+  const [avgPeriodMode, setAvgPeriodMode] = useState<'all' | 'month'>('all');
 
   // Estado para controle de expansão de sanfona por segmento
   const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
@@ -132,7 +133,6 @@ export default function Dashboard() {
     setLoadingDropouts(true);
     setLoadingFrequency(true);
     setLoadingCases(true);
-    setLoadingAvgSessions(true);
     
     try {
       const resultDischarged = await getDischargedDiagnoses(profId, startMonth, startYear, endMonth, endYear, "ALTA");
@@ -177,9 +177,14 @@ export default function Dashboard() {
     } finally {
       setLoadingCases(false);
     }
+  };
 
+  const fetchAverageSessions = async (profId: string) => {
+    setLoadingAvgSessions(true);
     try {
-      const resultAvg = await getAverageSessionsPerDiagnosis(profId, startMonth, startYear, endMonth, endYear);
+      const resultAvg = avgPeriodMode === 'all'
+        ? await getAverageSessionsPerDiagnosis(profId)
+        : await getAverageSessionsPerDiagnosis(profId, startMonth, startYear, endMonth, endYear);
       if (resultAvg.success) {
         setAverageSessions(resultAvg.data || []);
       }
@@ -197,6 +202,13 @@ export default function Dashboard() {
       fetchDischargedAndFrequency(profId);
     }
   }, [startMonth, startYear, endMonth, endYear, activeTab, initialized]);
+
+  useEffect(() => {
+    if (initialized) {
+      const profId = !['geral', 'fisioterapia', 'pilates'].includes(activeTab) ? activeTab : "all";
+      fetchAverageSessions(profId);
+    }
+  }, [startMonth, startYear, endMonth, endYear, activeTab, avgPeriodMode, initialized]);
 
   // Cálculo de dados para exibição (Memoizado para performance)
   const displayContext = useMemo(() => {
@@ -509,9 +521,50 @@ export default function Dashboard() {
 
           {/* Média de Atendimentos por Diagnóstico */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '350px', gridColumn: 'span 2' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-              <TrendingUp style={{ color: '#10b981' }} size={22} />
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>Média de Atendimentos por Diagnóstico (Todo período)</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingUp style={{ color: '#10b981' }} size={22} />
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>
+                  Média de Atendimentos por Diagnóstico {avgPeriodMode === 'all' ? '(Todo período)' : '(Mês atual)'}
+                </h3>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.05)', padding: '2px', borderRadius: '8px' }} className="no-print">
+                <button 
+                  onClick={() => setAvgPeriodMode('all')}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: avgPeriodMode === 'all' ? 'white' : 'transparent',
+                    color: avgPeriodMode === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    boxShadow: avgPeriodMode === 'all' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Todo o Período
+                </button>
+                <button 
+                  onClick={() => setAvgPeriodMode('month')}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: avgPeriodMode === 'month' ? 'white' : 'transparent',
+                    color: avgPeriodMode === 'month' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    boxShadow: avgPeriodMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Mês Atual
+                </button>
+              </div>
             </div>
             
             {loadingAvgSessions ? (
