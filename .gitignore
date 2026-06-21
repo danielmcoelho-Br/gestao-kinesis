@@ -42,3 +42,9 @@ next-env.d.ts
 
 /src/generated/prisma
 /tmp/
+
+# sensitive clinic documents
+*.xlsx
+*.pdf
+*.csv
+/uploads/
