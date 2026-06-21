@@ -1225,7 +1225,7 @@ export default function FinanceiroPageContent() {
   const totalExpense = bankTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
   const balance = totalIncome - totalExpense;
 
-  const allowedFavorecidos = ["KINESIS", "DANIEL", "STUART", "PAULA", "PILATES", "FUNDO"];
+  const allowedFavorecidos = ["KINESIS", "PILATES", "FUNDO", "DANIEL", "STUART", "PAULA"];
 
   const favColors: Record<string, { border: string, bg: string, text: string }> = {
     KINESIS: { border: '#8b5cf6', bg: '#f5f3ff', text: '#6d28d9' },
@@ -1960,7 +1960,7 @@ export default function FinanceiroPageContent() {
           <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Wallet size={20} color="#8b5cf6" /> Fechamento de Caixa (Após Liquidação)
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
             {allowedFavorecidos.map(fav => {
               const value = liquidatedFavTotals[fav] || 0;
               const colors = favColors[fav] || { border: '#cbd5e1', bg: '#f8fafc', text: '#475569' };
