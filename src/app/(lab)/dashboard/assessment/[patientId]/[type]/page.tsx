@@ -366,7 +366,8 @@ function AssessmentContent() {
                             {!(currentItem as any).isInstruction && (
                                 <div className="options-grid">
                                     {(currentItem as any).options?.map((opt: any) => {
-                                        const isSelected = answers[currentIdx] === opt.value;
+                                        const key = (currentItem as any).id !== undefined ? (currentItem as any).id : currentIdx;
+                                        const isSelected = answers[key] === opt.value;
                                         return (
                                             <button
                                                 key={opt.value}

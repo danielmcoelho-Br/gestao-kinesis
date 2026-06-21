@@ -26,10 +26,11 @@ export default function PublicAssessmentPage() {
 
   const questions = questionnaire.questions || [];
   const currentQuestion = questions[currentIdx];
+  const currentKey = (currentQuestion as any).id !== undefined ? (currentQuestion as any).id : currentIdx;
   const progress = ((currentIdx + 1) / questions.length) * 100;
 
   const handleSelect = (value: number) => {
-    setAnswers({ ...answers, [currentIdx]: value });
+    setAnswers({ ...answers, [currentKey]: value });
     if (currentIdx < questions.length - 1) {
       setTimeout(() => setCurrentIdx(currentIdx + 1), 300);
     }
@@ -134,8 +135,8 @@ export default function PublicAssessmentPage() {
                     padding: '1.25rem', 
                     borderRadius: '1rem', 
                     border: '2px solid', 
-                    borderColor: answers[currentIdx] === option.value ? 'var(--primary)' : '#f3f4f6',
-                    backgroundColor: answers[currentIdx] === option.value ? 'var(--primary-light)' : 'white',
+                    borderColor: answers[currentKey] === option.value ? 'var(--primary)' : '#f3f4f6',
+                    backgroundColor: answers[currentKey] === option.value ? 'var(--primary-light)' : 'white',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -143,7 +144,7 @@ export default function PublicAssessmentPage() {
                     transition: 'all 0.2s'
                   }}
                 >
-                  <span style={{ fontSize: '1rem', fontWeight: '500', color: answers[currentIdx] === option.value ? 'var(--primary)' : 'var(--text)' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: '500', color: answers[currentKey] === option.value ? 'var(--primary)' : 'var(--text)' }}>
                     {option.label}
                   </span>
                   <div style={{ 

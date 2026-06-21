@@ -764,7 +764,7 @@ export const questionnairesData: Record<string, Questionnaire> = {
     ],
     calculateScore: (answers: Record<string, any>) => {
         const values = Object.entries(answers)
-            .filter(([k, v]) => !isNaN(Number(k)) && v !== undefined && v !== "" && typeof v !== 'boolean')
+            .filter(([k, v]) => (k.startsWith('q') || !isNaN(Number(k))) && v !== undefined && v !== "" && typeof v !== 'boolean' && k !== 'qbt_score')
             .map(([_, v]) => Number(v))
             .filter(v => !isNaN(v));
             

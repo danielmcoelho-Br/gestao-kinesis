@@ -85,7 +85,7 @@ const NORMATIVE_DATA: Record<string, any> = {
 export function calculateAssessmentScore(type: CalculationType, answers: Record<string, any>, profile?: { gender?: string, age?: number, activityLevel?: string }): CalculationResult {
     // Filter answers where keys are numeric indices (0, 1, 2...) and values are numeric or string-numbers
     const values = Object.entries(answers)
-        .filter(([k, v]) => !isNaN(Number(k)) && v !== undefined && v !== "" && typeof v !== 'boolean')
+        .filter(([k, v]) => (k.startsWith('q') || !isNaN(Number(k))) && v !== undefined && v !== "" && typeof v !== 'boolean' && k !== 'qbt_score')
         .map(([_, v]) => Number(v))
         .filter(v => !isNaN(v));
     
