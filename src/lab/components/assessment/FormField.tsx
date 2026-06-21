@@ -42,7 +42,7 @@ const FormField = memo(function FormField({ field, isPrint: overrideIsPrint, val
     const onOpenYbt = () => state.setYbtModal(true);
     const patientGender = state.patientGender;
     const patientAge = state.patientAge;
-    const patientAssessments = state.patientAssessments;
+    const patientAssessments = state.patientAssessments || [];
     const assessmentDate = state.assessmentDate;
 
     const isPrint = overrideIsPrint !== undefined ? overrideIsPrint : state.isPrint;

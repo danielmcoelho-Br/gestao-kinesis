@@ -149,6 +149,10 @@ const MM_DATA = {
         male: { young: { active: 33.0, sedentary: 31.4 }, old: { active: 33.0, sedentary: 30.2 } },
         female: { young: { active: 31.5, sedentary: 26.5 }, old: { active: 27.1, sedentary: 24.3 } }
     },
+    hip_flex: {
+        male: { young: { active: 34.0, sedentary: 30.0 }, old: { active: 30.0, sedentary: 27.0 } },
+        female: { young: { active: 28.0, sedentary: 24.0 }, old: { active: 24.0, sedentary: 21.0 } }
+    },
     knee_ext: {
         female: { 20: 49.6, 25: 47.4, 30: 46.0, 35: 44.9, 40: 43.9, 45: 43.0, 50: 41.9, 55: 40.8, 60: 39.4, 65: 37.9, 70: 36.2 },
         male_multiplier: 1.25 // Estimate for Missing Male MVIC table (Can be adjusted)
@@ -171,6 +175,9 @@ export function getMuscleStrengthReference(muscleId: string, gender: Gender, age
     }
     if (muscleId.includes('ext_q')) {
         return MM_DATA.hip_ext[gKey][ageKey][aKey];
+    }
+    if (muscleId.includes('flex_q')) {
+        return MM_DATA.hip_flex[gKey][ageKey][aKey];
     }
     
     // Knee logic (lookup nearest age)

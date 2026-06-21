@@ -131,7 +131,7 @@ const DataTable = memo(({ section, isPrint: overrideIsPrint }: DataTableProps) =
                             const mainField = row.fields[0];
                             const fieldId = typeof mainField === 'string' ? mainField : (mainField as any)?.id;
                             
-                            if (['flexao_60', 'sorensen', 'resist_flexora', 'resist_extensora'].includes(fieldId)) {
+                            if (['flexao_60', 'sorensen', 'resist_flexora', 'resist_extensora', 'prancha', 'prancha_lat_esq', 'prancha_lat_dir'].includes(fieldId)) {
                                 const threshold = getEnduranceThreshold({
                                     testId: fieldId,
                                     gender: patientGender,
@@ -176,6 +176,7 @@ const DataTable = memo(({ section, isPrint: overrideIsPrint }: DataTableProps) =
                                     const isCalculated = fieldId.includes('_deficit') || fieldId.includes('_def') || 
                                                        fieldId.includes('_ratio') || fieldId.includes('_res_global') || 
                                                        fieldId.includes('_iq_') || fieldId.includes('_pct') ||
+                                                       fieldId.includes('_res_lom') ||
                                                        fieldId.endsWith('_res');
 
                                     if (isCalculated && !answers[fieldId] && (fieldId.endsWith('_deficit') || fieldId.endsWith('_def'))) {

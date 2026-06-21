@@ -2,6 +2,7 @@ import { Questionnaire } from '@/lab/types/clinical';
 export * from '@/lab/types/clinical';
 
 const scores0to5 = ["0", "1", "2", "3", "4", "5"];
+const scores0to10 = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
 const reflexOptions = ["Normal", "Hiperreflexia", "Hiporeflexia"];
 const sensitivityOptions = ["Normal", "Hipoestesia", "Hiperestesia", "Anestesia"];
 
@@ -304,45 +305,6 @@ export const questionnairesData: Record<string, Questionnaire> = {
                 { id: 'neuro_cervical_obs', label: 'OBSERVAÇÕES', type: 'textarea' }
             ]
         },
-        {
-            id: 'exame_neurologico',
-            title: 'Exame Neurológico',
-            type: 'multi-table',
-            subsections: [
-                {
-                    id: 'miotomos',
-                    title: 'Miótomos (Força 0-5)',
-                    type: 'table',
-                    columns: [
-                        'Nível / Movimento', 
-                        { label: 'Esquerdo', action: { type: 'fill', value: '5' } }, 
-                        { label: 'Direito', action: { type: 'fill', value: '5' } }
-                    ],
-                    rows: [
-                        { id: 'c5_mio', label: 'C5 (Abdução Ombro)', fields: [{ id: 'forca_c5_esq', type: 'select', options: scores0to5 }, { id: 'forca_c5_dir', type: 'select', options: scores0to5 }] },
-                        { id: 'c6_mio', label: 'C6 (Flex. Cotovelo / Ext. Punho)', fields: [{ id: 'forca_c6_esq', type: 'select', options: scores0to5 }, { id: 'forca_c6_dir', type: 'select', options: scores0to5 }] },
-                        { id: 'c7_mio', label: 'C7 (Ext. Cotovelo / Flex. Punho)', fields: [{ id: 'forca_c7_esq', type: 'select', options: scores0to5 }, { id: 'forca_c7_dir', type: 'select', options: scores0to5 }] },
-                        { id: 'c8_mio', label: 'C8 (Ext. Polegar / Ulnarização)', fields: [{ id: 'forca_c8_esq', type: 'select', options: scores0to5 }, { id: 'forca_c8_dir', type: 'select', options: scores0to5 }] },
-                        { id: 't1_mio', label: 'T1 (Abdução Dedos)', fields: [{ id: 'forca_t1_esq', type: 'select', options: scores0to5 }, { id: 'forca_t1_dir', type: 'select', options: scores0to5 }] }
-                    ]
-                },
-                {
-                    id: 'reflexos',
-                    title: 'Reflexos Profundos',
-                    type: 'table',
-                    columns: [
-                        'Reflexo', 
-                        { label: 'Esquerdo', action: { type: 'fill', value: 'Normal' } }, 
-                        { label: 'Direito', action: { type: 'fill', value: 'Normal' } }
-                    ],
-                    rows: [
-                        { id: 'ref_biciptal', label: 'Biciptal (C5)', fields: [{ id: 'ref_bic_esq', type: 'select', options: reflexOptions }, { id: 'ref_bic_dir', type: 'select', options: reflexOptions }] },
-                        { id: 'ref_estilorradial', label: 'Estilorradial (C6)', fields: [{ id: 'ref_est_esq', type: 'select', options: reflexOptions }, { id: 'ref_est_dir', type: 'select', options: reflexOptions }] },
-                        { id: 'ref_triciptal', label: 'Triciptal (C7)', fields: [{ id: 'ref_tri_esq', type: 'select', options: reflexOptions }, { id: 'ref_tri_dir', type: 'select', options: reflexOptions }] }
-                    ]
-                }
-            ]
-        },
 
         {
             id: 'movimento_cervical',
@@ -371,13 +333,13 @@ export const questionnairesData: Record<string, Questionnaire> = {
                     type: 'table',
                     columns: ['Nível Vertebral', 'Presença de Dor', 'Intensidade (0-10)'],
                     rows: [
-                        { id: 'c2', label: 'C2', fields: [{ id: 'palp_c2_dor', type: 'checkbox' }, { id: 'palp_c2_int', type: 'number' }] },
-                        { id: 'c3', label: 'C3', fields: [{ id: 'palp_c3_dor', type: 'checkbox' }, { id: 'palp_c3_int', type: 'number' }] },
-                        { id: 'c4', label: 'C4', fields: [{ id: 'palp_c4_dor', type: 'checkbox' }, { id: 'palp_c4_int', type: 'number' }] },
-                        { id: 'c5p', label: 'C5', fields: [{ id: 'palp_c5_dor', type: 'checkbox' }, { id: 'palp_c5_int', type: 'number' }] },
-                        { id: 'c6p', label: 'C6', fields: [{ id: 'palp_c6_dor', type: 'checkbox' }, { id: 'palp_c6_int', type: 'number' }] },
-                        { id: 'c7p', label: 'C7', fields: [{ id: 'palp_c7_dor', type: 'checkbox' }, { id: 'palp_c7_int', type: 'number' }] },
-                        { id: 't1p', label: 'T1', fields: [{ id: 'palp_t1_dor', type: 'checkbox' }, { id: 'palp_t1_int', type: 'number' }] }
+                        { id: 'c2', label: 'C2', fields: [{ id: 'palp_c2_dor', type: 'checkbox' }, { id: 'palp_c2_int', type: 'select', options: scores0to10 }] },
+                        { id: 'c3', label: 'C3', fields: [{ id: 'palp_c3_dor', type: 'checkbox' }, { id: 'palp_c3_int', type: 'select', options: scores0to10 }] },
+                        { id: 'c4', label: 'C4', fields: [{ id: 'palp_c4_dor', type: 'checkbox' }, { id: 'palp_c4_int', type: 'select', options: scores0to10 }] },
+                        { id: 'c5p', label: 'C5', fields: [{ id: 'palp_c5_dor', type: 'checkbox' }, { id: 'palp_c5_int', type: 'select', options: scores0to10 }] },
+                        { id: 'c6p', label: 'C6', fields: [{ id: 'palp_c6_dor', type: 'checkbox' }, { id: 'palp_c6_int', type: 'select', options: scores0to10 }] },
+                        { id: 'c7p', label: 'C7', fields: [{ id: 'palp_c7_dor', type: 'checkbox' }, { id: 'palp_c7_int', type: 'select', options: scores0to10 }] },
+                        { id: 't1p', label: 'T1', fields: [{ id: 'palp_t1_dor', type: 'checkbox' }, { id: 'palp_t1_int', type: 'select', options: scores0to10 }] }
                     ]
                 },
                 {
@@ -386,12 +348,12 @@ export const questionnairesData: Record<string, Questionnaire> = {
                     type: 'table',
                     columns: ['Nível Vertebral', 'Presença de Dor', 'Intensidade (0-10)'],
                     rows: [
-                        { id: 't2', label: 'T2', fields: [{ id: 'palp_t2_dor', type: 'checkbox' }, { id: 'palp_t2_int', type: 'number' }] },
-                        { id: 't3', label: 'T3', fields: [{ id: 'palp_t3_dor', type: 'checkbox' }, { id: 'palp_t3_int', type: 'number' }] },
-                        { id: 't4', label: 'T4', fields: [{ id: 'palp_t4_dor', type: 'checkbox' }, { id: 'palp_t4_int', type: 'number' }] },
-                        { id: 't5', label: 'T5', fields: [{ id: 'palp_t5_dor', type: 'checkbox' }, { id: 'palp_t5_int', type: 'number' }] },
-                        { id: 't6', label: 'T6', fields: [{ id: 'palp_t6_dor', type: 'checkbox' }, { id: 'palp_t6_int', type: 'number' }] },
-                        { id: 't7p', label: 'T7', fields: [{ id: 'palp_t7_dor', type: 'checkbox' }, { id: 'palp_t7_int', type: 'number' }] }
+                        { id: 't2', label: 'T2', fields: [{ id: 'palp_t2_dor', type: 'checkbox' }, { id: 'palp_t2_int', type: 'select', options: scores0to10 }] },
+                        { id: 't3', label: 'T3', fields: [{ id: 'palp_t3_dor', type: 'checkbox' }, { id: 'palp_t3_int', type: 'select', options: scores0to10 }] },
+                        { id: 't4', label: 'T4', fields: [{ id: 'palp_t4_dor', type: 'checkbox' }, { id: 'palp_t4_int', type: 'select', options: scores0to10 }] },
+                        { id: 't5', label: 'T5', fields: [{ id: 'palp_t5_dor', type: 'checkbox' }, { id: 'palp_t5_int', type: 'select', options: scores0to10 }] },
+                        { id: 't6', label: 'T6', fields: [{ id: 'palp_t6_dor', type: 'checkbox' }, { id: 'palp_t6_int', type: 'select', options: scores0to10 }] },
+                        { id: 't7p', label: 'T7', fields: [{ id: 'palp_t7_dor', type: 'checkbox' }, { id: 'palp_t7_int', type: 'select', options: scores0to10 }] }
                     ]
                 }
             ],
@@ -631,12 +593,12 @@ export const questionnairesData: Record<string, Questionnaire> = {
                     type: 'table',
                     columns: ['Nível Vertebral', 'Presença de Dor', 'Intensidade (0-10)'],
                     rows: [
-                        { id: 't7p', label: 'T7', fields: [{ id: 'palp_t7_dor', type: 'checkbox' }, { id: 'palp_t7_int', type: 'number' }] },
-                        { id: 't8p', label: 'T8', fields: [{ id: 'palp_t8_dor', type: 'checkbox' }, { id: 'palp_t8_int', type: 'number' }] },
-                        { id: 't9p', label: 'T9', fields: [{ id: 'palp_t9_dor', type: 'checkbox' }, { id: 'palp_t9_int', type: 'number' }] },
-                        { id: 't10p', label: 'T10', fields: [{ id: 'palp_t10_dor', type: 'checkbox' }, { id: 'palp_t10_int', type: 'number' }] },
-                        { id: 't11p', label: 'T11', fields: [{ id: 'palp_t11_dor', type: 'checkbox' }, { id: 'palp_t11_int', type: 'number' }] },
-                        { id: 't12p', label: 'T12', fields: [{ id: 'palp_t12_dor', type: 'checkbox' }, { id: 'palp_t12_int', type: 'number' }] }
+                        { id: 't7p', label: 'T7', fields: [{ id: 'palp_t7_dor', type: 'checkbox' }, { id: 'palp_t7_int', type: 'select', options: scores0to10 }] },
+                        { id: 't8p', label: 'T8', fields: [{ id: 'palp_t8_dor', type: 'checkbox' }, { id: 'palp_t8_int', type: 'select', options: scores0to10 }] },
+                        { id: 't9p', label: 'T9', fields: [{ id: 'palp_t9_dor', type: 'checkbox' }, { id: 'palp_t9_int', type: 'select', options: scores0to10 }] },
+                        { id: 't10p', label: 'T10', fields: [{ id: 'palp_t10_dor', type: 'checkbox' }, { id: 'palp_t10_int', type: 'select', options: scores0to10 }] },
+                        { id: 't11p', label: 'T11', fields: [{ id: 'palp_t11_dor', type: 'checkbox' }, { id: 'palp_t11_int', type: 'select', options: scores0to10 }] },
+                        { id: 't12p', label: 'T12', fields: [{ id: 'palp_t12_dor', type: 'checkbox' }, { id: 'palp_t12_int', type: 'select', options: scores0to10 }] }
                     ]
                 },
                 {
@@ -645,12 +607,12 @@ export const questionnairesData: Record<string, Questionnaire> = {
                     type: 'table',
                     columns: ['Nível Vertebral', 'Presença de Dor', 'Intensidade (0-10)'],
                     rows: [
-                        { id: 'l1p', label: 'L1', fields: [{ id: 'palp_l1_dor', type: 'checkbox' }, { id: 'palp_l1_int', type: 'number' }] },
-                        { id: 'l2p', label: 'L2', fields: [{ id: 'palp_l2_dor', type: 'checkbox' }, { id: 'palp_l2_int', type: 'number' }] },
-                        { id: 'l3p', label: 'L3', fields: [{ id: 'palp_l3_dor', type: 'checkbox' }, { id: 'palp_l3_int', type: 'number' }] },
-                        { id: 'l4p', label: 'L4', fields: [{ id: 'palp_l4_dor', type: 'checkbox' }, { id: 'palp_l4_int', type: 'number' }] },
-                        { id: 'l5p', label: 'L5', fields: [{ id: 'palp_l5_dor', type: 'checkbox' }, { id: 'palp_l5_int', type: 'number' }] },
-                        { id: 'sacrop', label: 'Sacro', fields: [{ id: 'palp_sacro_dor', type: 'checkbox' }, { id: 'palp_sacro_int', type: 'number' }] }
+                        { id: 'l1p', label: 'L1', fields: [{ id: 'palp_l1_dor', type: 'checkbox' }, { id: 'palp_l1_int', type: 'select', options: scores0to10 }] },
+                        { id: 'l2p', label: 'L2', fields: [{ id: 'palp_l2_dor', type: 'checkbox' }, { id: 'palp_l2_int', type: 'select', options: scores0to10 }] },
+                        { id: 'l3p', label: 'L3', fields: [{ id: 'palp_l3_dor', type: 'checkbox' }, { id: 'palp_l3_int', type: 'select', options: scores0to10 }] },
+                        { id: 'l4p', label: 'L4', fields: [{ id: 'palp_l4_dor', type: 'checkbox' }, { id: 'palp_l4_int', type: 'select', options: scores0to10 }] },
+                        { id: 'l5p', label: 'L5', fields: [{ id: 'palp_l5_dor', type: 'checkbox' }, { id: 'palp_l5_int', type: 'select', options: scores0to10 }] },
+                        { id: 'sacrop', label: 'Sacro', fields: [{ id: 'palp_sacro_dor', type: 'checkbox' }, { id: 'palp_sacro_int', type: 'select', options: scores0to10 }] }
                     ]
                 }
             ],
@@ -715,11 +677,11 @@ export const questionnairesData: Record<string, Questionnaire> = {
             id: 'forca_quadril_lombar',
             title: 'Dinamometria Muscular de Quadril (kgF)',
             type: 'table',
-            columns: ['Movimento', 'Esquerdo', 'Direito', 'DÉFICIT %', 'Resultado'],
+            columns: ['Movimento', 'Esquerdo', 'Resultado', 'Direito', 'Resultado', 'DÉFICIT %'],
             rows: [
-                { id: 'flex_q_forca_lom', label: 'Flexão de Quadril', fields: ['f_flex_q_esq_lom', 'f_flex_q_dir_lom', 'f_flex_q_def_lom', 'f_flex_q_res_lom'] },
-                { id: 'abd_q_forca_lom', label: 'Abdução de Quadril', fields: ['f_abd_q_esq_lom', 'f_abd_q_dir_lom', 'f_abd_q_def_lom', 'f_abd_q_res_lom'] },
-                { id: 'ext_q_forca_lom', label: 'Extensão de Quadril', fields: ['f_ext_q_esq_lom', 'f_ext_q_dir_lom', 'f_ext_q_def_lom', 'f_ext_q_res_lom'] }
+                { id: 'flex_q_forca_lom', label: 'Flexão de Quadril', fields: ['f_flex_q_esq_lom', 'f_flex_q_esq_res_lom', 'f_flex_q_dir_lom', 'f_flex_q_dir_res_lom', 'f_flex_q_def_lom'] },
+                { id: 'abd_q_forca_lom', label: 'Abdução de Quadril', fields: ['f_abd_q_esq_lom', 'f_abd_q_esq_res_lom', 'f_abd_q_dir_lom', 'f_abd_q_dir_res_lom', 'f_abd_q_def_lom'] },
+                { id: 'ext_q_forca_lom', label: 'Extensão de Quadril', fields: ['f_ext_q_esq_lom', 'f_ext_q_esq_res_lom', 'f_ext_q_dir_lom', 'f_ext_q_dir_res_lom', 'f_ext_q_def_lom'] }
             ],
             fields: [{ id: 'forca_quadril_obs', label: 'OBSERVAÇÕES', type: 'textarea' }]
         },

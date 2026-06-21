@@ -1,7 +1,7 @@
 "use client";
 
 import Bar from "./Bar";
-import { getMuscleStrengthReference } from "@/lab/utils/clinicalThresholds";
+import { getMuscleStrengthReference, getEnduranceThreshold } from "@/lab/utils/clinicalThresholds";
 
 interface MuscleStrengthRowChartProps {
     row: any;
@@ -13,6 +13,7 @@ interface MuscleStrengthRowChartProps {
     age: number;
     activityLevel: string;
     isPrint?: boolean;
+    unit?: string;
 }
 
 const MuscleStrengthRowChart = ({
@@ -24,12 +25,18 @@ const MuscleStrengthRowChart = ({
     gender,
     age,
     activityLevel,
-    isPrint = false
+    isPrint = false,
+    unit = 'kgf'
 }: MuscleStrengthRowChartProps) => {
     
-    // 1. Identify Field IDs for this row (Esq, Dir)
-    const fieldE = typeof row.fields[0] === 'string' ? row.fields[0] : row.fields[0]?.id;
-    const fieldD = typeof row.fields[1] === 'string' ? row.fields[1] : row.fields[1]?.id;
+    // 1. Identify Field IDs for this row (Esq, Dir) dynamically
+    const fieldE = row?.fields?.map((f: any) => typeof f === 'string' ? f : f?.id)
+        .find((fid: string) => fid && fid.toLowerCase().includes('esq') && !fid.toLowerCase().includes('res')) || 
+        (typeof row?.fields?.[0] === 'string' ? row.fields[0] : row?.fields?.[0]?.id);
+        
+    const fieldD = row?.fields?.map((f: any) => typeof f === 'string' ? f : f?.id)
+        .find((fid: string) => fid && fid.toLowerCase().includes('dir') && !fid.toLowerCase().includes('res')) ||
+        (typeof row?.fields?.[1] === 'string' ? row.fields[1] : row?.fields?.[1]?.id);
     
     // 2. Fetch Values
     const parseVal = (v: any) => {
@@ -37,15 +44,18 @@ const MuscleStrengthRowChart = ({
         return parseFloat(String(v).replace(',', '.')) || 0;
     };
 
-    const currE = parseVal(answers[fieldE]);
-    const currD = parseVal(answers[fieldD]);
+    const currE = parseVal(answers?.[fieldE]);
+    const currD = parseVal(answers?.[fieldD]);
 
     // 3. Get Reference
-    const reference = getMuscleStrengthReference(row.id, gender, age, activityLevel);
+    const isPlank = row?.id?.includes('prancha');
+    const reference = isPlank 
+        ? getEnduranceThreshold({ testId: row.id, gender, age, activityLevel })
+        : getMuscleStrengthReference(row?.id || '', gender, age, activityLevel);
 
     // 4. Get Most Recent Previous Assessment
-    const previousAssessment = history
-        .filter(h => h.id !== assessmentId)
+    const previousAssessment = (history || [])
+        .filter(h => h.id !== assessmentId && (parseVal(h.answers?.[fieldE]) > 0 || parseVal(h.answers?.[fieldD]) > 0))
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 
     const prevE = previousAssessment ? parseVal(previousAssessment.answers?.[fieldE]) : 0;
@@ -99,22 +109,22 @@ const MuscleStrengthRowChart = ({
                         border: '1px solid #e2e8f0',
                         whiteSpace: 'nowrap'
                     }}>
-                        Ref: {reference} kgf
+                        Ref: {reference} {unit}
                     </span>
                 </div>
 
                 {/* ALL BARS IN SAME ROW FOR PERFECT ALIGNMENT */}
-                <Bar value={reference} maxValue={maxValue} label="Referência" color="#cbd5e1" unit="kgf" isPrint={isPrint} />
+                <Bar value={reference} maxValue={maxValue} label="Referência" color="#cbd5e1" unit={unit} isPrint={isPrint} />
 
                 <div style={{ height: '140px', width: '2px', backgroundColor: '#f1f5f9', marginBottom: '40px' }} />
 
-                {prevE > 0 && <Bar value={prevE} maxValue={maxValue} label={prevDate} subLabel="Esquerda Ant." color="#fee2e2" unit="kgf" isPrint={isPrint} />}
-                <Bar value={currE} maxValue={maxValue} label={assessmentDate} subLabel="Esquerda" color="var(--primary)" unit="kgf" isPrint={isPrint} />
+                {prevE > 0 && <Bar value={prevE} maxValue={maxValue} label={prevDate} subLabel="Esquerda Ant." color="#fee2e2" unit={unit} isPrint={isPrint} />}
+                <Bar value={currE} maxValue={maxValue} label={assessmentDate} subLabel="Esquerda" color="var(--primary)" unit={unit} isPrint={isPrint} />
 
                 <div style={{ height: '140px', width: '2px', backgroundColor: '#f1f5f9', marginBottom: '40px' }} />
 
-                {prevD > 0 && <Bar value={prevD} maxValue={maxValue} label={prevDate} subLabel="Direita Ant." color="#fecaca" unit="kgf" isPrint={isPrint} />}
-                <Bar value={currD} maxValue={maxValue} label={assessmentDate} subLabel="Direita" color="#f87171" unit="kgf" isPrint={isPrint} />
+                {prevD > 0 && <Bar value={prevD} maxValue={maxValue} label={prevDate} subLabel="Direita Ant." color="#fecaca" unit={unit} isPrint={isPrint} />}
+                <Bar value={currD} maxValue={maxValue} label={assessmentDate} subLabel="Direita" color="#f87171" unit={unit} isPrint={isPrint} />
             </div>
             
             <div style={{ 
@@ -128,7 +138,7 @@ const MuscleStrengthRowChart = ({
                 color: 'var(--text-muted)',
                 textTransform: 'uppercase'
             }}>
-                <span>Normativa: {reference} kgf</span>
+                <span>Normativa: {reference} {unit}</span>
                 {previousAssessment && (
                     <span>Evolução desde: {prevDate}</span>
                 )}

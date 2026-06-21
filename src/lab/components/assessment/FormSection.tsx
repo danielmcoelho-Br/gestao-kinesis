@@ -20,9 +20,123 @@ interface FormSectionProps {
     hideTitle?: boolean;
     excludeFields?: string[];
     halfWidth?: boolean; // New prop
+    pageBreakInside?: 'auto' | 'avoid';
 }
 
-const FormSection = memo(({ section, isPrint: overrideIsPrint, hideTitle = false, excludeFields = [], halfWidth = false }: FormSectionProps) => {
+const renderEnduranceCharts = (
+    answers: any,
+    patientAssessments: any[],
+    patientGender: string,
+    patientAge: number,
+    activityLevel: string,
+    isPrint: boolean,
+    assessmentId: string | null,
+    assessmentDate: string
+) => {
+    const profile = getPatientProfileString(patientGender, patientAge, activityLevel);
+    const parseVal = (v: any) => {
+        if (!v && v !== 0) return 0;
+        return parseFloat(String(v).replace(',', '.')) || 0;
+    };
+    
+    const renderedCharts = [];
+    
+    // 1. Flexao 60
+    const flexao_60_val = parseVal(answers['flexao_60']);
+    const flexao_60_ref = getEnduranceThreshold({ testId: 'flexao_60', gender: patientGender, age: patientAge, activityLevel });
+    if (flexao_60_ref || patientAssessments.length > 1) {
+        renderedCharts.push(
+            <div key="container-endur-flexao_60" style={{ width: '100%', minWidth: 0 }}>
+                <AssessmentHistoryChart 
+                    fieldId="flexao_60"
+                    currentValue={flexao_60_val}
+                    chartTitle={`Flexão a 60º (${profile}: ${flexao_60_ref}s)`}
+                    unit="s"
+                    history={patientAssessments}
+                    isPrint={isPrint}
+                    assessmentId={assessmentId}
+                    referenceValue={flexao_60_ref}
+                    referenceLabel="Normalidade"
+                    isEndurance={true}
+                />
+            </div>
+        );
+    }
+
+    // 2. Sorensen
+    const sorensen_val = parseVal(answers['sorensen']);
+    const sorensen_ref = getEnduranceThreshold({ testId: 'sorensen', gender: patientGender, age: patientAge, activityLevel });
+    if (sorensen_ref || patientAssessments.length > 1) {
+        renderedCharts.push(
+            <div key="container-endur-sorensen" style={{ width: '100%', minWidth: 0 }}>
+                <AssessmentHistoryChart 
+                    fieldId="sorensen"
+                    currentValue={sorensen_val}
+                    chartTitle={`Teste de Sorensen (${profile}: ${sorensen_ref}s)`}
+                    unit="s"
+                    history={patientAssessments}
+                    isPrint={isPrint}
+                    assessmentId={assessmentId}
+                    referenceValue={sorensen_ref}
+                    referenceLabel="Normalidade"
+                    isEndurance={true}
+                />
+            </div>
+        );
+    }
+
+    // 3. Prancha
+    const prancha_val = parseVal(answers['prancha']);
+    const prancha_ref = getEnduranceThreshold({ testId: 'prancha', gender: patientGender, age: patientAge, activityLevel });
+    if (prancha_ref || patientAssessments.length > 1) {
+        renderedCharts.push(
+            <div key="container-endur-prancha" style={{ width: '100%', minWidth: 0 }}>
+                <AssessmentHistoryChart 
+                    fieldId="prancha"
+                    currentValue={prancha_val}
+                    chartTitle={`Prancha - Estabilidade de CORE (${profile}: ${prancha_ref}s)`}
+                    unit="s"
+                    history={patientAssessments}
+                    isPrint={isPrint}
+                    assessmentId={assessmentId}
+                    referenceValue={prancha_ref}
+                    referenceLabel="Normalidade"
+                    isEndurance={true}
+                />
+            </div>
+        );
+    }
+
+    // 4. Pranchas Laterais (Esq vs Dir comparative)
+    const prancha_esq_val = parseVal(answers['prancha_lat_esq']);
+    const prancha_dir_val = parseVal(answers['prancha_lat_dir']);
+    if (prancha_esq_val > 0 || prancha_dir_val > 0) {
+        renderedCharts.push(
+            <div key="container-endur-prancha-lateral" style={{ width: '100%', minWidth: 0 }}>
+                <MuscleStrengthRowChart 
+                    row={{
+                        id: 'prancha_lat_esq',
+                        label: 'Prancha Lateral (Esq vs Dir)',
+                        fields: ['prancha_lat_esq', 'prancha_lat_dir']
+                    }}
+                    answers={answers}
+                    history={patientAssessments}
+                    assessmentId={assessmentId}
+                    assessmentDate={assessmentDate}
+                    gender={patientGender}
+                    age={patientAge}
+                    activityLevel={activityLevel}
+                    isPrint={isPrint}
+                    unit="s"
+                />
+            </div>
+        );
+    }
+    
+    return renderedCharts;
+};
+
+const FormSection = memo(({ section, isPrint: overrideIsPrint, hideTitle = false, excludeFields = [], halfWidth = false, pageBreakInside }: FormSectionProps) => {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -38,7 +152,7 @@ const FormSection = memo(({ section, isPrint: overrideIsPrint, hideTitle = false
     const onAnalyzeImage = state.handleAnalyzeImage;
     const patientGender = state.patientGender;
     const patientAge = state.patientAge;
-    const patientAssessments = state.patientAssessments;
+    const patientAssessments = state.patientAssessments || [];
     const assessmentDate = state.assessmentDate;
     
     const isPrint = overrideIsPrint !== undefined ? overrideIsPrint : state.isPrint;
@@ -78,7 +192,7 @@ const FormSection = memo(({ section, isPrint: overrideIsPrint, hideTitle = false
             initial={isPrint ? {} : { opacity: 0, x: 20 }}
             animate={isPrint ? {} : { opacity: 1, x: 0 }}
             className="section-container"
-            style={{ marginBottom: isPrint ? (hideTitle ? '0.5rem' : '1.25rem') : (hideTitle ? '1rem' : '2.5rem'), pageBreakInside: 'avoid' }}
+            style={{ marginBottom: isPrint ? (hideTitle ? '0.5rem' : '1.25rem') : (hideTitle ? '1rem' : '2.5rem'), pageBreakInside: pageBreakInside || 'avoid' }}
         >
             {!hideTitle && (
                 <>
@@ -344,52 +458,56 @@ const FormSection = memo(({ section, isPrint: overrideIsPrint, hideTitle = false
                                     />
                                 ))
                             ) : (
-                                // STANDARD HISTORY CHARTS
-                                section.rows?.map((row: TableRow) => row.fields.map((f, fidx: number) => {
-                                    const fid = typeof f === "string" ? f : (f as any).id;
-                                    if (excludeFields.includes(fid)) return null;
-                                    
-                                    // Render ONLY charts here, not individual fields (DataTable handles the inputs)
-                                    if (fid.endsWith('_res') || fid.endsWith('_status') || fid.endsWith('_obs')) return null;
+                                // STANDARD HISTORY CHARTS OR ENDURANCE GROUPED CHARTS
+                                section.id === 'testes_resistencia' ? (
+                                    renderEnduranceCharts(answers, patientAssessments, patientGender, patientAge, state.patientActivityLevel, isPrint, assessmentId, assessmentDate)
+                                ) : (
+                                    section.rows?.map((row: TableRow) => row.fields.map((f, fidx: number) => {
+                                        const fid = typeof f === "string" ? f : (f as any).id;
+                                        if (excludeFields.includes(fid)) return null;
+                                        
+                                        // Render ONLY charts here, not individual fields (DataTable handles the inputs)
+                                        if (fid.endsWith('_res') || fid.endsWith('_status') || fid.endsWith('_obs')) return null;
 
-                                    const colLabel = typeof section.columns?.[fidx + 1] === "string" 
-                                        ? section.columns?.[fidx + 1] 
-                                        : (section.columns?.[fidx + 1] as any)?.label || "";
-                                    
-                                    const referenceValue = ['resist_flexora', 'resist_extensora', 'flexao_60', 'sorensen'].includes(fid) 
-                                        ? getEnduranceThreshold({ testId: fid, gender: state.patientGender, age: state.patientAge, activityLevel: state.patientActivityLevel })
-                                        : undefined;
+                                        const colLabel = typeof section.columns?.[fidx + 1] === "string" 
+                                            ? section.columns?.[fidx + 1] 
+                                            : (section.columns?.[fidx + 1] as any)?.label || "";
+                                        
+                                        const referenceValue = ['resist_flexora', 'resist_extensora', 'flexao_60', 'sorensen'].includes(fid) 
+                                            ? getEnduranceThreshold({ testId: fid, gender: state.patientGender, age: state.patientAge, activityLevel: state.patientActivityLevel })
+                                            : undefined;
 
-                                    const isClinicalTest = ['resist_flexora', 'resist_extensora', 'flexao_60', 'sorensen'].includes(fid);
-                                    const isTime = colLabel.includes("Tempo") || colLabel.includes("segundos");
-                                    const isValue = colLabel.includes("Valor") || colLabel.includes("Tentativa");
-                                    const isScore = fid.endsWith("_score");
+                                        const isClinicalTest = ['resist_flexora', 'resist_extensora', 'flexao_60', 'sorensen'].includes(fid);
+                                        const isTime = colLabel.includes("Tempo") || colLabel.includes("segundos");
+                                        const isValue = colLabel.includes("Valor") || colLabel.includes("Tentativa");
+                                        const isScore = fid.endsWith("_score");
 
-                                    if ((isScore || isClinicalTest || isTime || isValue) && (patientAssessments.length > 1 || referenceValue)) {
-                                        const profile = getPatientProfileString(state.patientGender, state.patientAge, state.patientActivityLevel);
-                                        const chartTitle = isClinicalTest 
-                                            ? `${row.label.replace('(Ref: Normativa)', '').trim()} (${profile}: ${referenceValue}s)`
-                                            : `Evolução: ${row.label} (${colLabel})`;
+                                        if ((isScore || isClinicalTest || isTime || isValue) && (patientAssessments.length > 1 || referenceValue)) {
+                                            const profile = getPatientProfileString(state.patientGender, state.patientAge, state.patientActivityLevel);
+                                            const chartTitle = isClinicalTest 
+                                                ? `${row.label.replace('(Ref: Normativa)', '').trim()} (${profile}: ${referenceValue}s)`
+                                                : `Evolução: ${row.label} (${colLabel})`;
 
-                                        return (
-                                            <AssessmentHistoryChart 
-                                                key={`hist-${fid}`}
-                                                fieldId={fid}
-                                                currentValue={answers[fid] || 0}
-                                                chartTitle={chartTitle}
-                                                unit={isScore ? "%" : ((section.id.includes("forca") || section.id.includes("dinamometria")) && !isClinicalTest ? "kgF" : (isTime ? "s" : "un"))}
-                                                history={patientAssessments}
-                                                isPrint={isPrint}
-                                                assessmentId={assessmentId}
-                                                referenceValue={referenceValue}
-                                                referenceLabel="Normalidade"
-                                                isEndurance={isClinicalTest}
-                                                useScoreData={isScore}
-                                            />
-                                        );
-                                    }
-                                    return null;
-                                }))
+                                            return (
+                                                <AssessmentHistoryChart 
+                                                    key={`hist-${fid}`}
+                                                    fieldId={fid}
+                                                    currentValue={answers[fid] || 0}
+                                                    chartTitle={chartTitle}
+                                                    unit={isScore ? "%" : ((section.id.includes("forca") || section.id.includes("dinamometria")) && !isClinicalTest ? "kgF" : (isTime ? "s" : "un"))}
+                                                    history={patientAssessments}
+                                                    isPrint={isPrint}
+                                                    assessmentId={assessmentId}
+                                                    referenceValue={referenceValue}
+                                                    referenceLabel="Normalidade"
+                                                    isEndurance={isClinicalTest}
+                                                    useScoreData={isScore}
+                                                />
+                                            );
+                                        }
+                                        return null;
+                                    }))
+                                )
                             )}
                         </div>
                     )}

@@ -150,9 +150,10 @@ export default function PrintSummaryView({
 
                 if (isClinicalAssessment) {
                     const isMultiTable = section.type === 'multi-table';
-                    const FULL_WIDTH_SECTIONS = [
+                     const FULL_WIDTH_SECTIONS = [
                         'anamnese', 
                         'forca',
+                        'forca_quadril_lombar',
                         'testes_resistencia', 
                         'resistencia_tronco', 
                         'testes_especiais_resistidos',
@@ -173,7 +174,9 @@ export default function PrintSummaryView({
                     // idx 0 (Header) groups with idx 1 if idx 1 is not a mandated full-width section.
                     const firstItem = arr[0] as Section;
                     const secondItem = arr[1] as Section;
-                    const isDashboardSecondary = secondItem && !FULL_WIDTH_SECTIONS.includes(secondItem.id);
+                    const isDashboardSecondary = secondItem && 
+                        !FULL_WIDTH_SECTIONS.includes(secondItem.id) && 
+                        !(type === 'afLombar' && secondItem.id === 'exame_neurologico');
 
                     if (idx === 0) {
                         if (isDashboardSecondary) {
@@ -232,25 +235,27 @@ export default function PrintSummaryView({
                                 {anamneseField && <FormField field={anamneseField} isPrint={true} />}
                             </div>
 
-                            {/* Grid Row (48% / 48%) */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1.5rem', width: '100%' }}>
+                            {/* Flex Row (48% / 48%) */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1.5rem', width: '100%' }}>
                                 {/* Left Column: EVA + Secondary Section (Metrics) */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '48%' }}>
                                     <div style={{ padding: '0.75rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
                                         <h4 style={{ fontSize: '0.8rem', fontWeight: '800', marginBottom: '0.25rem', color: 'var(--secondary)' }}>INTESIDADE DA DOR (EVA)</h4>
                                         {evaField && <FormField field={{ ...evaField, hideLabel: true }} isPrint={true} />}
                                     </div>
 
-                                    <FormSection 
-                                        section={section.secondarySection} 
-                                        isPrint={true} 
-                                        hideTitle={false}
-                                        halfWidth={true}
-                                    />
+                                     {section.secondarySection && (
+                                         <FormSection 
+                                             section={section.secondarySection} 
+                                             isPrint={true} 
+                                             hideTitle={false}
+                                             halfWidth={true}
+                                         />
+                                     )}
                                 </div>
 
                                 {/* Right Column: Body Map */}
-                                <div style={{ padding: '1rem', backgroundColor: '#fff', borderRadius: '0.75rem', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <div style={{ padding: '1rem', backgroundColor: '#fff', borderRadius: '0.75rem', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '48%' }}>
                                     <h4 style={{ width: '100%', fontSize: '0.8rem', fontWeight: '800', marginBottom: '1.5rem', color: 'var(--secondary)', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.25rem' }}>MAPA DE DOR</h4>
                                     {mapField && (
                                         <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
@@ -277,9 +282,14 @@ export default function PrintSummaryView({
                     );
                 }
 
+                const pageBreak = (type === 'afLombar' && (item as Section).id === 'exame_neurologico') ? 'auto' : 'avoid';
                 return (
-                    <div key={`${(item as Section).id}_${idx}`} style={{ marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
-                        <FormSection section={item as Section} isPrint={true} />
+                    <div key={`${(item as Section).id}_${idx}`} style={{ marginBottom: '1.5rem', pageBreakInside: pageBreak }}>
+                        <FormSection 
+                            section={item as Section} 
+                            isPrint={true} 
+                            pageBreakInside={pageBreak}
+                        />
                     </div>
                 );
             })

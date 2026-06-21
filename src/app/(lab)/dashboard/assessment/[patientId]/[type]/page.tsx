@@ -46,6 +46,7 @@ const YbtModal = dynamic(() => import("@/lab/components/assessment/modals/YbtMod
 const DraftModal = dynamic(() => import("@/lab/components/assessment/modals/DraftModal"), { ssr: false });
 const ExitModal = dynamic(() => import("@/lab/components/assessment/modals/ExitModal"), { ssr: false });
 const ImageZoomModal = dynamic(() => import("@/lab/components/assessment/modals/ImageZoomModal"), { ssr: false });
+const MyelopathyModal = dynamic(() => import("@/lab/components/assessment/modals/MyelopathyModal"), { ssr: false });
 
 const isValidUUID = (id: string) => {
   if (typeof id !== "string") return false;
@@ -71,6 +72,45 @@ function AssessmentContent() {
     router,
     searchParams
   });
+
+  const [pendingNavIdx, setPendingNavIdx] = useState<number | null>(null);
+  const [showMyelopathyModal, setShowMyelopathyModal] = useState(false);
+
+  const customSetCurrentIdx = useCallback((value: number | ((prev: number) => number)) => {
+      const nextIdx = typeof value === 'function' ? value(state.currentIdx) : value;
+      
+      const items = questionnaire?.sections || questionnaire?.questions || [];
+      const currentItem = items[state.currentIdx];
+      
+      if (nextIdx > state.currentIdx && (type === 'afCervical' || type === 'afLombar') && currentItem?.id === 'exame_neurologico') {
+          const reflexFields = type === 'afCervical' 
+              ? ['ref_bic_esq', 'ref_bic_dir', 'ref_est_esq', 'ref_est_dir', 'ref_tri_esq', 'ref_tri_dir']
+              : ['ref_pat_esq', 'ref_pat_dir', 'ref_aqui_esq', 'ref_aqui_dir'];
+          
+          const hasHyperreflexia = reflexFields.some(f => state.answers[f] === 'Hiperreflexia');
+          
+          if (hasHyperreflexia) {
+              const specialFields = type === 'afCervical'
+                  ? ['hoffmann_esq', 'hoffmann_dir', 'babinski_esq', 'babinski_dir', 'clonus_esq', 'clonus_dir', 'claudicacao_esq', 'claudicacao_dir']
+                  : ['hoffmann_esq_l', 'hoffmann_dir_l', 'babinski_esq_l', 'babinski_dir_l', 'clonus_esq_l', 'clonus_dir_l', 'claudicacao_esq_l', 'claudicacao_dir_l'];
+              
+              const hasSpecialFilled = specialFields.some(f => state.answers[f] === true);
+              
+              if (!hasSpecialFilled) {
+                  setPendingNavIdx(nextIdx);
+                  setShowMyelopathyModal(true);
+                  return;
+              }
+          }
+      }
+      
+      state.setCurrentIdx(nextIdx);
+  }, [state.currentIdx, state.answers, type, questionnaire, state.setCurrentIdx]);
+
+  const stateWithCustomNav = {
+      ...state,
+      setCurrentIdx: customSetCurrentIdx
+  };
 
   const {
     currentIdx, setCurrentIdx,
@@ -109,9 +149,7 @@ function AssessmentContent() {
     confirmExitDiscard,
     confirmExitSave,
     showExitModal
-  } = state;
-
-  const [showMyelopathyModal, setShowMyelopathyModal] = useState(false);
+  } = stateWithCustomNav;
 
   if (!patientId) {
     return (
@@ -160,7 +198,7 @@ function AssessmentContent() {
     };
 
     return (
-      <AssessmentProvider state={state}>
+      <AssessmentProvider state={stateWithCustomNav}>
       <div style={{ minHeight: '100vh', padding: '2rem', backgroundColor: 'white' }}>
         <PrintSummaryView 
             forScreen={true}
@@ -212,7 +250,7 @@ function AssessmentContent() {
   }
 
   return (
-    <AssessmentProvider state={state}>
+    <AssessmentProvider state={stateWithCustomNav}>
     <div className="assessment-page">
       <div className="background-gradient" />
             <Header />
@@ -403,27 +441,6 @@ function AssessmentContent() {
                             {currentItem.id !== 'finish' && currentIdx < items.length - 1 && (
                                 <button
                                     onClick={() => {
-                                        if ((type === 'afCervical' || type === 'afLombar') && items[currentIdx]?.id === 'exame_neurologico') {
-                                            const reflexFields = type === 'afCervical' 
-                                                ? ['ref_bic_esq', 'ref_bic_dir', 'ref_est_esq', 'ref_est_dir', 'ref_tri_esq', 'ref_tri_dir']
-                                                : ['ref_pat_esq', 'ref_pat_dir', 'ref_aqui_esq', 'ref_aqui_dir'];
-                                            
-                                            const hasHyperreflexia = reflexFields.some(f => answers[f] === 'Hiperreflexia');
-                                            
-                                            if (hasHyperreflexia) {
-                                                const specialFields = type === 'afCervical'
-                                                    ? ['hoffmann_esq', 'hoffmann_dir', 'babinski_esq', 'babinski_dir', 'clonus_esq', 'clonus_dir', 'claudicacao_esq', 'claudicacao_dir']
-                                                    : ['hoffmann_esq_l', 'hoffmann_dir_l', 'babinski_esq_l', 'babinski_dir_l', 'clonus_esq_l', 'clonus_dir_l', 'claudicacao_esq_l', 'claudicacao_dir_l'];
-                                                
-                                                const hasSpecialFilled = specialFields.some(f => answers[f] === true);
-                                                
-                                                if (!hasSpecialFilled) {
-                                                    setShowMyelopathyModal(true);
-                                                    return;
-                                                }
-                                            }
-                                        }
-
                                         setCurrentIdx(currentIdx + 1);
                                         window.scrollTo({ top: 0, behavior: 'smooth' });
                                     }}
@@ -519,6 +536,22 @@ function AssessmentContent() {
                 setYbtValues={setYbtValues}
                 onClose={() => setYbtModal(false)}
                 onSave={(fieldId, val) => handleInputChange(fieldId, val)}
+            />
+        )}
+
+        {showMyelopathyModal && (
+            <MyelopathyModal 
+                onConfirmNegative={() => {
+                    setShowMyelopathyModal(false);
+                    if (pendingNavIdx !== null) {
+                        state.setCurrentIdx(pendingNavIdx);
+                        setPendingNavIdx(null);
+                    }
+                }}
+                onCancel={() => {
+                    setShowMyelopathyModal(false);
+                    setPendingNavIdx(null);
+                }}
             />
         )}
       </AnimatePresence>

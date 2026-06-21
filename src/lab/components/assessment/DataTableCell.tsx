@@ -46,7 +46,7 @@ const DataTableCell = memo(({
         (max !== undefined && numValue > max)
     );
 
-    if (fieldId.endsWith('_res') || fieldId.endsWith('_res_esq') || fieldId.endsWith('_res_dir') || fieldId.endsWith('_res_e') || fieldId.endsWith('_res_d') || fieldId.endsWith('_result_esq') || fieldId.endsWith('_result_dir') || fieldId.endsWith('_res_global') || fieldId.endsWith('_class') || fieldId.endsWith('_status') || fieldId.endsWith('_deficit_res') || fieldId.includes('ratio')) {
+    if (fieldId.endsWith('_res') || fieldId.endsWith('_res_esq') || fieldId.endsWith('_res_dir') || fieldId.endsWith('_res_e') || fieldId.endsWith('_res_d') || fieldId.endsWith('_result_esq') || fieldId.endsWith('_result_dir') || fieldId.endsWith('_res_global') || fieldId.endsWith('_class') || fieldId.endsWith('_status') || fieldId.endsWith('_deficit_res') || fieldId.includes('ratio') || fieldId.includes('_res_lom')) {
         let displayValue = value || "-";
         
         // Dynamic status for ratio if missing

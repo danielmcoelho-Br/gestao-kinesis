@@ -763,17 +763,31 @@ export function useAssessmentState({
                 const hipForceFields = ['f_flex_q', 'f_abd_q', 'f_ext_q'];
                 if (hipForceFields.some(f => fieldId.startsWith(f)) && fieldId.endsWith('_lom')) {
                     const baseField = hipForceFields.find(f => fieldId.startsWith(f));
-                    const esq = parseFloat(String(newAnswers[`${baseField}_esq_lom`]).replace(',', '.'));
-                    const dir = parseFloat(String(newAnswers[`${baseField}_dir_lom`]).replace(',', '.'));
-                    
-                    if (!isNaN(esq) && !isNaN(dir) && (esq > 0 || dir > 0)) {
-                        const maxVal = Math.max(esq, dir);
-                        const deficit = Math.round(Math.abs((esq - dir) / maxVal) * 100);
-                        newAnswers[`${baseField}_def_lom`] = `${deficit}%`;
-                        newAnswers[`${baseField}_res_lom`] = deficit < 15 ? 'Normal' : 'Alterado';
-                    } else {
-                        newAnswers[`${baseField}_def_lom`] = '';
-                        newAnswers[`${baseField}_res_lom`] = '';
+                    if (baseField) {
+                        const esq = parseFloat(String(newAnswers[`${baseField}_esq_lom`]).replace(',', '.'));
+                        const dir = parseFloat(String(newAnswers[`${baseField}_dir_lom`]).replace(',', '.'));
+                        
+                        const ref = getMuscleStrengthReference(baseField, patientGender, patientAge, patientActivityLevel);
+                        
+                        if (!isNaN(esq) && esq > 0) {
+                            newAnswers[`${baseField}_esq_res_lom`] = esq >= ref ? 'Normal' : 'Reduzido';
+                        } else {
+                            newAnswers[`${baseField}_esq_res_lom`] = '';
+                        }
+                        
+                        if (!isNaN(dir) && dir > 0) {
+                            newAnswers[`${baseField}_dir_res_lom`] = dir >= ref ? 'Normal' : 'Reduzido';
+                        } else {
+                            newAnswers[`${baseField}_dir_res_lom`] = '';
+                        }
+
+                        if (!isNaN(esq) && !isNaN(dir) && (esq > 0 || dir > 0)) {
+                            const maxVal = Math.max(esq, dir);
+                            const deficit = Math.round(Math.abs((esq - dir) / maxVal) * 100);
+                            newAnswers[`${baseField}_def_lom`] = `${deficit}%`;
+                        } else {
+                            newAnswers[`${baseField}_def_lom`] = '';
+                        }
                     }
                 }
             }
