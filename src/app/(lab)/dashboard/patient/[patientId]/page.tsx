@@ -121,6 +121,8 @@ export default function PatientHistoryPage() {
   const [recognition, setRecognition] = useState<any>(null);
   const evolutionTextareaRef = useRef<HTMLTextAreaElement>(null);
   const initialContentRef = useRef("");
+  const isRecordingRef = useRef(false);
+  const latestContentRef = useRef("");
 
   // Integration State
   const [diaryLogs, setDiaryLogs] = useState<any[]>([]);
@@ -374,7 +376,8 @@ export default function PatientHistoryPage() {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         const rec = new SpeechRecognition();
-        rec.continuous = true;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        rec.continuous = !isMobile;
         rec.interimResults = true;
         rec.lang = 'pt-BR';
 
@@ -403,16 +406,31 @@ export default function PatientHistoryPage() {
           }
           
           setEvolutionContent(newContent);
+          latestContentRef.current = newContent;
         };
 
         rec.onerror = (event: any) => {
           console.error("Speech recognition error", event);
+          isRecordingRef.current = false;
           setIsRecording(false);
           toast.error("Erro na gravação: " + event.error);
         };
 
         rec.onend = () => {
-          setIsRecording(false);
+          if (isRecordingRef.current) {
+            initialContentRef.current = latestContentRef.current;
+            setTimeout(() => {
+              if (isRecordingRef.current) {
+                try {
+                  rec.start();
+                } catch (e) {
+                  console.error("Erro ao reiniciar gravação:", e);
+                }
+              }
+            }, 100);
+          } else {
+            setIsRecording(false);
+          }
         };
 
         setRecognition(rec);
@@ -488,12 +506,15 @@ export default function PatientHistoryPage() {
     }
 
     if (isRecording) {
+      isRecordingRef.current = false;
       recognition.stop();
       setIsRecording(false);
       toast.success("Gravação por voz pausada.");
     } else {
       try {
         initialContentRef.current = evolutionContent;
+        latestContentRef.current = evolutionContent;
+        isRecordingRef.current = true;
         recognition.start();
         setIsRecording(true);
         toast.success("Microfone ativado! Fale para transcrever.");
@@ -1503,7 +1524,9 @@ export default function PatientHistoryPage() {
                       onChange={(e) => {
                         setEvolutionContent(e.target.value);
                         initialContentRef.current = e.target.value;
+                        latestContentRef.current = e.target.value;
                         if (isRecording && recognition) {
+                          isRecordingRef.current = false;
                           recognition.stop();
                           setIsRecording(false);
                           toast.info("Gravação de voz pausada devido à digitação manual.");
