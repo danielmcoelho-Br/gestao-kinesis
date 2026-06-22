@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
 import { 
   Users, 
@@ -48,6 +48,8 @@ const months = [
 
 const libraries: ("visualization" | "places" | "drawing" | "geometry")[] = ["visualization"];
 
+const kinesisLocation = { lat: -21.1969, lng: -47.8105 };
+
 export default function PacientesPage() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
   const [data, setData] = useState<PatientProfileResponse | null>(null);
@@ -58,6 +60,37 @@ export default function PacientesPage() {
   const [inactiveData, setInactiveData] = useState<{ inactivePatients: any[], feedbacks: any[] } | null>(null);
   const [loadingInactive, setLoadingInactive] = useState(false);
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
+
+  // Referências e estado para o mapa do Leaflet
+  const leafletContainerRef = useRef<HTMLDivElement>(null);
+  const leafletMapInstanceRef = useRef<any>(null);
+  const [leafletLoaded, setLeafletLoaded] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    libraries: libraries
+  });
+
+  const isMapApiReady = useMemo(() => {
+    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
+  }, [isLoaded]);
+
+  const isVisualizationLoaded = useMemo(() => {
+    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps?.visualization?.HeatmapLayer;
+  }, [isLoaded]);
+
+  const heatmapPoints = useMemo(() => {
+    if (isMapApiReady && data?.stats?.heatmapData && (window as any).google?.maps?.LatLng) {
+      try {
+        return data.stats.heatmapData.map((p) => new google.maps.LatLng(p.lat, p.lng));
+      } catch (e) {
+        console.error("Erro ao instanciar google.maps.LatLng:", e);
+        return [];
+      }
+    }
+    return [];
+  }, [isMapApiReady, data]);
   
   // Novos estados para filtro de Fisioterapeuta e Alta
   const [professionals, setProfessionals] = useState<any[]>([]);
@@ -147,6 +180,119 @@ export default function PacientesPage() {
     }).sort((a, b) => b.totalCases - a.totalCases);
   };
 
+  useEffect(() => {
+    if (activeView !== 'map' || isMapApiReady) {
+      if (leafletMapInstanceRef.current) {
+        leafletMapInstanceRef.current.remove();
+        leafletMapInstanceRef.current = null;
+      }
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadLeaflet = async () => {
+      if ((window as any).L) {
+        if (isMounted) setLeafletLoaded(true);
+        return;
+      }
+
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+      }
+
+      if (!document.getElementById("leaflet-js")) {
+        const script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.async = true;
+        script.onload = () => {
+          if (isMounted) setLeafletLoaded(true);
+        };
+        script.onerror = () => {
+          console.error("Erro ao carregar script do Leaflet.");
+        };
+        document.body.appendChild(script);
+      } else {
+        const checkL = setInterval(() => {
+          if ((window as any).L) {
+            clearInterval(checkL);
+            if (isMounted) setLeafletLoaded(true);
+          }
+        }, 100);
+      }
+    };
+
+    loadLeaflet();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeView, isMapApiReady]);
+
+  useEffect(() => {
+    if (!leafletLoaded || activeView !== 'map' || isMapApiReady || !leafletContainerRef.current) {
+      return;
+    }
+
+    const L = (window as any).L;
+    if (!L) return;
+
+    if (leafletMapInstanceRef.current) {
+      leafletMapInstanceRef.current.remove();
+      leafletMapInstanceRef.current = null;
+    }
+
+    const map = L.map(leafletContainerRef.current).setView(
+      [kinesisLocation.lat, kinesisLocation.lng],
+      14
+    );
+    leafletMapInstanceRef.current = map;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    const defaultIcon = L.icon({
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
+    L.marker([kinesisLocation.lat, kinesisLocation.lng], { icon: defaultIcon })
+      .addTo(map)
+      .bindPopup('<strong>Clínica Kinesis</strong><br/>Centro de Atendimento')
+      .openPopup();
+
+    if (data?.stats?.heatmapData && Array.isArray(data.stats.heatmapData)) {
+      data.stats.heatmapData.forEach((point: { lat: number, lng: number }) => {
+        if (point.lat && point.lng) {
+          L.circle([point.lat, point.lng], {
+            color: 'red',
+            fillColor: '#f03',
+            fillOpacity: 0.2,
+            radius: 120,
+            stroke: false
+          }).addTo(map);
+        }
+      });
+    }
+
+    return () => {
+      if (leafletMapInstanceRef.current) {
+        leafletMapInstanceRef.current.remove();
+        leafletMapInstanceRef.current = null;
+      }
+    };
+  }, [leafletLoaded, activeView, isMapApiReady, data]);
 
   const fetchInactivePatients = async () => {
     setLoadingInactive(true);
@@ -317,12 +463,6 @@ export default function PacientesPage() {
     }
   };
 
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-    libraries: libraries
-  });
-
   const runGeocoding = async () => {
     setGeocoding(true);
     try {
@@ -374,26 +514,6 @@ export default function PacientesPage() {
     return { ageData, stats };
   }, [data]);
 
-  const isMapApiReady = useMemo(() => {
-    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
-  }, [isLoaded]);
-
-  const isVisualizationLoaded = useMemo(() => {
-    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps?.visualization?.HeatmapLayer;
-  }, [isLoaded]);
-
-  const heatmapPoints = useMemo(() => {
-    if (isMapApiReady && data?.stats?.heatmapData && (window as any).google?.maps?.LatLng) {
-      try {
-        return data.stats.heatmapData.map((p) => new google.maps.LatLng(p.lat, p.lng));
-      } catch (e) {
-        console.error("Erro ao instanciar google.maps.LatLng:", e);
-        return [];
-      }
-    }
-    return [];
-  }, [isMapApiReady, data]);
-
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column', gap: '20px' }}>
       <div className="loader"></div>
@@ -409,8 +529,6 @@ export default function PacientesPage() {
   const provenanceData = stats.allProvenance;
   const diagnosesData = stats.allDiagnoses || [];
   const segmentsData = stats.allSegments || [];
-
-  const kinesisLocation = { lat: -21.1969, lng: -47.8105 };
 
   return (
     <div className="patient-profile-container" style={{ paddingBottom: '60px' }}>
@@ -1303,12 +1421,18 @@ export default function PacientesPage() {
                   />
                 </GoogleMap>
               ) : (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: '15px', padding: '40px' }}>
-                  <MapIcon size={64} color="var(--text-secondary)" style={{ opacity: 0.3, marginBottom: '10px' }} />
-                  <h4 style={{ color: 'var(--text-secondary)', margin: 0 }}>API do Google Maps Indisponível</h4>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '320px', textAlign: 'center', margin: 0 }}>
-                    Não foi possível carregar a API do Google Maps. Verifique se a variável de ambiente <code style={{ background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> está configurada corretamente.
-                  </p>
+                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                  <div 
+                    ref={leafletContainerRef} 
+                    id="leaflet-map" 
+                    style={{ width: '100%', height: '100%', minHeight: '400px', zIndex: 1 }} 
+                  />
+                  {!leafletLoaded && (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: '15px', padding: '40px', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: '#f8fafc', zIndex: 2 }}>
+                      <Loader2 className="animate-spin" style={{ color: 'var(--primary)' }} size={32} />
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Carregando mapa alternativo...</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
