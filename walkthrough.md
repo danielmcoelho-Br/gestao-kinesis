@@ -123,5 +123,14 @@ Implementamos a compilação estatística de diagnósticos, a correção de perf
 * **A solução:** Importamos explicitamente a função `getMuscleStrengthReference` de `@/lab/utils/clinicalThresholds` no arquivo `src/lab/hooks/useAssessmentState.ts`.
 * **Resultado:** Executamos `npx tsc --noEmit` localmente para validar a integridade de todas as referências do TypeScript e a compilação agora está 100% livre de erros (zero avisos).
 
-### 3. Validação e Compilação
+### 3. Ajuste de Layout Responsivo dos Gráficos e Calculadora de Média (Dinamometria)
+* **O problema:**
+  1. Na tela de avaliação, os gráficos das dinamometrias e resistências musculares tentavam se espremer lado a lado em duas colunas fixas (`1fr 1fr`). Com o menu lateral aberto, o espaço horizontal era muito curto, causando sobreposição visual e quebra de alinhamento dos elementos e barras dos gráficos.
+  2. As avaliações de coluna (cervical e lombar) não exibiam o ícone de calculadora (para obter a média de 3 tentativas de dinamometria/resistência), funcionalidade que já existia na de membro inferior.
+* **A solução:**
+  1. Alteramos o container de layout dos gráficos em `src/lab/components/assessment/FormSection.tsx` para usar um grid responsivo (`gridTemplateColumns: isPrint ? '1fr 1fr' : 'repeat(auto-fit, minmax(400px, 1fr))'`). Quando impressa, a visualização mantém as 2 colunas; na tela, se o espaço for menor que 800px, os gráficos empilham automaticamente de forma limpa e legível.
+  2. Removemos a exclusão de tipo em `src/lab/components/assessment/DataTableCell.tsx` e estendemos as palavras-chave de correspondência das células numéricas de entrada para renderizar o ícone de calculadora nos testes de dinamometria e testes de endurance (`flexao`, `sorensen`, `prancha`, `resist`, `forca`, `f_`).
+* **Resultado:** Layout 100% fluido e ajustado e cálculo de média habilitado para todas as medições de força e tempo.
+
+### 4. Validação e Compilação
 * Os arquivos foram enviados e integrados à branch principal do repositório no GitHub (`main`) e estão sendo propagados em produção no Vercel.
