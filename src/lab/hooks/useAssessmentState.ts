@@ -8,7 +8,7 @@ import { evaluateClinicalFlags } from "@/lab/utils/clinicalIntelligence";
 import { compressImage } from "@/lab/lib/image-compressor";
 import { calculateAssessmentScore, CalculationType } from "@/lab/lib/calculations";
 import localforage from "localforage";
-import { getEnduranceThreshold } from "@/lab/utils/clinicalThresholds";
+import { getEnduranceThreshold, getMuscleStrengthReference } from "@/lab/utils/clinicalThresholds";
 
 interface UseAssessmentStateProps {
     patientId: string;
