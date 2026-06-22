@@ -60,6 +60,23 @@ import PatientDocuments from "@/lab/components/PatientDocuments";
 import { toast } from "sonner";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
+const parseLocalDate = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 12, 0, 0);
+  }
+  return new Date(dateStr);
+};
+
+const toLocalISOString = (dateObj: Date | string) => {
+  if (!dateObj) return "";
+  const d = new Date(dateObj);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function PatientHistoryPage() {
   const params = useParams();
@@ -88,11 +105,11 @@ export default function PatientHistoryPage() {
   const [selectedDiagnosis, setSelectedDiagnosis] = useState("");
   const [customSegment, setCustomSegment] = useState("");
   const [customDiagnosis, setCustomDiagnosis] = useState("");
-  const [diagStartDate, setDiagStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [diagStartDate, setDiagStartDate] = useState(() => toLocalISOString(new Date()));
 
   // Discharge State
   const [diagToDischarge, setDiagToDischarge] = useState<any>(null);
-  const [dischargeDate, setDischargeDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dischargeDate, setDischargeDate] = useState(() => toLocalISOString(new Date()));
   const [isDropout, setIsDropout] = useState(false);
 
   // Edit Diagnosis State
@@ -114,7 +131,7 @@ export default function PatientHistoryPage() {
   // Evolutions State
   const [evolutions, setEvolutions] = useState<any[]>([]);
   const [evolutionContent, setEvolutionContent] = useState("");
-  const [evolutionDate, setEvolutionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [evolutionDate, setEvolutionDate] = useState(() => toLocalISOString(new Date()));
   const [editingEvolutionId, setEditingEvolutionId] = useState<string | null>(null);
   const [loadingEvolutions, setLoadingEvolutions] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -233,7 +250,7 @@ export default function PatientHistoryPage() {
       const res = await addPatientDiagnosis(patientId, {
         segment,
         diagnosis: diagnosisName,
-        start_date: new Date(diagStartDate)
+        start_date: parseLocalDate(diagStartDate)
       });
 
       if (res.success) {
@@ -243,7 +260,7 @@ export default function PatientHistoryPage() {
         setSelectedDiagnosis("");
         setCustomSegment("");
         setCustomDiagnosis("");
-        setDiagStartDate(new Date().toISOString().split('T')[0]);
+        setDiagStartDate(toLocalISOString(new Date()));
         fetchDiagnoses();
         fetchSuggestions();
       } else {
@@ -261,11 +278,11 @@ export default function PatientHistoryPage() {
 
     try {
       const status = isDropout ? "DESISTENCIA" : "ALTA";
-      const res = await updatePatientDiagnosisStatus(diagToDischarge.id, status, new Date(dischargeDate));
+      const res = await updatePatientDiagnosisStatus(diagToDischarge.id, status, parseLocalDate(dischargeDate));
       if (res.success) {
         toast.success(isDropout ? "Desistência registrada com sucesso!" : "Alta registrada com sucesso!");
         setDiagToDischarge(null);
-        setDischargeDate(new Date().toISOString().split('T')[0]);
+        setDischargeDate(toLocalISOString(new Date()));
         setIsDropout(false);
         fetchDiagnoses();
       } else {
@@ -300,9 +317,9 @@ export default function PatientHistoryPage() {
       setCustomEditDiagnosis(diag.diagnosis);
     }
     
-    setEditStartDate(new Date(diag.start_date).toISOString().split('T')[0]);
+    setEditStartDate(toLocalISOString(diag.start_date));
     setEditStatus(diag.status);
-    setEditDischargeDate(diag.discharge_date ? new Date(diag.discharge_date).toISOString().split('T')[0] : "");
+    setEditDischargeDate(diag.discharge_date ? toLocalISOString(diag.discharge_date) : "");
   };
 
   const handleEditConfirm = async (e: React.FormEvent) => {
@@ -314,13 +331,13 @@ export default function PatientHistoryPage() {
       const finalDiagnosis = (editSegment === "Outros" || editDiagnosis === "Outro") ? customEditDiagnosis : editDiagnosis;
       const finalStatus = editStatus;
       const finalDischargeDate = (editStatus === "ALTA" || editStatus === "DESISTENCIA") 
-        ? (editDischargeDate ? new Date(editDischargeDate) : new Date())
+        ? (editDischargeDate ? parseLocalDate(editDischargeDate) : new Date())
         : null;
 
       const res = await updatePatientDiagnosis(diagToEdit.id, {
         segment: finalSegment,
         diagnosis: finalDiagnosis,
-        start_date: new Date(editStartDate),
+        start_date: parseLocalDate(editStartDate),
         status: finalStatus,
         discharge_date: finalDischargeDate
       });
@@ -536,13 +553,13 @@ export default function PatientHistoryPage() {
     toast.loading("Salvando evolução...", { id: 'save-evolution' });
     
     if (editingEvolutionId) {
-      const res = await updatePatientEvolution(editingEvolutionId, evolutionContent, new Date(evolutionDate));
+      const res = await updatePatientEvolution(editingEvolutionId, evolutionContent, parseLocalDate(evolutionDate));
       toast.dismiss('save-evolution');
       if (res.success) {
         toast.success("Evolução atualizada com sucesso!");
         setEditingEvolutionId(null);
         setEvolutionContent("");
-        setEvolutionDate(new Date().toISOString().split('T')[0]);
+        setEvolutionDate(toLocalISOString(new Date()));
         fetchEvolutions();
       } else {
         toast.error(res.error || "Erro ao salvar.");
@@ -551,14 +568,14 @@ export default function PatientHistoryPage() {
       const res = await createPatientEvolution({
         patientId,
         content: evolutionContent,
-        date: new Date(evolutionDate),
+        date: parseLocalDate(evolutionDate),
         createdById: user?.id
       });
       toast.dismiss('save-evolution');
       if (res.success) {
         toast.success("Evolução registrada com sucesso!");
         setEvolutionContent("");
-        setEvolutionDate(new Date().toISOString().split('T')[0]);
+        setEvolutionDate(toLocalISOString(new Date()));
         fetchEvolutions();
       } else {
         toast.error(res.error || "Erro ao salvar.");
@@ -569,7 +586,7 @@ export default function PatientHistoryPage() {
   const handleEditEvolution = (evo: any) => {
     setEditingEvolutionId(evo.id);
     setEvolutionContent(evo.content);
-    setEvolutionDate(new Date(evo.date).toISOString().split('T')[0]);
+    setEvolutionDate(toLocalISOString(evo.date));
     if (evolutionTextareaRef.current) {
       evolutionTextareaRef.current.focus();
     }
@@ -589,7 +606,7 @@ export default function PatientHistoryPage() {
       if (editingEvolutionId === id) {
         setEditingEvolutionId(null);
         setEvolutionContent("");
-        setEvolutionDate(new Date().toISOString().split('T')[0]);
+        setEvolutionDate(toLocalISOString(new Date()));
       }
     } else {
       toast.error(res.error || "Erro ao excluir.");
@@ -1162,7 +1179,7 @@ export default function PatientHistoryPage() {
                                 if (e.target.value === "ATIVO") {
                                   setEditDischargeDate("");
                                 } else if (!editDischargeDate) {
-                                  setEditDischargeDate(new Date().toISOString().split('T')[0]);
+                                   setEditDischargeDate(toLocalISOString(new Date()));
                                 }
                               }}
                               required
@@ -1221,7 +1238,7 @@ export default function PatientHistoryPage() {
                                         title="Dar Alta"
                                         onClick={() => {
                                           setDiagToDischarge(diag);
-                                          setDischargeDate(new Date().toISOString().split('T')[0]);
+                                           setDischargeDate(toLocalISOString(new Date()));
                                         }}
                                       >
                                         <CheckCircle2 size={14} />
@@ -1544,7 +1561,7 @@ export default function PatientHistoryPage() {
                         onClick={() => {
                           setEditingEvolutionId(null);
                           setEvolutionContent("");
-                          setEvolutionDate(new Date().toISOString().split('T')[0]);
+                           setEvolutionDate(toLocalISOString(new Date()));
                         }}
                         className="btn-primary secondary-btn flex-1 py-3"
                       >
