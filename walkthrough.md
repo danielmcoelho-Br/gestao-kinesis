@@ -118,6 +118,10 @@ Implementamos a compilação estatística de diagnósticos, a correção de perf
   * `src/app/(lab)/assessment/public/summary/[id]/page.tsx`
   * `src/app/(integracao)/integracao/prontuario/page.tsx`
 
-### 2. Validação e Compilação
-* Executamos com sucesso o comando `npm run build` localmente, garantindo que o projeto está 100% livre de erros de tipagem e compilável com sucesso no Turbopack.
+### 2. Correção de Import de Referência de Força Muscular
+* **O problema:** Ao preencher a tabela de dinamometria de quadril na avaliação lombar (`afLombar`), ocorria um erro de tempo de execução `ReferenceError: getMuscleStrengthReference is not defined` no hook `useAssessmentState.ts`. O Next.js compilou a build ignorando erros de tipagem, mas o erro de importação ausente causava a falha ao digitar dados no formulário.
+* **A solução:** Importamos explicitamente a função `getMuscleStrengthReference` de `@/lab/utils/clinicalThresholds` no arquivo `src/lab/hooks/useAssessmentState.ts`.
+* **Resultado:** Executamos `npx tsc --noEmit` localmente para validar a integridade de todas as referências do TypeScript e a compilação agora está 100% livre de erros (zero avisos).
+
+### 3. Validação e Compilação
 * Os arquivos foram enviados e integrados à branch principal do repositório no GitHub (`main`) e estão sendo propagados em produção no Vercel.
