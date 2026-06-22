@@ -120,6 +120,7 @@ export default function PatientHistoryPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
   const evolutionTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const initialContentRef = useRef("");
 
   // Integration State
   const [diaryLogs, setDiaryLogs] = useState<any[]>([]);
@@ -378,20 +379,30 @@ export default function PatientHistoryPage() {
         rec.lang = 'pt-BR';
 
         rec.onresult = (event: any) => {
-          let interimTranscript = '';
-          let finalTranscript = '';
+          let finalParts: string[] = [];
+          let interimParts: string[] = [];
 
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
+          for (let i = 0; i < event.results.length; ++i) {
+            const text = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
+              finalParts.push(text.trim());
             } else {
-              interimTranscript += event.results[i][0].transcript;
+              interimParts.push(text.trim());
             }
           }
 
-          if (finalTranscript) {
-            setEvolutionContent(prev => prev + (prev ? " " : "") + finalTranscript);
+          const sessionFinal = finalParts.filter(Boolean).join(" ");
+          const sessionInterim = interimParts.filter(Boolean).join(" ");
+
+          const initial = initialContentRef.current;
+          let newContent = initial;
+          
+          const combinedSpeech = (sessionFinal + " " + sessionInterim).trim();
+          if (combinedSpeech) {
+            newContent += (newContent ? " " : "") + combinedSpeech;
           }
+          
+          setEvolutionContent(newContent);
         };
 
         rec.onerror = (event: any) => {
@@ -482,6 +493,7 @@ export default function PatientHistoryPage() {
       toast.success("Gravação por voz pausada.");
     } else {
       try {
+        initialContentRef.current = evolutionContent;
         recognition.start();
         setIsRecording(true);
         toast.success("Microfone ativado! Fale para transcrever.");
@@ -1488,7 +1500,15 @@ export default function PatientHistoryPage() {
                       rows={10}
                       placeholder="Descreva o atendimento, melhora clínica do paciente, exercícios realizados e condutas aplicadas. Use o botão acima para ditar..."
                       value={evolutionContent}
-                      onChange={(e) => setEvolutionContent(e.target.value)}
+                      onChange={(e) => {
+                        setEvolutionContent(e.target.value);
+                        initialContentRef.current = e.target.value;
+                        if (isRecording && recognition) {
+                          recognition.stop();
+                          setIsRecording(false);
+                          toast.info("Gravação de voz pausada devido à digitação manual.");
+                        }
+                      }}
                       required
                       style={{ minHeight: '200px', resize: 'vertical' }}
                     ></textarea>
