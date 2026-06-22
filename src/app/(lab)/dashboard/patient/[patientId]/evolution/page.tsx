@@ -55,16 +55,20 @@ export default function PatientEvolutionPage() {
     if (!selectedType) return [];
     return assessments
       .filter(a => a.assessment_type === selectedType)
-      .map(a => ({
-        id: a.id,
-        date: new Date(a.created_at).toLocaleDateString('pt-BR'),
-        timestamp: new Date(a.created_at).getTime(),
-        score: a.clinical_data?.percentage || 0,
-        eva: a.questionnaire_answers?.intensidade_dor || 0,
-        answers: a.questionnaire_answers || {},
-        interpretation: a.clinical_data?.interpretation || "Avaliado",
-        activeFlags: a.clinical_data?.activeFlags || []
-      }))
+      .map(a => {
+        const d = a.created_at ? new Date(a.created_at) : null;
+        const isValidDate = d && !isNaN(d.getTime());
+        return {
+          id: a.id,
+          date: isValidDate ? d.toLocaleDateString('pt-BR') : '',
+          timestamp: isValidDate ? d.getTime() : 0,
+          score: a.clinical_data?.percentage || 0,
+          eva: a.questionnaire_answers?.intensidade_dor || 0,
+          answers: a.questionnaire_answers || {},
+          interpretation: a.clinical_data?.interpretation || "Avaliado",
+          activeFlags: a.clinical_data?.activeFlags || []
+        };
+      })
       .sort((a, b) => a.timestamp - b.timestamp);
   }, [assessments, selectedType]);
 

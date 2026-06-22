@@ -168,11 +168,13 @@ export function useAssessmentState({
                 if (!assessmentId && (type === 'afLombar' || type === 'afCervical' || type === 'afOmbro')) {
                     const questType = type === 'afLombar' ? 'oswestry' : type === 'afCervical' ? 'ndi' : 'quickdash';
                     const today = new Date().toLocaleDateString('pt-BR');
-                    latestQuest = all.find((a: any) => 
-                        a.assessment_type === questType && 
-                        (a.clinical_data?.percentage || 0) > 0 &&
-                        new Date(a.created_at).toLocaleDateString('pt-BR') !== today
-                    );
+                    latestQuest = all.find((a: any) => {
+                        const d = a.created_at ? new Date(a.created_at) : null;
+                        const isValid = d && !isNaN(d.getTime());
+                        return a.assessment_type === questType && 
+                            (a.clinical_data?.percentage || 0) > 0 &&
+                            (!isValid || d.toLocaleDateString('pt-BR') !== today);
+                    });
                     
                     if (!latestQuest) {
                         latestQuest = all.find((a: any) => 
@@ -206,7 +208,10 @@ export function useAssessmentState({
                     setAssessmentOwnerId(data.created_by_id);
                     setAssessmentOwner(data.created_by);
                     if (data.created_at) {
-                        setAssessmentDate(new Date(data.created_at).toLocaleDateString('pt-BR'));
+                        const d = new Date(data.created_at);
+                        if (!isNaN(d.getTime())) {
+                            setAssessmentDate(d.toLocaleDateString('pt-BR'));
+                        }
                     }
                     
                     let finalAnswers = loadedAnswers;
@@ -264,7 +269,10 @@ export function useAssessmentState({
                     if (score > 0) {
                         currentAnswers[`${prefix}_score_previo`] = `${score}%`;
                         if (latestQuest.created_at) {
-                            currentAnswers[`${prefix}_data_previo`] = new Date(latestQuest.created_at).toISOString().split('T')[0];
+                            const d = new Date(latestQuest.created_at);
+                            if (!isNaN(d.getTime())) {
+                                currentAnswers[`${prefix}_data_previo`] = d.toISOString().split('T')[0];
+                            }
                         }
                     }
                 }

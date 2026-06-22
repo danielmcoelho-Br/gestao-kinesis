@@ -1402,7 +1402,10 @@ export default function PatientHistoryPage() {
                               </div>
                               <div className="assessment-meta">
                                 <span>
-                                  <Calendar size={14} /> {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                                  <Calendar size={14} /> {item.created_at ? (() => {
+                                    const d = new Date(item.created_at);
+                                    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+                                  })() : ''}
                                 </span>
                                 <span>
                                   <User size={14} /> {item.created_by?.name || "N/A"}

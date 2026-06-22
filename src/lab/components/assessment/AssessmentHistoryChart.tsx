@@ -64,12 +64,16 @@ const AssessmentHistoryChart = ({
         })
     ) * 1.2 || 60;
     
-    const validHistoryData = validHistory.map(h => ({
-        id: h.id,
-        value: useScoreData ? parseVal(h.scoreData?.percentage || h.scoreData?.score) : parseVal(h.answers?.[fieldId || '']),
-        date: new Date(h.created_at).toLocaleDateString('pt-BR'),
-        timestamp: new Date(h.created_at).getTime()
-    })).sort((a, b) => a.timestamp - b.timestamp);
+    const validHistoryData = validHistory.map(h => {
+        const d = h.created_at ? new Date(h.created_at) : null;
+        const isValidDate = d && !isNaN(d.getTime());
+        return {
+            id: h.id,
+            value: useScoreData ? parseVal(h.scoreData?.percentage || h.scoreData?.score) : parseVal(h.answers?.[fieldId || '']),
+            date: isValidDate ? d.toLocaleDateString('pt-BR') : '',
+            timestamp: isValidDate ? d.getTime() : 0
+        };
+    }).sort((a, b) => a.timestamp - b.timestamp);
 
     const totalBars = validHistoryData.length + (parsedCurrentValue > 0 ? 1 : 0) + (referenceValue ? 1 : 0);
     

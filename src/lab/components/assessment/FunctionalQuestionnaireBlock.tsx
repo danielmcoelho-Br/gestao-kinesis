@@ -38,7 +38,11 @@ const FunctionalQuestionnaireBlock = ({
         : (typeof currentScoreRaw === 'number' ? currentScoreRaw : 0);
     
     // Filter history for THIS specific questionnaire type
-    const validHistory = history.filter(h => h.assessment_type === questType).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const validHistory = history.filter(h => h.assessment_type === questType).sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
 
     const handleNavigate = () => {
         // Explicitly save draft before redirecting to sub-questionnaire
@@ -92,7 +96,10 @@ const FunctionalQuestionnaireBlock = ({
                                 <tbody>
                                     {validHistory.map((h, i) => (
                                         <tr key={i}>
-                                            <td>{new Date(h.created_at).toLocaleDateString('pt-BR')}</td>
+                                            <td>{(() => {
+                                                const d = h.created_at ? new Date(h.created_at) : null;
+                                                return d && !isNaN(d.getTime()) ? d.toLocaleDateString('pt-BR') : '';
+                                            })()}</td>
                                             <td>{h.scoreData?.percentage !== undefined ? `${h.scoreData.percentage}%` : `${h.scoreData?.score || 0} pts`}</td>
                                             <td>
                                                 <span className="status-badge" style={{ 

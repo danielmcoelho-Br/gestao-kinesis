@@ -105,12 +105,14 @@ export const AssessmentHistoryChart = memo(({
         .map(h => {
             const vEsq = Number(h.answers?.[fieldId] || h.questionnaire_answers?.[fieldId]) || 0;
             const vDir = fieldIdDir ? Number(h.answers?.[fieldIdDir] || h.questionnaire_answers?.[fieldIdDir]) : 0;
+            const d = h.created_at ? new Date(h.created_at) : null;
+            const isValidDate = d && !isNaN(d.getTime());
             return {
                 id: h.id,
                 vEsq,
                 vDir,
-                date: new Date(h.created_at).toLocaleDateString('pt-BR'),
-                timestamp: new Date(h.created_at).getTime()
+                date: isValidDate ? d.toLocaleDateString('pt-BR') : '',
+                timestamp: isValidDate ? d.getTime() : 0
             };
         })
         .filter(d => d.vEsq > 0 || d.vDir > 0)
@@ -261,12 +263,16 @@ export const FunctionalHistoryChart = memo(({ history = [], currentScore, type, 
     const validHistory = history.filter(h => h.assessment_type === type && (h.scoreData?.percentage > 0 || h.clinical_data?.percentage > 0) && h.id !== assessmentId);
 
     const todayStr = new Date().toLocaleDateString('pt-BR');
-    const rawData = [...validHistory.map(h => ({
-        id: h.id,
-        date: new Date(h.created_at).toLocaleDateString('pt-BR'),
-        score: h.scoreData?.percentage || h.clinical_data?.percentage || 0,
-        timestamp: new Date(h.created_at).getTime()
-    })).sort((a, b) => a.timestamp - b.timestamp)];
+    const rawData = [...validHistory.map(h => {
+        const d = h.created_at ? new Date(h.created_at) : null;
+        const isValidDate = d && !isNaN(d.getTime());
+        return {
+            id: h.id,
+            date: isValidDate ? d.toLocaleDateString('pt-BR') : '',
+            score: h.scoreData?.percentage || h.clinical_data?.percentage || 0,
+            timestamp: isValidDate ? d.getTime() : 0
+        };
+    }).sort((a, b) => a.timestamp - b.timestamp)];
 
     const isAlreadyInHistory = rawData.some(h => h.id === assessmentId || (h.date === todayStr && Math.abs(h.score - currentScore) < 0.1));
     
@@ -330,13 +336,17 @@ export const AssessmentComparisonChart = memo(({
 }) => {
     const validHistoryData = history
         .filter(h => h.id !== assessmentId)
-        .map(h => ({
-            id: h.id,
-            vEsq: Number(String(h.answers?.[fieldId] || h.questionnaire_answers?.[fieldId] || '0').replace(',', '.')) || 0,
-            vDir: fieldIdDir ? (Number(String(h.answers?.[fieldIdDir] || h.questionnaire_answers?.[fieldIdDir] || '0').replace(',', '.')) || 0) : 0,
-            date: new Date(h.created_at).toLocaleDateString('pt-BR'),
-            timestamp: new Date(h.created_at).getTime()
-        }))
+        .map(h => {
+            const d = h.created_at ? new Date(h.created_at) : null;
+            const isValidDate = d && !isNaN(d.getTime());
+            return {
+                id: h.id,
+                vEsq: Number(String(h.answers?.[fieldId] || h.questionnaire_answers?.[fieldId] || '0').replace(',', '.')) || 0,
+                vDir: fieldIdDir ? (Number(String(h.answers?.[fieldIdDir] || h.questionnaire_answers?.[fieldIdDir] || '0').replace(',', '.')) || 0) : 0,
+                date: isValidDate ? d.toLocaleDateString('pt-BR') : '',
+                timestamp: isValidDate ? d.getTime() : 0
+            };
+        })
         .filter(d => d.vEsq > 0 || d.vDir > 0)
         .sort((a, b) => a.timestamp - b.timestamp);
 

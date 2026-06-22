@@ -60,8 +60,9 @@ export default async function ProntuarioPage() {
         {hasAssessments ? (
           <div className="flex flex-col ml-3 border-l-2 border-slate-200 pl-6 gap-6 relative">
             {patient!.assessments.map((assessment: any, idx: number) => {
-              const evalDate = assessment.created_at 
-                ? new Date(assessment.created_at).toLocaleDateString('pt-BR') 
+              const d = assessment.created_at ? new Date(assessment.created_at) : null;
+              const evalDate = d && !isNaN(d.getTime()) 
+                ? d.toLocaleDateString('pt-BR') 
                 : "Data N/D";
                 
               return (

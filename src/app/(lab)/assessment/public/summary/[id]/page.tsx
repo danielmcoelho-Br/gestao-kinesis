@@ -92,7 +92,10 @@ export default function PublicSummaryPage() {
         patientName: patientData?.name || "Paciente",
         patientAge: patientData?.age || assessmentData.clinical_data?.age || 0,
         patientGender: patientData?.gender || assessmentData.clinical_data?.gender || "",
-        assessmentDate: new Date(assessmentData.created_at).toLocaleDateString('pt-BR'),
+        assessmentDate: assessmentData.created_at ? (() => {
+            const d = new Date(assessmentData.created_at);
+            return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+        })() : '',
         user: null, // Public view doesn't have a current user
         assessmentOwner: assessmentData.created_by,
         answers: assessmentData.questionnaire_answers || {},

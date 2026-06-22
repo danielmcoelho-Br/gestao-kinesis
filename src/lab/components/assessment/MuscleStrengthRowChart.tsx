@@ -56,11 +56,20 @@ const MuscleStrengthRowChart = ({
     // 4. Get Most Recent Previous Assessment
     const previousAssessment = (history || [])
         .filter(h => h.id !== assessmentId && (parseVal(h.answers?.[fieldE]) > 0 || parseVal(h.answers?.[fieldD]) > 0))
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        .sort((a, b) => {
+            const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+        })[0];
 
     const prevE = previousAssessment ? parseVal(previousAssessment.answers?.[fieldE]) : 0;
     const prevD = previousAssessment ? parseVal(previousAssessment.answers?.[fieldD]) : 0;
-    const prevDate = previousAssessment ? new Date(previousAssessment.created_at).toLocaleDateString('pt-BR') : '';
+    const prevDate = previousAssessment && previousAssessment.created_at 
+        ? (() => {
+            const d = new Date(previousAssessment.created_at);
+            return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+          })()
+        : '';
 
     // Skip if all values are 0 (except reference)
     if (currE === 0 && currD === 0 && prevE === 0 && prevD === 0) return null;

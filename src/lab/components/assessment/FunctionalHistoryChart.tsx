@@ -27,12 +27,16 @@ const FunctionalHistoryChart = ({
     const validHistory = history.filter(h => h.assessment_type === type && h.scoreData?.percentage > 0 && h.id !== assessmentId);
 
     const todayStr = new Date().toLocaleDateString('pt-BR');
-    const rawData = [...validHistory.slice().map(h => ({
-        id: h.id,
-        date: new Date(h.created_at).toLocaleDateString('pt-BR'),
-        score: h.scoreData?.percentage || 0,
-        timestamp: new Date(h.created_at).getTime()
-    })).sort((a, b) => a.timestamp - b.timestamp)];
+    const rawData = [...validHistory.slice().map(h => {
+        const d = h.created_at ? new Date(h.created_at) : null;
+        const isValidDate = d && !isNaN(d.getTime());
+        return {
+            id: h.id,
+            date: isValidDate ? d.toLocaleDateString('pt-BR') : '',
+            score: h.scoreData?.percentage || 0,
+            timestamp: isValidDate ? d.getTime() : 0
+        };
+    }).sort((a, b) => a.timestamp - b.timestamp)];
 
     // Add current if it has a score and it's not already in history (by ID or same score today)
     const isAlreadyInHistory = rawData.some(h => 
