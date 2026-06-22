@@ -248,7 +248,7 @@ const DataTableCell = memo(({
                     fontWeight: (isValueBelowStandard(fieldId, numValue, state.patientGender, state.patientAge) && state.type !== 'afMao') ? '800' : 'inherit'
                 }}
             />
-            {isEditing && state.type !== 'afLombar' && state.type !== 'afCervical' && fieldType === 'number' && (fieldId.includes('forca') || fieldId.startsWith('f_') || fieldId.includes('preensao') || fieldId.includes('polpa') || fieldId.includes('lateral') || fieldId.includes('tripode') || fieldId.includes('resist')) && onOpenDynamo && (
+            {isEditing && fieldType === 'number' && (fieldId.includes('forca') || fieldId.startsWith('f_') || fieldId.includes('preensao') || fieldId.includes('polpa') || fieldId.includes('lateral') || fieldId.includes('tripode') || fieldId.includes('resist') || fieldId.includes('flexao') || fieldId.includes('sorensen') || fieldId.includes('prancha')) && onOpenDynamo && (
                 <button
                     type="button"
                     onClick={() => onOpenDynamo(fieldId, rowLabel || "")}

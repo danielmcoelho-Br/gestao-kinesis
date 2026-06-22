@@ -433,10 +433,9 @@ const FormSection = memo(({ section, isPrint: overrideIsPrint, hideTitle = false
                     />                    {/* 1. SIDE-BY-SIDE EVOLUTION CHARTS (Data-heavy sections) */}
                     {['perimetria', 'forca', 'forca_preensao', 'forca_quadril_lombar', 'dinamometria', 'ndi_integracao', 'oswestry_integracao', 'quickdash_integracao', 'resistencia', 'testes_resistencia', 'testes_fadiga', 'testes_especiais_resistidos', 'resistencia_tronco', 'testes_equilibrio', 'adm', 'movimento_cervical', 'movimento_lombar', 'endurance'].includes(section.id) && (
                         <div style={{ 
-                            display: (isPrint || ['afOmbro', 'afCervical', 'afLombar', 'afMmii', 'afMao'].includes(type)) ? 'grid' : 'flex', 
-                            gridTemplateColumns: (isPrint || ['afOmbro', 'afCervical', 'afLombar', 'afMmii', 'afMao'].includes(type)) ? '1fr 1fr' : 'none',
-                            flexWrap: (isPrint || ['afOmbro', 'afCervical', 'afLombar', 'afMmii', 'afMao'].includes(type)) ? 'nowrap' : 'wrap', 
-                            gap: (isPrint || ['afOmbro', 'afCervical', 'afLombar', 'afMmii', 'afMao'].includes(type)) ? '2.5%' : '1.5rem', 
+                            display: 'grid', 
+                            gridTemplateColumns: isPrint ? '1fr 1fr' : 'repeat(auto-fit, minmax(400px, 1fr))',
+                            gap: isPrint ? '2.5%' : '1.5rem', 
                             marginTop: '1.5rem',
                             width: '100%',
                             pageBreakInside: 'avoid'
@@ -655,13 +654,12 @@ const FormSection = memo(({ section, isPrint: overrideIsPrint, hideTitle = false
                                          />
                                      )}
                                      {['perimetria', 'forca', 'dinamometria', 'ndi_integracao', 'oswestry_integracao', 'quickdash_integracao'].includes(sub.id) && (
-                                         <div style={{ 
-                                             display: (isPrint && (type === 'afLombar' || type === 'afCervical')) ? 'grid' : 'flex', 
-                                             gridTemplateColumns: (isPrint && (type === 'afLombar' || type === 'afCervical')) ? '1fr 1fr' : 'none',
-                                             flexWrap: (isPrint && (type === 'afLombar' || type === 'afCervical')) ? 'nowrap' : 'wrap', 
-                                             gap: (isPrint && (type === 'afLombar' || type === 'afCervical')) ? '4%' : '1.5rem', 
-                                             marginTop: '1rem' 
-                                         }}>
+                                          <div style={{ 
+                                              display: 'grid', 
+                                              gridTemplateColumns: isPrint ? '1fr 1fr' : 'repeat(auto-fit, minmax(400px, 1fr))',
+                                              gap: isPrint ? '4%' : '1.5rem', 
+                                              marginTop: '1rem' 
+                                          }}>
                                              {sub.rows?.map((row: TableRow) => row.fields.map((f, fidx: number) => {
                                                  const fid = typeof f === "string" ? f : (f as any).id;
                                                  
