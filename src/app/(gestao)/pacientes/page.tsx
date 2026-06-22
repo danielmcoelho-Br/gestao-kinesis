@@ -72,15 +72,8 @@ export default function PacientesPage() {
     libraries: libraries
   });
 
-  const isMapApiReady = useMemo(() => {
-    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
-  }, [isLoaded]);
-
-  const isVisualizationLoaded = useMemo(() => {
-    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps?.visualization?.HeatmapLayer;
-  }, [isLoaded]);
-
   const heatmapPoints = useMemo(() => {
+    const isMapApiReady = isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
     if (isMapApiReady && data?.stats?.heatmapData && (window as any).google?.maps?.LatLng) {
       try {
         return data.stats.heatmapData.map((p) => new google.maps.LatLng(p.lat, p.lng));
@@ -90,7 +83,7 @@ export default function PacientesPage() {
       }
     }
     return [];
-  }, [isMapApiReady, data]);
+  }, [isLoaded, data]);
   
   // Novos estados para filtro de Fisioterapeuta e Alta
   const [professionals, setProfessionals] = useState<any[]>([]);
@@ -181,6 +174,7 @@ export default function PacientesPage() {
   };
 
   useEffect(() => {
+    const isMapApiReady = isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
     if (activeView !== 'map' || isMapApiReady) {
       if (leafletMapInstanceRef.current) {
         leafletMapInstanceRef.current.remove();
@@ -232,9 +226,10 @@ export default function PacientesPage() {
     return () => {
       isMounted = false;
     };
-  }, [activeView, isMapApiReady]);
+  }, [activeView, isLoaded]);
 
   useEffect(() => {
+    const isMapApiReady = isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
     if (!leafletLoaded || activeView !== 'map' || isMapApiReady || !leafletContainerRef.current) {
       return;
     }
@@ -292,7 +287,7 @@ export default function PacientesPage() {
         leafletMapInstanceRef.current = null;
       }
     };
-  }, [leafletLoaded, activeView, isMapApiReady, data]);
+  }, [leafletLoaded, activeView, isLoaded, data]);
 
   const fetchInactivePatients = async () => {
     setLoadingInactive(true);
@@ -1391,7 +1386,7 @@ export default function PacientesPage() {
             </div>
             
             <div style={{ flex: 1, background: '#f8fafc', borderRadius: '16px', border: '1px solid var(--border-color)', position: 'relative', overflow: 'hidden' }} className="map-container-print">
-              {isMapApiReady ? (
+              {isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps ? (
                 <GoogleMap
                   mapContainerStyle={{ width: '100%', height: '100%' }}
                   center={kinesisLocation}
@@ -1403,7 +1398,7 @@ export default function PacientesPage() {
                     ]
                   }}
                 >
-                  {heatmapPoints.length > 0 && isVisualizationLoaded && (
+                  {heatmapPoints.length > 0 && isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps?.visualization?.HeatmapLayer && (
                     <HeatmapLayer
                       data={heatmapPoints}
                       options={{ radius: 20, opacity: 0.6 }}
