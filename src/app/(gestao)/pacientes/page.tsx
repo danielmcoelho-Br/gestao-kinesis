@@ -374,12 +374,25 @@ export default function PacientesPage() {
     return { ageData, stats };
   }, [data]);
 
+  const isMapApiReady = useMemo(() => {
+    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
+  }, [isLoaded]);
+
+  const isVisualizationLoaded = useMemo(() => {
+    return isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps?.visualization?.HeatmapLayer;
+  }, [isLoaded]);
+
   const heatmapPoints = useMemo(() => {
-    if (isLoaded && data?.stats?.heatmapData) {
-      return data.stats.heatmapData.map((p) => new google.maps.LatLng(p.lat, p.lng));
+    if (isMapApiReady && data?.stats?.heatmapData && (window as any).google?.maps?.LatLng) {
+      try {
+        return data.stats.heatmapData.map((p) => new google.maps.LatLng(p.lat, p.lng));
+      } catch (e) {
+        console.error("Erro ao instanciar google.maps.LatLng:", e);
+        return [];
+      }
     }
     return [];
-  }, [isLoaded, data]);
+  }, [isMapApiReady, data]);
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column', gap: '20px' }}>
@@ -1260,7 +1273,7 @@ export default function PacientesPage() {
             </div>
             
             <div style={{ flex: 1, background: '#f8fafc', borderRadius: '16px', border: '1px solid var(--border-color)', position: 'relative', overflow: 'hidden' }} className="map-container-print">
-              {isLoaded ? (
+              {isMapApiReady ? (
                 <GoogleMap
                   mapContainerStyle={{ width: '100%', height: '100%' }}
                   center={kinesisLocation}
@@ -1272,7 +1285,7 @@ export default function PacientesPage() {
                     ]
                   }}
                 >
-                  {heatmapPoints.length > 0 && (
+                  {heatmapPoints.length > 0 && isVisualizationLoaded && (
                     <HeatmapLayer
                       data={heatmapPoints}
                       options={{ radius: 20, opacity: 0.6 }}
@@ -1290,9 +1303,12 @@ export default function PacientesPage() {
                   />
                 </GoogleMap>
               ) : (
-                <div style={{ textAlign: 'center', padding: '40px' }}>
-                  <MapIcon size={64} color="var(--text-secondary)" style={{ opacity: 0.3, marginBottom: '20px' }} />
-                  <h4 style={{ color: 'var(--text-secondary)' }}>Aguardando Configuração</h4>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: '15px', padding: '40px' }}>
+                  <MapIcon size={64} color="var(--text-secondary)" style={{ opacity: 0.3, marginBottom: '10px' }} />
+                  <h4 style={{ color: 'var(--text-secondary)', margin: 0 }}>API do Google Maps Indisponível</h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '320px', textAlign: 'center', margin: 0 }}>
+                    Não foi possível carregar a API do Google Maps. Verifique se a variável de ambiente <code style={{ background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> está configurada corretamente.
+                  </p>
                 </div>
               )}
             </div>
