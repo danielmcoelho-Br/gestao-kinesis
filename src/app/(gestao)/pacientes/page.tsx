@@ -1596,13 +1596,22 @@ function PatientAICopilotSection({ startMonth, startYear, endMonth, endYear }: a
           endYear
         })
       });
+
+      if (res.status === 401) {
+        setError("Sua sessão expirou. Redirecionando para a página de login...");
+        setTimeout(() => {
+          window.location.href = `/login?from=${encodeURIComponent(window.location.pathname)}`;
+        }, 1500);
+        return;
+      }
+
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Erro ao consultar o Agente de IA.");
       }
       setResponse(data.text);
     } catch (e: any) {
-      console.error(e);
+      console.warn("Erro no Agente de IA:", e);
       setError(e.message || "Erro na comunicação com o Agente de IA.");
     } finally {
       setLoading(false);
