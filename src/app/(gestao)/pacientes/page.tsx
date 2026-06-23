@@ -273,12 +273,13 @@ export default function PacientesPage() {
     if (data?.stats?.heatmapData && Array.isArray(data.stats.heatmapData)) {
       data.stats.heatmapData.forEach((point: { lat: number, lng: number }) => {
         if (point.lat && point.lng) {
-          L.circle([point.lat, point.lng], {
-            color: 'red',
-            fillColor: '#f03',
-            fillOpacity: 0.2,
-            radius: 120,
-            stroke: false
+          L.circleMarker([point.lat, point.lng], {
+            color: '#ffffff', // White border for contrast
+            fillColor: '#ef4444', // Sleek modern red
+            fillOpacity: 0.6,
+            radius: 6, // Fixed 6px radius regardless of zoom
+            weight: 1,
+            stroke: true
           }).addTo(map);
         }
       });
