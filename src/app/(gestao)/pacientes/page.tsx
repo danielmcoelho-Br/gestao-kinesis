@@ -48,7 +48,7 @@ const months = [
 
 const libraries: ("visualization" | "places" | "drawing" | "geometry")[] = ["visualization"];
 
-const kinesisLocation = { lat: -21.1969, lng: -47.8105 };
+const kinesisLocation = { lat: -21.1937048, lng: -47.8179272 };
 
 export default function PacientesPage() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
@@ -504,6 +504,33 @@ export default function PacientesPage() {
       return matchesSearch;
     });
   }, [data, searchTerm, selectedProfessional, showDischarged]);
+
+  // Cálculo da distância média dos pacientes em relação à clínica
+  const averageDistance = useMemo(() => {
+    if (!data?.stats?.heatmapData || !Array.isArray(data.stats.heatmapData)) return null;
+    
+    const getDistanceInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371; // Radius of the earth in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    const validDistances = data.stats.heatmapData
+      .filter((p: any) => p.lat && p.lng && (p.lat !== 0 || p.lng !== 0))
+      .map((p: any) => getDistanceInKm(kinesisLocation.lat, kinesisLocation.lng, p.lat, p.lng))
+      .filter((d: number) => d <= 15);
+
+    if (validDistances.length === 0) return 0;
+    
+    const sum = validDistances.reduce((acc: number, curr: number) => acc + curr, 0);
+    return sum / validDistances.length;
+  }, [data]);
 
   const statsData = useMemo(() => {
     if (!data) return null;
@@ -1369,7 +1396,7 @@ export default function PacientesPage() {
       )}
 
         {activeView === 'map' && (
-          <div className="fade-in card" style={{ height: '75vh', display: 'flex', flexDirection: 'column' }}>
+          <div className="fade-in card" style={{ minHeight: '75vh', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div>
                 <h3 style={{ margin: 0 }}>Mapa de Calor Geográfico</h3>
@@ -1434,6 +1461,33 @@ export default function PacientesPage() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Estatísticas Geográficas do Mapa */}
+            <div style={{ display: 'flex', gap: '24px', marginTop: '4px' }} className="no-print">
+              <div className="card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                  <MapIcon size={24} />
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '500', display: 'block' }}>Pacientes Mapeados</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: '800', display: 'block', marginTop: '4px' }}>
+                    {data?.stats?.heatmapData ? data.stats.heatmapData.filter((p: any) => p.lat && p.lng && (p.lat !== 0 || p.lng !== 0)).length : 0}
+                  </span>
+                </div>
+              </div>
+
+              <div className="card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
+                <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                  <Navigation size={24} />
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '500', display: 'block' }}>Distância Média (Ribeirão Preto)</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: '800', display: 'block', marginTop: '4px' }}>
+                    {averageDistance !== null ? `${averageDistance.toFixed(2)} km` : "Calculando..."}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
