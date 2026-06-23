@@ -505,9 +505,11 @@ export default function PacientesPage() {
     });
   }, [data, searchTerm, selectedProfessional, showDischarged]);
 
-  // Cálculo da distância média dos pacientes em relação à clínica
-  const averageDistance = useMemo(() => {
-    if (!data?.stats?.heatmapData || !Array.isArray(data.stats.heatmapData)) return null;
+  // Estatísticas de distância dos pacientes em relação à clínica
+  const distanceStats = useMemo(() => {
+    if (!data?.stats?.heatmapData || !Array.isArray(data.stats.heatmapData)) {
+      return { average: null, stdDev: null, mode: null, count: 0, ranges: [] };
+    }
     
     const getDistanceInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
       const R = 6371; // Radius of the earth in km
@@ -521,15 +523,70 @@ export default function PacientesPage() {
       return R * c;
     };
 
-    const validDistances = data.stats.heatmapData
+    const validPoints = data.stats.heatmapData
       .filter((p: any) => p.lat && p.lng && (p.lat !== 0 || p.lng !== 0))
-      .map((p: any) => getDistanceInKm(kinesisLocation.lat, kinesisLocation.lng, p.lat, p.lng))
-      .filter((d: number) => d <= 15);
+      .map((p: any) => {
+        const dist = getDistanceInKm(kinesisLocation.lat, kinesisLocation.lng, p.lat, p.lng);
+        return {
+          distance: dist,
+          sessions: p.sessions || 0
+        };
+      })
+      .filter((item: any) => item.distance <= 15);
 
-    if (validDistances.length === 0) return 0;
+    const validDistances = validPoints.map((item: any) => item.distance);
+
+    if (validDistances.length === 0) {
+      return { average: 0, stdDev: 0, mode: 0, count: 0, ranges: [] };
+    }
     
+    // 1. Média
     const sum = validDistances.reduce((acc: number, curr: number) => acc + curr, 0);
-    return sum / validDistances.length;
+    const average = sum / validDistances.length;
+
+    // 2. Desvio Padrão
+    const variance = validDistances.reduce((acc: number, curr: number) => acc + Math.pow(curr - average, 2), 0) / validDistances.length;
+    const stdDev = Math.sqrt(variance);
+
+    // 3. Moda (arredondando para 1 casa decimal para agrupar)
+    const modeCounts: Record<string, number> = {};
+    let maxModeCount = 0;
+    let mode = validDistances[0];
+    validDistances.forEach((d: number) => {
+      const rounded = d.toFixed(1);
+      modeCounts[rounded] = (modeCounts[rounded] || 0) + 1;
+      if (modeCounts[rounded] > maxModeCount) {
+        maxModeCount = modeCounts[rounded];
+        mode = parseFloat(rounded);
+      }
+    });
+
+    // 4. Faixas de distância para a tabela
+    const intervals = [
+      { label: "Muito Próximo (0 a 2 km)", min: 0, max: 2, sumSessions: 0, count: 0 },
+      { label: "Próximo (2 a 5 km)", min: 2, max: 5, sumSessions: 0, count: 0 },
+      { label: "Médio (5 a 10 km)", min: 5, max: 10, sumSessions: 0, count: 0 },
+      { label: "Afastado (10 a 15 km)", min: 10, max: 15, sumSessions: 0, count: 0 }
+    ];
+
+    validPoints.forEach((p: any) => {
+      for (const interval of intervals) {
+        if (p.distance >= interval.min && p.distance < interval.max) {
+          interval.sumSessions += p.sessions;
+          interval.count++;
+          break;
+        }
+      }
+    });
+
+    const ranges = intervals.map(i => ({
+      label: i.label,
+      count: i.count,
+      totalSessions: i.sumSessions,
+      averageSessions: i.count > 0 ? i.sumSessions / i.count : 0
+    }));
+
+    return { average, stdDev, mode, count: validDistances.length, ranges };
   }, [data]);
 
   const statsData = useMemo(() => {
@@ -1464,29 +1521,102 @@ export default function PacientesPage() {
             </div>
 
             {/* Estatísticas Geográficas do Mapa */}
-            <div style={{ display: 'flex', gap: '24px', marginTop: '4px' }} className="no-print">
-              <div className="card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
-                <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
-                  <MapIcon size={24} />
+            <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }} className="no-print">
+              {/* Card 1: Pacientes Mapeados */}
+              <div className="card" style={{ flex: 1, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                  <MapIcon size={20} />
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '500', display: 'block' }}>Pacientes Mapeados</span>
-                  <span style={{ color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: '800', display: 'block', marginTop: '4px' }}>
-                    {data?.stats?.heatmapData ? data.stats.heatmapData.filter((p: any) => p.lat && p.lng && (p.lat !== 0 || p.lng !== 0)).length : 0}
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '500', display: 'block' }}>Pacientes Mapeados</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: '800', display: 'block', marginTop: '2px' }}>
+                    {distanceStats.count}
                   </span>
                 </div>
               </div>
 
-              <div className="card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
-                <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
-                  <Navigation size={24} />
+              {/* Card 2: Distância Média */}
+              <div className="card" style={{ flex: 1, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
+                <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                  <Navigation size={20} />
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '500', display: 'block' }}>Distância Média (Ribeirão Preto)</span>
-                  <span style={{ color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: '800', display: 'block', marginTop: '4px' }}>
-                    {averageDistance !== null ? `${averageDistance.toFixed(2)} km` : "Calculando..."}
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '500', display: 'block' }}>Distância Média</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: '800', display: 'block', marginTop: '2px' }}>
+                    {distanceStats.average !== null ? `${distanceStats.average.toFixed(2)} km` : "Calculando..."}
                   </span>
                 </div>
+              </div>
+
+              {/* Card 3: Desvio Padrão */}
+              <div className="card" style={{ flex: 1, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
+                <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>
+                  <Activity size={20} />
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '500', display: 'block' }}>Desvio Padrão</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: '800', display: 'block', marginTop: '2px' }}>
+                    {distanceStats.stdDev !== null ? `${distanceStats.stdDev.toFixed(2)} km` : "Calculando..."}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 4: Moda */}
+              <div className="card" style={{ flex: 1, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', borderRadius: '16px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)' }}>
+                <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
+                  <TrendingUp size={20} />
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '500', display: 'block' }}>Moda Geográfica</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: '800', display: 'block', marginTop: '2px' }}>
+                    {distanceStats.mode !== null ? `${distanceStats.mode.toFixed(1)} km` : "Calculando..."}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabela de Adesão por Faixa de Distância */}
+            <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '24px' }}>
+              <h4 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingUp size={20} color="var(--primary)" /> Adesão por Faixa de Distância no Período
+              </h4>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '16px' }}>
+                Mapeamento da retenção e volume de sessões conforme a proximidade residencial do paciente.
+              </p>
+              
+              <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', background: 'white' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border-color)' }}>
+                      <th style={{ padding: '14px 16px', fontWeight: '800', color: 'var(--text-secondary)', fontSize: '0.85rem', textTransform: 'uppercase' }}>Faixa de Distância</th>
+                      <th style={{ padding: '14px 16px', fontWeight: '800', color: 'var(--text-secondary)', fontSize: '0.85rem', textTransform: 'uppercase', textAlign: 'center' }}>Pacientes Mapeados</th>
+                      <th style={{ padding: '14px 16px', fontWeight: '800', color: 'var(--text-secondary)', fontSize: '0.85rem', textTransform: 'uppercase', textAlign: 'center' }}>Sessões Totais</th>
+                      <th style={{ padding: '14px 16px', fontWeight: '800', color: 'var(--text-secondary)', fontSize: '0.85rem', textTransform: 'uppercase', textAlign: 'center' }}>Média de Sessões</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {distanceStats.ranges.map((range: any, idx: number) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                        <td style={{ padding: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>{range.label}</td>
+                        <td style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-secondary)' }}>{range.count}</td>
+                        <td style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-secondary)' }}>{range.totalSessions}</td>
+                        <td style={{ padding: '16px', textAlign: 'center' }}>
+                          <span style={{ 
+                            background: range.averageSessions >= 20 ? '#dcfce7' : range.averageSessions >= 10 ? '#eff6ff' : '#f1f5f9', 
+                            color: range.averageSessions >= 20 ? '#15803d' : range.averageSessions >= 10 ? '#1e40af' : '#475569', 
+                            fontWeight: '800', 
+                            borderRadius: '8px', 
+                            padding: '4px 10px', 
+                            fontSize: '0.85rem',
+                            border: `1px solid ${range.averageSessions >= 20 ? '#bbf7d0' : range.averageSessions >= 10 ? '#bfdbfe' : '#e2e8f0'}`
+                          }}>
+                            {range.averageSessions.toFixed(1)} sessões
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

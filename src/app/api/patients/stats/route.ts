@@ -35,6 +35,13 @@ export async function GET(request: Request) {
       }
     });
 
+    const sessionsCountMap = new Map<string, number>();
+    sessions.forEach(s => {
+      if (!s.patientName) return;
+      const key = normalizeName(s.patientName);
+      sessionsCountMap.set(key, (sessionsCountMap.get(key) || 0) + 1);
+    });
+
     const uniquePatientNames = Array.from(new Set(sessions.map(s => s.patientName.trim().toLowerCase())));
     const uniquePatientNamesVariants = Array.from(new Set(
       uniquePatientNames.flatMap(name => [
@@ -339,7 +346,17 @@ export async function GET(request: Request) {
       allSegments: mergeSegments(patientDiagnoses),
       heatmapData: patientProfiles
         .filter(p => p.latitude && p.longitude)
-        .map(p => ({ lat: p.latitude, lng: p.longitude, weight: 1 }))
+        .map(p => {
+          const pNameNorm = normalizeName(p.name);
+          const sessionKey = Array.from(sessionsCountMap.keys()).find(k => pNameNorm.startsWith(k) || k.startsWith(pNameNorm));
+          const sessionCount = sessionKey ? (sessionsCountMap.get(sessionKey) || 0) : 0;
+          return {
+            lat: p.latitude,
+            lng: p.longitude,
+            weight: 1,
+            sessions: sessionCount
+          };
+        })
     };
 
     return NextResponse.json({ stats, patients: formattedPatients, missingProfiles });
