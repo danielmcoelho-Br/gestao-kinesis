@@ -134,3 +134,30 @@ Implementamos a compilação estatística de diagnósticos, a correção de perf
 
 ### 4. Validação e Compilação
 * Os arquivos foram enviados e integrados à branch principal do repositório no GitHub (`main`) e estão sendo propagados em produção no Vercel.
+
+---
+
+## Atualização: Correção de Cobranças e Faltas Cobradas (25/06/2026)
+
+### 1. Nova Regra de Importação de Cobranças
+* **Arquivo modificado:** [route.ts](file:///C:/Users/daniel/.gemini/antigravity/scratch/kinesis-app/src/app/api/upload/route.ts)
+* **Mudança:** Alteramos a lógica de importação do Excel de cobranças. Agora, em vez de ignorar sumariamente todas as sessões marcadas como falta/não comparecimento, todas as sessões com valor lançado (`valor > 0`) são consideradas faturáveis, **a menos que**:
+  - Exista algum comentário no campo de **Observação** (como `"PACOTE FIXO"` ou qualquer outro texto).
+  - A sessão já esteja marcada como **Paga**.
+* **Marcação:** As sessões identificadas com status de falta/não comparecimento que entram na cobrança recebem o sufixo `(Falta)` no tipo de serviço salvo no banco de dados.
+
+### 2. Diferenciação na Consolidação de Faturas
+* **Arquivo modificado:** [route.ts](file:///C:/Users/daniel/.gemini/antigravity/scratch/kinesis-app/src/app/api/cobrancas/route.ts)
+* **Mudança:** A API de busca de cobranças foi ajustada para agrupar faturas diferenciando sessões normais realizadas (`sessionCount`) de faltas cobradas (`absenceCount`). As datas dessas faltas recebem o sufixo `(Falta Cobrada)` na listagem enviada ao frontend.
+
+### 3. Exibição Dinâmica e Mensagem de WhatsApp Customizada
+* **Arquivo modificado:** [page.tsx](file:///C:/Users/daniel/.gemini/antigravity/scratch/kinesis-app/src/app/(gestao)/cobrancas/page.tsx)
+* **Mudança:**
+  - O gerador de mensagens do WhatsApp (`generateMessage`) foi atualizado para discriminar a quantidade de sessões executadas e a quantidade de faltas cobradas separadamente, facilitando a transparência na cobrança enviada ao paciente.
+  - Adicionamos um badge visual vermelho de "Faltas" na listagem de faturamento de cada paciente caso `p.absenceCount > 0`.
+
+### 4. Deploy e Publicação
+* Verificamos a compilação local com type-checking completo (`tsc --noEmit`).
+* As alterações foram salvas e enviadas ao repositório no GitHub (`main`).
+* O projeto foi publicado com sucesso no ambiente de produção do **Vercel** (`https://kinesisapp.vercel.app`).
+
