@@ -76,7 +76,7 @@ export default function CobrançasPage() {
   // Estatísticas de Resumo
   const stats = useMemo(() => {
     const totalToCollect = data.reduce((acc, p) => acc + p.totalValue, 0);
-    const totalSessions = data.reduce((acc, p) => acc + p.sessionCount, 0);
+    const totalSessions = data.reduce((acc, p) => acc + p.sessionCount + (p.absenceCount || 0), 0);
     const patientCount = data.length;
     const ticketAverage = patientCount > 0 ? totalToCollect / patientCount : 0;
     const sentCount = sentPatients.size;
@@ -87,11 +87,16 @@ export default function CobrançasPage() {
 
   const generateMessage = (p: any) => {
     const datesStr = p.dates.join('\n');
-    return `RELATÓRIO DE COBRANÇAS
+    let sessionSummary = `- Quantidade de sessões feitas: ${p.sessionCount} Sessões`;
+    if (p.absenceCount > 0) {
+      sessionSummary += `\n- Quantidade de faltas cobradas: ${p.absenceCount} Faltas`;
+    }
+
+    return `Relatório de Atendimentos
 
 Prezado(a) Sr. (a). ${p.patientName}, segue relatório das sessões de Fisioterapia do corrente mês, incluindo as previstas nesta última semana, em caso de dúvidas entrar em contato por este número ou presencialmente.
 
-- Quantidade de sessões feitas: ${p.sessionCount} Sessões
+${sessionSummary}
 Valor total: R$ ${p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 
 ${datesStr}
@@ -258,7 +263,7 @@ Clínica Kinesis Fisioterapia`;
                     }}>
                       {p.patientName}
                     </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
                       <span style={{ 
                         fontSize: '0.85rem', 
                         background: 'rgba(0,0,0,0.04)', 
@@ -269,6 +274,18 @@ Clínica Kinesis Fisioterapia`;
                       }}>
                         {p.sessionCount} SESSÕES
                       </span>
+                      {p.absenceCount > 0 && (
+                        <span style={{ 
+                          fontSize: '0.85rem', 
+                          background: 'rgba(239, 68, 68, 0.1)', 
+                          padding: '3px 10px', 
+                          borderRadius: '6px', 
+                          fontWeight: '700',
+                          color: '#ef4444'
+                        }}>
+                          {p.absenceCount} FALTAS
+                        </span>
+                      )}
                       {p.phone && (
                         <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <CheckCircle2 size={14} /> WHATSAPP

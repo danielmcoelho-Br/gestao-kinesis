@@ -627,31 +627,21 @@ export async function POST(request: Request) {
 
           const name = findKey(["cliente", "paciente", "nome", "paciante"]);
           const valor = findKey(["valor", "preço", "total", "valor total", "bruto"]);
-          const servico = String(findKey(["serviço", "procedimento", "tipo", "atendimento", "descrição"]) || "").toLowerCase();
+          const rawServico = String(findKey(["serviço", "procedimento", "tipo", "atendimento", "descrição"]) || "");
           const dataAtendimento = findKey(["data", "dia", "atendimento", "data atendimento"]);
           const telefone = findKey(["telefone do cliente", "telefone", "celular", "contato"]);
-          const obs = String(findKey(["obs", "observação", "notas"]) || "").toUpperCase();
+          const obs = String(findKey(["obs", "observação", "notas"]) || "").trim();
           const statusRaw = findKey(["status", "situação", "status atendimento", "situação atendimento"]);
 
           if (!name || !dataAtendimento) continue;
 
-          if (obs.includes("PACOTE FIXO")) continue;
+          // Se houver qualquer mensagem/texto no campo de observação, desconsiderar da cobrança
+          if (obs !== "") continue;
 
-          // Ignorar atendimentos não faturáveis (faltas, cancelamentos, ausências)
-          if (statusRaw !== undefined && statusRaw !== null && statusRaw !== "") {
-            const statusStr = String(statusRaw).toLowerCase().trim();
-            if (
-              statusStr.includes("não compareceu") ||
-              statusStr.includes("falta") ||
-              statusStr.includes("ausência") ||
-              statusStr.includes("cancelado") ||
-              statusStr.includes("desmarcado")
-            ) {
-              continue;
-            }
-          }
+          const valNum = typeof valor === "number" ? valor : parseFloat(String(valor).replace(/[^\d,.-]/g, '').replace(',', '.'));
+          if (!valNum || valNum <= 0) continue;
           
-          // Verificar de forma robusta se a sessão já está paga
+          // Verificar se a sessão é marcada como paga
           const pagoRaw = findKey(["pago", "pagamento", "liquidado", "acerto"]);
           let isPaid = false;
           if (pagoRaw !== undefined && pagoRaw !== null && pagoRaw !== "") {
@@ -678,9 +668,24 @@ export async function POST(request: Request) {
           }
           
           if (isPaid) continue;
-          
-          const valNum = typeof valor === "number" ? valor : parseFloat(String(valor).replace(/[^\d,.-]/g, '').replace(',', '.'));
-          if (!valNum || valNum <= 0) continue;
+
+          // Identificar se é uma falta para acrescentar ao tipo de serviço
+          let isFalta = false;
+          if (statusRaw !== undefined && statusRaw !== null && statusRaw !== "") {
+            const statusStr = String(statusRaw).toLowerCase().trim();
+            if (
+              statusStr.includes("não compareceu") ||
+              statusStr.includes("falta") ||
+              statusStr.includes("ausência")
+            ) {
+              isFalta = true;
+            }
+          }
+
+          const servico = (isFalta 
+            ? (rawServico ? `${rawServico} (Falta)` : "Falta")
+            : rawServico
+          ).toLowerCase();
 
           let sessionDate: Date;
           try {

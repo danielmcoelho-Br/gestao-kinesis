@@ -27,16 +27,25 @@ export async function GET(request: Request) {
           phone: s.phone || null,
           totalValue: 0,
           sessionCount: 0,
+          absenceCount: 0,
           dates: []
         };
       }
       groups[s.patientName].totalValue += s.value;
-      groups[s.patientName].sessionCount += 1;
       
       const dateObj = new Date(s.date);
       const day = dateObj.getDate().toString().padStart(2, '0');
       const mo = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-      groups[s.patientName].dates.push(`${day}/${mo}`);
+      
+      const isFalta = s.serviceType.toLowerCase().includes("falta") || s.serviceType.toLowerCase().includes("ausência");
+      
+      if (isFalta) {
+        groups[s.patientName].absenceCount += 1;
+        groups[s.patientName].dates.push(`${day}/${mo} (Falta Cobrada)`);
+      } else {
+        groups[s.patientName].sessionCount += 1;
+        groups[s.patientName].dates.push(`${day}/${mo}`);
+      }
     });
 
     return NextResponse.json(Object.values(groups));
