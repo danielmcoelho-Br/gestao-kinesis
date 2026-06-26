@@ -63,7 +63,9 @@ export default function CobrançasPage() {
   const manualStorageKey = `nf-manual-${selectedMonth}-${selectedYear}`;
   const editedValuesStorageKey = `nf-edited-values-${selectedMonth}-${selectedYear}`;
 
-  // Carregar status do localStorage ao mudar o período
+  const [dbLoaded, setDbLoaded] = useState(false);
+
+  // Carregar status do localStorage e banco de dados ao mudar o período
   useEffect(() => {
     // 1. Sent Patients
     const saved = localStorage.getItem(storageKey);
@@ -173,6 +175,108 @@ export default function CobrançasPage() {
     storageKey, nfStorageKey, emitaStorageKey, entitiesStorageKey, 
     subEntitiesStorageKey, taxRateStorageKey, splitsStorageKey, 
     manualStorageKey, editedValuesStorageKey
+  ]);
+
+  // Função para buscar as configurações do banco de dados
+  const fetchConfig = async () => {
+    try {
+      const res = await fetch(`/api/cobrancas/config?month=${selectedMonth}&year=${selectedYear}`);
+      if (res.ok) {
+        const config = await res.json();
+        if (config) {
+          setNotaFiscalPatients(new Set(JSON.parse(config.notaFiscalPatients || "[]")));
+          setEmitaPatients(new Set(JSON.parse(config.emitaPatients || "[]")));
+          setPatientEntities(JSON.parse(config.patientEntities || "{}"));
+          setPatientSubEntities(JSON.parse(config.patientSubEntities || "{}"));
+          setTaxRate(config.taxRate || 0);
+          setPatientSplits(JSON.parse(config.patientSplits || "{}"));
+          setManualInvoices(JSON.parse(config.manualInvoices || "[]"));
+          setPatientEditedValues(JSON.parse(config.patientEditedValues || "{}"));
+        }
+      }
+      setDbLoaded(true);
+    } catch (e) {
+      console.error("Error fetching billing config:", e);
+      setDbLoaded(true); // Não trava a tela se houver erro
+    }
+  };
+
+  // Carregar do banco de dados ao mudar o período
+  useEffect(() => {
+    setDbLoaded(false);
+    fetchConfig();
+  }, [selectedMonth, selectedYear]);
+
+  // Recarregar configurações quando a janela/aba ganhar foco
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchConfig();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [selectedMonth, selectedYear]);
+
+  // Sincronizar com banco de dados e LocalStorage com debounce
+  useEffect(() => {
+    if (!dbLoaded) return;
+
+    // Atualizar LocalStorage localmente como cópia de segurança
+    localStorage.setItem(nfStorageKey, JSON.stringify(Array.from(notaFiscalPatients)));
+    localStorage.setItem(emitaStorageKey, JSON.stringify(Array.from(emitaPatients)));
+    localStorage.setItem(entitiesStorageKey, JSON.stringify(patientEntities));
+    localStorage.setItem(subEntitiesStorageKey, JSON.stringify(patientSubEntities));
+    localStorage.setItem(taxRateStorageKey, String(taxRate));
+    localStorage.setItem(splitsStorageKey, JSON.stringify(patientSplits));
+    localStorage.setItem(manualStorageKey, JSON.stringify(manualInvoices));
+    localStorage.setItem(editedValuesStorageKey, JSON.stringify(patientEditedValues));
+
+    // Debounce sincronização com banco para 1 segundo
+    const timer = setTimeout(async () => {
+      try {
+        await fetch("/api/cobrancas/config", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            month: selectedMonth,
+            year: selectedYear,
+            notaFiscalPatients: Array.from(notaFiscalPatients),
+            emitaPatients: Array.from(emitaPatients),
+            patientEntities,
+            patientSubEntities,
+            taxRate,
+            patientSplits,
+            manualInvoices,
+            patientEditedValues,
+          }),
+        });
+      } catch (e) {
+        console.error("Error saving config to DB:", e);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    dbLoaded,
+    selectedMonth,
+    selectedYear,
+    notaFiscalPatients,
+    emitaPatients,
+    patientEntities,
+    patientSubEntities,
+    taxRate,
+    patientSplits,
+    manualInvoices,
+    patientEditedValues,
+    nfStorageKey,
+    emitaStorageKey,
+    entitiesStorageKey,
+    subEntitiesStorageKey,
+    taxRateStorageKey,
+    splitsStorageKey,
+    manualStorageKey,
+    editedValuesStorageKey
   ]);
 
   const fetchData = () => {

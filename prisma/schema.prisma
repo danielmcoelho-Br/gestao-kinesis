@@ -322,3 +322,22 @@ model DiagnosisSuggestion {
   @@unique([segmentId, diagnosis])
   @@map("diagnosis_suggestions")
 }
+
+model BillingConfig {
+  id                  String   @id @default(cuid())
+  month               Int
+  year                Int
+  notaFiscalPatients  String   @default("[]")
+  emitaPatients       String   @default("[]")
+  patientEntities     String   @default("{}")
+  patientSubEntities  String   @default("{}")
+  taxRate             Float    @default(0)
+  patientSplits       String   @default("{}")
+  manualInvoices      String   @default("[]")
+  patientEditedValues String   @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([month, year])
+  @@map("billing_configs")
+}

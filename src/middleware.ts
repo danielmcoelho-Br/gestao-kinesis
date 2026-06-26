@@ -45,8 +45,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // - Public Portal Routes for Patients (Super Critical to Keep Public!)
-  // Ex: /p/token123 or /p/token123/diario
-  if (pathname.startsWith("/p/")) {
+  // Ex: /p/token123 or /p/token123/diario, or /assessment/public/...
+  if (pathname.startsWith("/p/") || pathname.startsWith("/assessment/public/")) {
     return NextResponse.next();
   }
 
