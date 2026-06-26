@@ -11,7 +11,11 @@ import {
   Users, 
   DollarSign, 
   Calendar,
-  Activity
+  Activity,
+  Pencil,
+  Trash2,
+  Plus,
+  Split
 } from "lucide-react";
 import { MetricCard } from "@/gestao/components/DashboardComponents";
 
@@ -40,6 +44,14 @@ export default function CobrançasPage() {
   const [patientSubEntities, setPatientSubEntities] = useState<Record<string, string>>({});
   const [taxRate, setTaxRate] = useState<number>(0);
 
+  // Novos estados para Lançamentos Manuais, Splits e Edição de Valores
+  const [patientSplits, setPatientSplits] = useState<Record<string, { id: string; partName: string; value: number }[]>>({});
+  const [manualInvoices, setManualInvoices] = useState<any[]>([]);
+  const [patientEditedValues, setPatientEditedValues] = useState<Record<string, number>>({});
+  const [showAddManualForm, setShowAddManualForm] = useState(false);
+  const [manualNameInput, setManualNameInput] = useState("");
+  const [manualValueInput, setManualValueInput] = useState("");
+
   // Chaves para persistência baseadas no período
   const storageKey = `sent-patients-${selectedMonth}-${selectedYear}`;
   const nfStorageKey = `nota-fiscal-patients-${selectedMonth}-${selectedYear}`;
@@ -47,6 +59,9 @@ export default function CobrançasPage() {
   const entitiesStorageKey = `nf-entities-${selectedMonth}-${selectedYear}`;
   const subEntitiesStorageKey = `nf-sub-entities-${selectedMonth}-${selectedYear}`;
   const taxRateStorageKey = `nf-tax-rate-${selectedMonth}-${selectedYear}`;
+  const splitsStorageKey = `nf-splits-${selectedMonth}-${selectedYear}`;
+  const manualStorageKey = `nf-manual-${selectedMonth}-${selectedYear}`;
+  const editedValuesStorageKey = `nf-edited-values-${selectedMonth}-${selectedYear}`;
 
   // Carregar status do localStorage ao mudar o período
   useEffect(() => {
@@ -118,7 +133,47 @@ export default function CobrançasPage() {
     } else {
       setTaxRate(0);
     }
-  }, [storageKey, nfStorageKey, emitaStorageKey, entitiesStorageKey, subEntitiesStorageKey, taxRateStorageKey]);
+
+    // 7. Patient Splits
+    const savedSplits = localStorage.getItem(splitsStorageKey);
+    if (savedSplits) {
+      try {
+        setPatientSplits(JSON.parse(savedSplits));
+      } catch (e) {
+        setPatientSplits({});
+      }
+    } else {
+      setPatientSplits({});
+    }
+
+    // 8. Manual Invoices
+    const savedManual = localStorage.getItem(manualStorageKey);
+    if (savedManual) {
+      try {
+        setManualInvoices(JSON.parse(savedManual));
+      } catch (e) {
+        setManualInvoices([]);
+      }
+    } else {
+      setManualInvoices([]);
+    }
+
+    // 9. Edited Values
+    const savedEditedValues = localStorage.getItem(editedValuesStorageKey);
+    if (savedEditedValues) {
+      try {
+        setPatientEditedValues(JSON.parse(savedEditedValues));
+      } catch (e) {
+        setPatientEditedValues({});
+      }
+    } else {
+      setPatientEditedValues({});
+    }
+  }, [
+    storageKey, nfStorageKey, emitaStorageKey, entitiesStorageKey, 
+    subEntitiesStorageKey, taxRateStorageKey, splitsStorageKey, 
+    manualStorageKey, editedValuesStorageKey
+  ]);
 
   const fetchData = () => {
     setLoading(true);
@@ -156,13 +211,90 @@ export default function CobrançasPage() {
     return { totalToCollect, totalSessions, patientCount, ticketAverage, sentCount, pendingCount };
   }, [data, sentPatients]);
 
-  // Filtrar pacientes selecionados para Nota Fiscal
+  // Filtrar, unir com manuais, desdobrar splits e aplicar valores editados
   const notaFiscalData = useMemo(() => {
-    if (!Array.isArray(data)) return [];
-    return data
-      .filter(p => notaFiscalPatients.has(p.patientName))
-      .sort((a, b) => a.patientName.localeCompare(b.patientName));
-  }, [data, notaFiscalPatients]);
+    const result: { 
+      patientName: string; 
+      displayName: string; 
+      totalValue: number; 
+      isSplitPart: boolean; 
+      parentName: string; 
+      parentKey: string;
+      partId: string; 
+      isManual: boolean; 
+    }[] = [];
+    
+    // 1. Pacientes vindos das cobranças importadas
+    if (Array.isArray(data)) {
+      const activeNf = data.filter(p => notaFiscalPatients.has(p.patientName));
+      activeNf.forEach(p => {
+        const splits = patientSplits[p.patientName];
+        if (splits && splits.length > 0) {
+          splits.forEach(part => {
+            const overridenValue = patientEditedValues[part.id];
+            result.push({
+              patientName: p.patientName,
+              displayName: part.partName,
+              totalValue: overridenValue !== undefined ? overridenValue : part.value,
+              isSplitPart: true,
+              parentName: p.patientName,
+              parentKey: p.patientName,
+              partId: part.id,
+              isManual: false
+            });
+          });
+        } else {
+          const overridenValue = patientEditedValues[p.patientName];
+          result.push({
+            patientName: p.patientName,
+            displayName: p.patientName,
+            totalValue: overridenValue !== undefined ? overridenValue : p.totalValue,
+            isSplitPart: false,
+            parentName: p.patientName,
+            parentKey: p.patientName,
+            partId: p.patientName,
+            isManual: false
+          });
+        }
+      });
+    }
+
+    // 2. Lançamentos manuais de Notas Fiscais
+    if (Array.isArray(manualInvoices)) {
+      manualInvoices.forEach(m => {
+        const splits = patientSplits[m.id];
+        if (splits && splits.length > 0) {
+          splits.forEach(part => {
+            const overridenValue = patientEditedValues[part.id];
+            result.push({
+              patientName: m.patientName,
+              displayName: part.partName,
+              totalValue: overridenValue !== undefined ? overridenValue : part.value,
+              isSplitPart: true,
+              parentName: m.patientName,
+              parentKey: m.id,
+              partId: part.id,
+              isManual: true
+            });
+          });
+        } else {
+          const overridenValue = patientEditedValues[m.id];
+          result.push({
+            patientName: m.patientName,
+            displayName: m.patientName,
+            totalValue: overridenValue !== undefined ? overridenValue : m.totalValue,
+            isSplitPart: false,
+            parentName: m.patientName,
+            parentKey: m.id,
+            partId: m.id,
+            isManual: true
+          });
+        }
+      });
+    }
+
+    return result.sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [data, notaFiscalPatients, patientSplits, manualInvoices, patientEditedValues]);
 
   const totalNfValue = useMemo(() => {
     return notaFiscalData.reduce((acc, p) => acc + p.totalValue, 0);
@@ -170,7 +302,7 @@ export default function CobrançasPage() {
 
   const totalEmitaValue = useMemo(() => {
     return notaFiscalData
-      .filter(p => emitaPatients.has(p.patientName))
+      .filter(p => emitaPatients.has(p.partId))
       .reduce((acc, p) => acc + p.totalValue, 0);
   }, [notaFiscalData, emitaPatients]);
 
@@ -194,8 +326,8 @@ export default function CobrançasPage() {
     let totalTaxGeneral = 0;
 
     notaFiscalData.forEach(p => {
-      const entity = patientEntities[p.patientName] || "";
-      const subEntity = patientSubEntities[p.patientName] || "";
+      const entity = patientEntities[p.partId] || "";
+      const subEntity = patientSubEntities[p.partId] || "";
       const val = p.totalValue;
       const tax = taxRate > 0 ? (val * taxRate) / 100 : 0;
 
@@ -305,25 +437,37 @@ Clínica Kinesis Fisioterapia`;
         localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
         return next;
       });
+      setPatientSplits(prev => {
+        const next = { ...prev };
+        delete next[patientName];
+        localStorage.setItem(splitsStorageKey, JSON.stringify(next));
+        return next;
+      });
+      setPatientEditedValues(prev => {
+        const next = { ...prev };
+        delete next[patientName];
+        localStorage.setItem(editedValuesStorageKey, JSON.stringify(next));
+        return next;
+      });
     }
   };
 
-  const handleToggleEmita = (patientName: string, isChecked: boolean) => {
+  const handleToggleEmita = (partId: string, isChecked: boolean) => {
     setEmitaPatients(prev => {
       const next = new Set(prev);
       if (isChecked) {
-        next.add(patientName);
+        next.add(partId);
       } else {
-        next.delete(patientName);
+        next.delete(partId);
       }
       localStorage.setItem(emitaStorageKey, JSON.stringify(Array.from(next)));
       return next;
     });
   };
 
-  const handleUpdateEntity = (patientName: string, entity: "Kinesis" | "MAF") => {
+  const handleUpdateEntity = (partId: string, entity: "Kinesis" | "MAF") => {
     setPatientEntities(prev => {
-      const next = { ...prev, [patientName]: entity };
+      const next = { ...prev, [partId]: entity };
       localStorage.setItem(entitiesStorageKey, JSON.stringify(next));
       return next;
     });
@@ -331,22 +475,22 @@ Clínica Kinesis Fisioterapia`;
     if (entity === "MAF") {
       setPatientSubEntities(prev => {
         const next = { ...prev };
-        delete next[patientName];
+        delete next[partId];
         localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
         return next;
       });
     } else {
       setPatientSubEntities(prev => {
-        const next = { ...prev, [patientName]: "Kinesis" };
+        const next = { ...prev, [partId]: "Kinesis" };
         localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
         return next;
       });
     }
   };
 
-  const handleUpdateSubEntity = (patientName: string, subEntity: string) => {
+  const handleUpdateSubEntity = (partId: string, subEntity: string) => {
     setPatientSubEntities(prev => {
-      const next = { ...prev, [patientName]: subEntity };
+      const next = { ...prev, [partId]: subEntity };
       localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
       return next;
     });
@@ -357,17 +501,151 @@ Clínica Kinesis Fisioterapia`;
     localStorage.setItem(taxRateStorageKey, String(rate));
   };
 
+  const handleSplitPatient = (patientId: string, currentValue: number) => {
+    const userInput = prompt(
+      `Digite o valor para a primeira parte da divisão (Valor total atual: R$ ${currentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}):`
+    );
+
+    if (userInput === null) return; // User cancelled
+
+    let cleanInput = userInput.replace(/[R$\s]/g, '').replace(/\./g, '');
+    if (cleanInput.includes(',')) {
+      cleanInput = cleanInput.replace(',', '.');
+    }
+    const val1 = Number(parseFloat(cleanInput).toFixed(2));
+    if (isNaN(val1) || val1 <= 0 || val1 >= currentValue) {
+      alert("Valor inválido! Deve ser um número maior que 0 e menor que o valor total.");
+      return;
+    }
+
+    const val2 = Number((currentValue - val1).toFixed(2));
+
+    const part1Id = `${patientId}-part1-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const part2Id = `${patientId}-part2-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    setPatientSplits(prev => {
+      const next = {
+        ...prev,
+        [patientId]: [
+          { id: part1Id, partName: `${patientId} (Parte 1)`, value: val1 },
+          { id: part2Id, partName: `${patientId} (Parte 2)`, value: val2 }
+        ]
+      };
+      localStorage.setItem(splitsStorageKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleUnsplitPatient = (patientId: string) => {
+    if (confirm(`Deseja desfazer a divisão do paciente ${patientId}?`)) {
+      setPatientSplits(prev => {
+        const next = { ...prev };
+        delete next[patientId];
+        localStorage.setItem(splitsStorageKey, JSON.stringify(next));
+        return next;
+      });
+    }
+  };
+
+  const handleAddManualInvoice = () => {
+    if (!manualNameInput.trim()) {
+      alert("Por favor, digite o nome do paciente.");
+      return;
+    }
+    let cleanVal = manualValueInput.replace(/[R$\s]/g, '').replace(/\./g, '');
+    if (cleanVal.includes(',')) {
+      cleanVal = cleanVal.replace(',', '.');
+    }
+    const val = parseFloat(cleanVal);
+    if (isNaN(val) || val <= 0) {
+      alert("Por favor, digite um valor válido maior que 0.");
+      return;
+    }
+
+    const newInvoice = {
+      id: `manual-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      patientName: manualNameInput.trim(),
+      totalValue: val
+    };
+
+    setManualInvoices(prev => {
+      const next = [...prev, newInvoice];
+      localStorage.setItem(manualStorageKey, JSON.stringify(next));
+      return next;
+    });
+
+    setManualNameInput("");
+    setManualValueInput("");
+    setShowAddManualForm(false);
+  };
+
+  const handleDeleteManualInvoice = (id: string, name: string) => {
+    if (confirm(`Deseja remover o lançamento manual do paciente ${name}?`)) {
+      setManualInvoices(prev => {
+        const next = prev.filter(m => m.id !== id);
+        localStorage.setItem(manualStorageKey, JSON.stringify(next));
+        return next;
+      });
+
+      setPatientSplits(prev => {
+        const next = { ...prev };
+        delete next[id];
+        localStorage.setItem(splitsStorageKey, JSON.stringify(next));
+        return next;
+      });
+    }
+  };
+
+  const handleEditValue = (partId: string, currentVal: number, displayName: string) => {
+    const userInput = prompt(
+      `Digite o novo valor para a nota fiscal de ${displayName} (Valor atual: R$ ${currentVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}):`
+    );
+
+    if (userInput === null) return; // User cancelled
+
+    let cleanInput = userInput.replace(/[R$\s]/g, '').replace(/\./g, '');
+    if (cleanInput.includes(',')) {
+      cleanInput = cleanInput.replace(',', '.');
+    }
+    const newVal = parseFloat(cleanInput);
+    if (isNaN(newVal) || newVal < 0) {
+      alert("Por favor, digite um valor válido maior ou igual a 0.");
+      return;
+    }
+
+    setPatientEditedValues(prev => {
+      const next = { ...prev, [partId]: newVal };
+      localStorage.setItem(editedValuesStorageKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleResetValue = (partId: string) => {
+    setPatientEditedValues(prev => {
+      const next = { ...prev };
+      delete next[partId];
+      localStorage.setItem(editedValuesStorageKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
   const handleResetNotaFiscal = () => {
     if (confirm("Deseja desmarcar todas as notas fiscais, emissões e configurações deste mês?")) {
       setNotaFiscalPatients(new Set());
       setEmitaPatients(new Set());
       setPatientEntities({});
       setPatientSubEntities({});
+      setPatientSplits({});
+      setManualInvoices([]);
+      setPatientEditedValues({});
       setTaxRate(0);
       localStorage.removeItem(nfStorageKey);
       localStorage.removeItem(emitaStorageKey);
       localStorage.removeItem(entitiesStorageKey);
       localStorage.removeItem(subEntitiesStorageKey);
+      localStorage.removeItem(splitsStorageKey);
+      localStorage.removeItem(manualStorageKey);
+      localStorage.removeItem(editedValuesStorageKey);
       localStorage.removeItem(taxRateStorageKey);
     }
   };
@@ -720,27 +998,135 @@ Clínica Kinesis Fisioterapia`;
                 Pacientes selecionados para emissão no período de {months[selectedMonth]} de {selectedYear}
               </p>
             </div>
-            {notaFiscalData.length > 0 && (
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                onClick={handleResetNotaFiscal}
+                onClick={() => setShowAddManualForm(prev => !prev)}
                 style={{ 
                   padding: '10px 16px', 
                   borderRadius: '12px', 
-                  border: '1px solid var(--border-color)', 
-                  background: 'white', 
-                  color: 'var(--danger)', 
+                  border: 'none', 
+                  background: 'var(--primary)', 
+                  color: 'white', 
                   cursor: 'pointer', 
                   fontWeight: '700', 
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)'
                 }}
               >
-                <RotateCcw size={16} /> Limpar Seleções
+                <Plus size={16} /> Adicionar Lançamento
               </button>
-            )}
+              {notaFiscalData.length > 0 && (
+                <button
+                  onClick={handleResetNotaFiscal}
+                  style={{ 
+                    padding: '10px 16px', 
+                    borderRadius: '12px', 
+                    border: '1px solid var(--border-color)', 
+                    background: 'white', 
+                    color: 'var(--danger)', 
+                    cursor: 'pointer', 
+                    fontWeight: '700', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <RotateCcw size={16} /> Limpar Seleções
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Form para Lançamentos Manuais */}
+          {showAddManualForm && (
+            <div className="fade-in" style={{
+              background: 'rgba(99, 102, 241, 0.03)',
+              border: '1.5px dashed var(--primary)',
+              borderRadius: '20px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              marginBottom: '10px'
+            }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>Novo Lançamento Manual</h3>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 2, minWidth: '200px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>Nome do Paciente</label>
+                  <input
+                    type="text"
+                    value={manualNameInput}
+                    onChange={(e) => setManualNameInput(e.target.value)}
+                    placeholder="Nome Completo"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-color)',
+                      outline: 'none',
+                      fontSize: '0.95rem'
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: '120px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>Valor da Nota (R$)</label>
+                  <input
+                    type="text"
+                    value={manualValueInput}
+                    onChange={(e) => setManualValueInput(e.target.value)}
+                    placeholder="ex: 350,00"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-color)',
+                      outline: 'none',
+                      fontSize: '0.95rem',
+                      fontWeight: '700'
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <button
+                  onClick={() => {
+                    setShowAddManualForm(false);
+                    setManualNameInput("");
+                    setManualValueInput("");
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-color)',
+                    background: 'white',
+                    color: 'var(--text-secondary)',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddManualInvoice}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: 'var(--primary)',
+                    color: 'white',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)'
+                  }}
+                >
+                  Salvar Lançamento
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Campo de Alíquota de Imposto */}
           {notaFiscalData.length > 0 && (
@@ -821,10 +1207,11 @@ Clínica Kinesis Fisioterapia`;
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {notaFiscalData.map((p, idx) => {
-                const isEmita = emitaPatients.has(p.patientName);
-                const selectedEntity = patientEntities[p.patientName] || "";
-                const selectedSubEntity = patientSubEntities[p.patientName] || "";
+                const isEmita = emitaPatients.has(p.partId);
+                const selectedEntity = patientEntities[p.partId] || "";
+                const selectedSubEntity = patientSubEntities[p.partId] || "";
                 const calculatedTax = taxRate > 0 ? (p.totalValue * taxRate) / 100 : 0;
+                const isEdited = patientEditedValues[p.partId] !== undefined;
 
                 return (
                   <div key={idx} style={{
@@ -855,26 +1242,94 @@ Clínica Kinesis Fisioterapia`;
                         background: isEmita ? 'rgba(34, 197, 94, 0.1)' : 'rgba(0,0,0,0.04)',
                         padding: '6px 12px',
                         borderRadius: '8px',
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.2s ease',
+                        userSelect: 'none'
                       }}>
                         <input 
                           type="checkbox"
                           checked={isEmita}
-                          onChange={(e) => handleToggleEmita(p.patientName, e.target.checked)}
+                          onChange={(e) => handleToggleEmita(p.partId, e.target.checked)}
                           style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#22c55e' }}
                         />
                         <span>emita</span>
                       </label>
-                      <span style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '1.15rem' }}>
-                        {p.patientName}
+                      <span style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {p.displayName}
+                        {p.isManual && (
+                          <span style={{ fontSize: '0.65rem', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: '900' }}>MANUAL</span>
+                        )}
                       </span>
+                      <div style={{ display: 'flex', gap: '6px', marginLeft: '6px' }}>
+                        {p.isSplitPart ? (
+                          <button
+                            onClick={() => handleUnsplitPatient(p.parentKey)}
+                            title="Desfazer divisão e reunificar"
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              padding: '6px',
+                              color: 'var(--primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              borderRadius: '8px',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <RotateCcw size={15} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleSplitPatient(p.parentKey, p.totalValue)}
+                            title="Dividir Nota em duas partes"
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              padding: '6px',
+                              color: 'var(--text-secondary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              borderRadius: '8px',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <Split size={15} />
+                          </button>
+                        )}
+                        {p.isManual && (
+                          <button
+                            onClick={() => handleDeleteManualInvoice(p.parentKey, p.patientName)}
+                            title="Excluir lançamento manual"
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              padding: '6px',
+                              color: 'var(--danger)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              borderRadius: '8px',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Seletores Entidade e Sub-Opções */}
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <select
                         value={selectedEntity}
-                        onChange={(e) => handleUpdateEntity(p.patientName, e.target.value as "Kinesis" | "MAF")}
+                        onChange={(e) => handleUpdateEntity(p.partId, e.target.value as "Kinesis" | "MAF")}
                         style={{
                           padding: '8px 12px',
                           borderRadius: '10px',
@@ -895,7 +1350,7 @@ Clínica Kinesis Fisioterapia`;
                       {selectedEntity === "Kinesis" ? (
                         <select
                           value={selectedSubEntity}
-                          onChange={(e) => handleUpdateSubEntity(p.patientName, e.target.value)}
+                          onChange={(e) => handleUpdateSubEntity(p.partId, e.target.value)}
                           style={{
                             padding: '8px 12px',
                             borderRadius: '10px',
@@ -925,11 +1380,61 @@ Clínica Kinesis Fisioterapia`;
                     </div>
 
                     {/* Valores e Impostos */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', minWidth: '220px', justifyContent: 'flex-end' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '800' }}>Valor Total</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: '900', color: 'var(--primary)' }}>
-                          R$ {p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', minWidth: '250px', justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '800' }}>
+                            {isEdited ? 'Valor Editado' : 'Valor Total'}
+                          </div>
+                          <div style={{ 
+                            fontSize: '1.2rem', 
+                            fontWeight: '900', 
+                            color: isEdited ? 'var(--primary)' : 'var(--text-primary)' 
+                          }}>
+                            R$ {p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <button
+                            onClick={() => handleEditValue(p.partId, p.totalValue, p.displayName)}
+                            title="Editar valor"
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              color: 'var(--text-secondary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              borderRadius: '6px',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          {isEdited && (
+                            <button
+                              onClick={() => handleResetValue(p.partId)}
+                              title="Restaurar valor original"
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                padding: '4px',
+                                color: 'var(--danger)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                borderRadius: '6px',
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <RotateCcw size={13} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       
