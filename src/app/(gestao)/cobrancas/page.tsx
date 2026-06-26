@@ -192,6 +192,31 @@ export default function CobrançasPage() {
           setPatientSplits(JSON.parse(config.patientSplits || "{}"));
           setManualInvoices(JSON.parse(config.manualInvoices || "[]"));
           setPatientEditedValues(JSON.parse(config.patientEditedValues || "{}"));
+        } else {
+          // Se não houver configuração no banco para este período, carregar do LocalStorage (fallback)
+          const savedNf = localStorage.getItem(nfStorageKey);
+          setNotaFiscalPatients(savedNf ? new Set(JSON.parse(savedNf)) : new Set());
+
+          const savedEmita = localStorage.getItem(emitaStorageKey);
+          setEmitaPatients(savedEmita ? new Set(JSON.parse(savedEmita)) : new Set());
+
+          const savedEntities = localStorage.getItem(entitiesStorageKey);
+          setPatientEntities(savedEntities ? JSON.parse(savedEntities) : {});
+
+          const savedSubEntities = localStorage.getItem(subEntitiesStorageKey);
+          setPatientSubEntities(savedSubEntities ? JSON.parse(savedSubEntities) : {});
+
+          const savedTaxRate = localStorage.getItem(taxRateStorageKey);
+          setTaxRate(savedTaxRate ? parseFloat(savedTaxRate) || 0 : 0);
+
+          const savedSplits = localStorage.getItem(splitsStorageKey);
+          setPatientSplits(savedSplits ? JSON.parse(savedSplits) : {});
+
+          const savedManual = localStorage.getItem(manualStorageKey);
+          setManualInvoices(savedManual ? JSON.parse(savedManual) : []);
+
+          const savedEditedValues = localStorage.getItem(editedValuesStorageKey);
+          setPatientEditedValues(savedEditedValues ? JSON.parse(savedEditedValues) : {});
         }
       }
       setDbLoaded(true);
@@ -207,13 +232,16 @@ export default function CobrançasPage() {
     fetchConfig();
   }, [selectedMonth, selectedYear]);
 
-  // Recarregar configurações quando a janela/aba ganhar foco
+  // Recarregar configurações quando a aba/janela mudar de visibilidade (ex: trocar de aba)
+  // Nota: Usamos visibilitychange em vez de focus para evitar que prompts/confirms modais reiniciem o estado local.
   useEffect(() => {
-    const handleFocus = () => {
-      fetchConfig();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchConfig();
+      }
     };
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [selectedMonth, selectedYear]);
 
   // Sincronizar com banco de dados e LocalStorage com debounce
