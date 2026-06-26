@@ -35,10 +35,18 @@ export default function CobrançasPage() {
   const [notaFiscalPatients, setNotaFiscalPatients] = useState<Set<string>>(new Set());
   const [emitaPatients, setEmitaPatients] = useState<Set<string>>(new Set());
 
+  // Novos estados para seleções de Notas Fiscais e Impostos
+  const [patientEntities, setPatientEntities] = useState<Record<string, "Kinesis" | "MAF">>({});
+  const [patientSubEntities, setPatientSubEntities] = useState<Record<string, string>>({});
+  const [taxRate, setTaxRate] = useState<number>(0);
+
   // Chaves para persistência baseadas no período
   const storageKey = `sent-patients-${selectedMonth}-${selectedYear}`;
   const nfStorageKey = `nota-fiscal-patients-${selectedMonth}-${selectedYear}`;
   const emitaStorageKey = `emita-patients-${selectedMonth}-${selectedYear}`;
+  const entitiesStorageKey = `nf-entities-${selectedMonth}-${selectedYear}`;
+  const subEntitiesStorageKey = `nf-sub-entities-${selectedMonth}-${selectedYear}`;
+  const taxRateStorageKey = `nf-tax-rate-${selectedMonth}-${selectedYear}`;
 
   // Carregar status do localStorage ao mudar o período
   useEffect(() => {
@@ -77,7 +85,40 @@ export default function CobrançasPage() {
     } else {
       setEmitaPatients(new Set());
     }
-  }, [storageKey, nfStorageKey, emitaStorageKey]);
+
+    // 4. Patient Entities
+    const savedEntities = localStorage.getItem(entitiesStorageKey);
+    if (savedEntities) {
+      try {
+        setPatientEntities(JSON.parse(savedEntities));
+      } catch (e) {
+        setPatientEntities({});
+      }
+    } else {
+      setPatientEntities({});
+    }
+
+    // 5. Patient Sub Entities
+    const savedSubEntities = localStorage.getItem(subEntitiesStorageKey);
+    if (savedSubEntities) {
+      try {
+        setPatientSubEntities(JSON.parse(savedSubEntities));
+      } catch (e) {
+        setPatientSubEntities({});
+      }
+    } else {
+      setPatientSubEntities({});
+    }
+
+    // 6. Tax Rate
+    const savedTaxRate = localStorage.getItem(taxRateStorageKey);
+    if (savedTaxRate) {
+      const parsed = parseFloat(savedTaxRate);
+      setTaxRate(isNaN(parsed) ? 0 : parsed);
+    } else {
+      setTaxRate(0);
+    }
+  }, [storageKey, nfStorageKey, emitaStorageKey, entitiesStorageKey, subEntitiesStorageKey, taxRateStorageKey]);
 
   const fetchData = () => {
     setLoading(true);
@@ -132,6 +173,51 @@ export default function CobrançasPage() {
       .filter(p => emitaPatients.has(p.patientName))
       .reduce((acc, p) => acc + p.totalValue, 0);
   }, [notaFiscalData, emitaPatients]);
+
+  // Totais consolidados para a planilha de resumo
+  const summaryTotals = useMemo(() => {
+    const totals: Record<string, number> = {
+      "MAF": 0,
+      "Kinesis - Kinesis": 0,
+      "Kinesis - Pilates": 0,
+      "Kinesis - Stuart": 0,
+      "Kinesis - Paula": 0,
+      "Kinesis - Daniel": 0,
+      "Kinesis - Newton": 0,
+      "Kinesis - Guilherme": 0,
+      "Kinesis - João": 0,
+      "Kinesis - Julia": 0,
+      "Não Especificado": 0,
+    };
+
+    let totalGeneral = 0;
+    let totalTaxGeneral = 0;
+
+    notaFiscalData.forEach(p => {
+      const entity = patientEntities[p.patientName] || "";
+      const subEntity = patientSubEntities[p.patientName] || "";
+      const val = p.totalValue;
+      const tax = taxRate > 0 ? (val * taxRate) / 100 : 0;
+
+      totalGeneral += val;
+      totalTaxGeneral += tax;
+
+      if (entity === "MAF") {
+        totals["MAF"] += val;
+      } else if (entity === "Kinesis") {
+        const key = `Kinesis - ${subEntity || "Kinesis"}`;
+        if (totals[key] !== undefined) {
+          totals[key] += val;
+        } else {
+          totals["Kinesis - Kinesis"] += val;
+        }
+      } else {
+        totals["Não Especificado"] += val;
+      }
+    });
+
+    return { totals, totalGeneral, totalTaxGeneral };
+  }, [notaFiscalData, patientEntities, patientSubEntities, taxRate]);
 
   const generateMessage = (p: any) => {
     const datesStr = p.dates.join('\n');
@@ -207,6 +293,18 @@ Clínica Kinesis Fisioterapia`;
         localStorage.setItem(emitaStorageKey, JSON.stringify(Array.from(next)));
         return next;
       });
+      setPatientEntities(prev => {
+        const next = { ...prev };
+        delete next[patientName];
+        localStorage.setItem(entitiesStorageKey, JSON.stringify(next));
+        return next;
+      });
+      setPatientSubEntities(prev => {
+        const next = { ...prev };
+        delete next[patientName];
+        localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
+        return next;
+      });
     }
   };
 
@@ -223,12 +321,54 @@ Clínica Kinesis Fisioterapia`;
     });
   };
 
+  const handleUpdateEntity = (patientName: string, entity: "Kinesis" | "MAF") => {
+    setPatientEntities(prev => {
+      const next = { ...prev, [patientName]: entity };
+      localStorage.setItem(entitiesStorageKey, JSON.stringify(next));
+      return next;
+    });
+    
+    if (entity === "MAF") {
+      setPatientSubEntities(prev => {
+        const next = { ...prev };
+        delete next[patientName];
+        localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
+        return next;
+      });
+    } else {
+      setPatientSubEntities(prev => {
+        const next = { ...prev, [patientName]: "Kinesis" };
+        localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
+        return next;
+      });
+    }
+  };
+
+  const handleUpdateSubEntity = (patientName: string, subEntity: string) => {
+    setPatientSubEntities(prev => {
+      const next = { ...prev, [patientName]: subEntity };
+      localStorage.setItem(subEntitiesStorageKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleUpdateTaxRate = (rate: number) => {
+    setTaxRate(rate);
+    localStorage.setItem(taxRateStorageKey, String(rate));
+  };
+
   const handleResetNotaFiscal = () => {
-    if (confirm("Deseja desmarcar todas as notas fiscais e emissões deste mês?")) {
+    if (confirm("Deseja desmarcar todas as notas fiscais, emissões e configurações deste mês?")) {
       setNotaFiscalPatients(new Set());
       setEmitaPatients(new Set());
+      setPatientEntities({});
+      setPatientSubEntities({});
+      setTaxRate(0);
       localStorage.removeItem(nfStorageKey);
       localStorage.removeItem(emitaStorageKey);
+      localStorage.removeItem(entitiesStorageKey);
+      localStorage.removeItem(subEntitiesStorageKey);
+      localStorage.removeItem(taxRateStorageKey);
     }
   };
 
@@ -602,6 +742,45 @@ Clínica Kinesis Fisioterapia`;
             )}
           </div>
 
+          {/* Campo de Alíquota de Imposto */}
+          {notaFiscalData.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              background: 'rgba(0,0,0,0.02)',
+              padding: '12px 20px',
+              borderRadius: '16px',
+              border: '1px solid var(--border-color)',
+              alignSelf: 'flex-start'
+            }}>
+              <span style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.95rem' }}>Alíquota de Imposto (%):</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={taxRate || ""}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  handleUpdateTaxRate(isNaN(val) ? 0 : val);
+                }}
+                placeholder="0.0"
+                style={{
+                  width: '85px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  outline: 'none',
+                  fontWeight: '700',
+                  fontSize: '1rem',
+                  textAlign: 'center',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
+          )}
+
           {/* Métricas da Aba */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
             <div style={{ padding: '16px 20px', background: 'rgba(99, 102, 241, 0.04)', borderRadius: '16px', border: '1px solid rgba(99, 102, 241, 0.08)' }}>
@@ -643,6 +822,10 @@ Clínica Kinesis Fisioterapia`;
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {notaFiscalData.map((p, idx) => {
                 const isEmita = emitaPatients.has(p.patientName);
+                const selectedEntity = patientEntities[p.patientName] || "";
+                const selectedSubEntity = patientSubEntities[p.patientName] || "";
+                const calculatedTax = taxRate > 0 ? (p.totalValue * taxRate) / 100 : 0;
+
                 return (
                   <div key={idx} style={{
                     display: 'flex',
@@ -657,7 +840,8 @@ Clínica Kinesis Fisioterapia`;
                     flexWrap: 'wrap',
                     gap: '15px'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                    {/* Checkbox e Nome */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: '1 1 280px' }}>
                       <label style={{ 
                         display: 'flex', 
                         alignItems: 'center', 
@@ -685,13 +869,152 @@ Clínica Kinesis Fisioterapia`;
                         {p.patientName}
                       </span>
                     </div>
-                    
-                    <div style={{ fontSize: '1.25rem', fontWeight: '900', color: 'var(--primary)' }}>
-                      R$ {p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+                    {/* Seletores Entidade e Sub-Opções */}
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <select
+                        value={selectedEntity}
+                        onChange={(e) => handleUpdateEntity(p.patientName, e.target.value as "Kinesis" | "MAF")}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-color)',
+                          background: 'white',
+                          color: 'var(--text-primary)',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          outline: 'none',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        <option value="">Entidade...</option>
+                        <option value="Kinesis">Kinesis</option>
+                        <option value="MAF">MAF</option>
+                      </select>
+
+                      {selectedEntity === "Kinesis" ? (
+                        <select
+                          value={selectedSubEntity}
+                          onChange={(e) => handleUpdateSubEntity(p.patientName, e.target.value)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            border: '1px solid var(--border-color)',
+                            background: 'white',
+                            color: 'var(--text-primary)',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            fontSize: '0.9rem'
+                          }}
+                        >
+                          <option value="">Opção...</option>
+                          <option value="Kinesis">Kinesis</option>
+                          <option value="Pilates">Pilates</option>
+                          <option value="Stuart">Stuart</option>
+                          <option value="Paula">Paula</option>
+                          <option value="Daniel">Daniel</option>
+                          <option value="Newton">Newton</option>
+                          <option value="Guilherme">Guilherme</option>
+                          <option value="João">João</option>
+                          <option value="Julia">Julia</option>
+                        </select>
+                      ) : (
+                        <div style={{ width: '120px' }}></div>
+                      )}
+                    </div>
+
+                    {/* Valores e Impostos */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', minWidth: '220px', justifyContent: 'flex-end' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '800' }}>Valor Total</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: '900', color: 'var(--primary)' }}>
+                          R$ {p.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      
+                      {taxRate > 0 && (
+                        <div style={{ textAlign: 'right', borderLeft: '1px solid var(--border-color)', paddingLeft: '20px' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#ef4444', textTransform: 'uppercase', fontWeight: '800' }}>Imposto ({taxRate}%)</div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#ef4444' }}>
+                            R$ {calculatedTax.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Planilha de Resumo */}
+          {notaFiscalData.length > 0 && (
+            <div style={{ 
+              marginTop: '40px', 
+              borderTop: '2px solid var(--border-color)', 
+              paddingTop: '30px' 
+            }}>
+              <h3 style={{ fontSize: '1.4rem', fontWeight: '900', marginBottom: '18px', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
+                Resumo de Emissões por Opção
+              </h3>
+              
+              <div style={{
+                overflowX: 'auto',
+                borderRadius: '16px',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+              }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  textAlign: 'left',
+                  background: 'white',
+                  fontSize: '0.95rem'
+                }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '2px solid var(--border-color)' }}>
+                      <th style={{ padding: '16px 20px', fontWeight: '800', color: 'var(--text-secondary)' }}>Opção / Entidade</th>
+                      <th style={{ padding: '16px 20px', fontWeight: '800', color: 'var(--text-secondary)', textAlign: 'right' }}>Valor Total Emitido</th>
+                      {taxRate > 0 && (
+                        <th style={{ padding: '16px 20px', fontWeight: '800', color: 'var(--text-secondary)', textAlign: 'right' }}>Imposto ({taxRate}%)</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(summaryTotals.totals)
+                      .filter(([_, value]) => value > 0)
+                      .map(([option, val], idx) => {
+                        const calculatedTax = taxRate > 0 ? (val * taxRate) / 100 : 0;
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '14px 20px', fontWeight: '700', color: 'var(--text-primary)' }}>{option}</td>
+                            <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: '800', color: 'var(--primary)' }}>
+                              R$ {val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            {taxRate > 0 && (
+                              <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: '800', color: '#ef4444' }}>
+                                R$ {calculatedTax.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    {/* Linha de Total Geral */}
+                    <tr style={{ background: 'rgba(99, 102, 241, 0.03)', borderTop: '2px solid var(--primary)', fontWeight: '900' }}>
+                      <td style={{ padding: '18px 20px', color: 'var(--text-primary)', fontSize: '1.05rem' }}>TOTAL GERAL</td>
+                      <td style={{ padding: '18px 20px', textAlign: 'right', color: 'var(--primary)', fontSize: '1.15rem' }}>
+                        R$ {summaryTotals.totalGeneral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      {taxRate > 0 && (
+                        <td style={{ padding: '18px 20px', textAlign: 'right', color: '#ef4444', fontSize: '1.15rem' }}>
+                          R$ {summaryTotals.totalTaxGeneral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      )}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
