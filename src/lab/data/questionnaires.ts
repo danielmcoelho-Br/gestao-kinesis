@@ -2224,6 +2224,44 @@ export const questionnairesData: Record<string, Questionnaire> = {
         }
     ],
     calculateScore: (answers: Record<string, any>) => ({ score: 0, max: 0, percentage: 100, interpretation: 'Orientação Registrada', unit: '%' })
+  },
+  nutricao: {
+    id: 'nutricao',
+    segment: 'nutricao',
+    title: 'Relatório de Composição Corporal',
+    description: 'Protocolo de avaliação nutricional por bioimpedância e dados antropométricos.',
+    type: 'clinical',
+    sections: [
+      {
+        id: 'antropometria',
+        title: 'Medidas Antropométricas',
+        fields: [
+          { id: 'peso', label: 'Peso (Kg)', type: 'number', min: 0, max: 300, step: 0.1 },
+          { id: 'altura', label: 'Altura (m)', type: 'number', min: 0, max: 2.5, step: 0.01 },
+          { id: 'imc', label: 'IMC (Kg/m²)', type: 'number', isCalculated: true }
+        ]
+      },
+      {
+        id: 'bioimpedancia',
+        title: 'BIOIMPEDANCIA',
+        fields: [
+          { id: 'massa_magra_pct', label: 'Massa Muscular (%)', type: 'number', min: 0, max: 100, step: 0.1 },
+          { id: 'gordura_pct', label: 'Gordura (%)', type: 'number', min: 0, max: 100, step: 0.1 },
+          { id: 'idade_metabolica', label: 'Idade Metabólica (anos)', type: 'number', min: 0, max: 150 },
+          { id: 'gordura_visceral', label: 'Índice de Gordura Visceral', type: 'number', min: 0, max: 30 },
+          { id: 'taxa_metabolica_basal', label: 'Taxa Metabólica Basal (Kcal)', type: 'number', min: 0, max: 10000 }
+        ]
+      },
+      {
+        id: 'resultados_calculados',
+        title: 'Resultados Calculados',
+        fields: [
+          { id: 'massa_magra_kg', label: 'Massa Muscular em Kg', type: 'number', isCalculated: true },
+          { id: 'gordura_kg', label: 'Gordura Corporal em Kg', type: 'number', isCalculated: true }
+        ]
+      }
+    ],
+    calculateScore: (answers: Record<string, any>) => ({ score: 0, max: 0, percentage: 100, interpretation: 'Avaliação Concluída', unit: '%' })
   }
 };
 

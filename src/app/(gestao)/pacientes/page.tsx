@@ -465,9 +465,32 @@ export default function PacientesPage() {
   const runGeocoding = async () => {
     setGeocoding(true);
     try {
-      const res = await fetch('/api/patients/geocode', { method: 'POST' });
-      const result = await res.json();
-      alert(result.message || result.error);
+      let hasMore = true;
+      let totalGeocoded = 0;
+      let iterations = 0;
+      const maxIterations = 50; // Safety guard limit
+      
+      while (hasMore && iterations < maxIterations) {
+        iterations++;
+        const res = await fetch('/api/patients/geocode', { method: 'POST' });
+        if (!res.ok) {
+          throw new Error("Erro na resposta do servidor");
+        }
+        const result = await res.json();
+        
+        if (result.error) {
+          alert(`Erro: ${result.error}`);
+          break;
+        }
+
+        const geocodedInThisBatch = (result.successCount || 0) + (result.placeholderCount || 0);
+        totalGeocoded += geocodedInThisBatch;
+
+        if (result.remaining === 0 || geocodedInThisBatch === 0) {
+          hasMore = false;
+          alert(`${totalGeocoded} endereços geocodificados com sucesso nesta execução.`);
+        }
+      }
       fetchStats();
     } catch (e) {
       alert("Erro ao processar geocodificação");

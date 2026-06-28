@@ -117,6 +117,11 @@ export async function middleware(request: NextRequest) {
     const isRestrictedApi =
       pathname.startsWith("/api/stats") ||
       pathname.startsWith("/api/patients/stats") ||
+      pathname.startsWith("/api/patients/geocode") ||
+      pathname.startsWith("/api/patients/inactive") ||
+      pathname.startsWith("/api/import-logs") ||
+      pathname.startsWith("/api/migrate-lab") ||
+      pathname.startsWith("/api/setup") ||
       pathname.startsWith("/api/admin/") ||
       (pathname.startsWith("/api/profissionais") && request.method !== "GET") ||
       pathname.startsWith("/api/financeiro") ||

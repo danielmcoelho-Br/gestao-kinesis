@@ -46,5 +46,11 @@ export const segments = [
     title: "Formulários Diversos",
     description: "Testes isolados, análise fotográfica e orientações.",
     icon: "/icons/diversos.png"
+  },
+  {
+    id: "nutricao",
+    title: "Nutrição",
+    description: "Relatório de Composição Corporal e bioimpedância.",
+    icon: "/icons/icon_nutricao.png"
   }
 ];

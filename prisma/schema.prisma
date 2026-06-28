@@ -31,6 +31,9 @@ model Session {
   value            Float
   clinicPercentage Float
   ownerId          String?
+  importLogId      String?
+  isAlertDismissed Boolean      @default(false)
+  isAdminDismissed Boolean      @default(false)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
   professional     Professional @relation(fields: [professionalId], references: [id])
@@ -38,6 +41,9 @@ model Session {
   @@index([professionalId])
   @@index([date])
   @@index([patientName])
+  @@index([importLogId])
+  @@index([isAlertDismissed])
+  @@index([isAdminDismissed])
 }
 
 model Transaction {
@@ -49,6 +55,7 @@ model Transaction {
   category    String
   bank        String
   ownerId     String?
+  importLogId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -59,6 +66,8 @@ model Transaction {
 
   // Checkbox for reconciliation
   isChecked    Boolean  @default(false)
+
+  @@index([importLogId])
 }
 
 model ServicePercentage {

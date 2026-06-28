@@ -24,15 +24,40 @@ export async function DELETE(
     if (log.fileType === "SEUFISIO") {
       await prisma.session.deleteMany({
         where: {
-          date: { gte: startOfMonth, lte: endOfMonth }
+          OR: [
+            { importLogId: id },
+            {
+              importLogId: null,
+              date: { gte: startOfMonth, lte: endOfMonth }
+            }
+          ]
         }
       });
     } else if (log.fileType === "BANCO_BB" || log.fileType === "BANCO_INTER") {
       const bankName = log.fileType === "BANCO_BB" ? "Banco do Brasil" : "Banco Inter";
       await prisma.transaction.deleteMany({
         where: {
-          date: { gte: startOfMonth, lte: endOfMonth },
-          bank: bankName
+          OR: [
+            { importLogId: id },
+            {
+              importLogId: null,
+              date: { gte: startOfMonth, lte: endOfMonth },
+              bank: bankName
+            }
+          ]
+        }
+      });
+    } else if (log.fileType === "COBRANCAS") {
+      await prisma.billingSession.deleteMany({
+        where: {
+          OR: [
+            { importLogId: id },
+            {
+              importLogId: "MANUAL",
+              month: log.month,
+              year: log.year
+            }
+          ]
         }
       });
     }

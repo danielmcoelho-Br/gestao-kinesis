@@ -2,6 +2,7 @@ import { Section } from "@/lab/data/questionnaires";
 import FormSection from "../FormSection";
 import FormField from "../FormField";
 import { calculateAssessmentScore, CalculationType } from "@/lab/lib/calculations";
+import NutritionReport from "./NutritionReport";
 
 interface PrintSummaryViewProps {
     forScreen?: boolean;
@@ -81,12 +82,12 @@ export default function PrintSummaryView({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', textAlign: 'right' }}>
                     <p style={{ margin: 0, fontWeight: '800', color: '#1e293b' }}>
                         <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Avaliador</span>
-                        {(assessmentOwner?.name || user?.name)}
+                        {type === 'nutricao' ? 'Cristiana Alves Ferreira Amato' : (assessmentOwner?.name || user?.name)}
                     </p>
                     <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'flex-end' }}>
                         <p style={{ margin: 0, fontWeight: '700' }}>
-                           <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>CREFITO</span>
-                           {assessmentOwner?.crefito || user?.crefito || '--'}
+                           <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>{type === 'nutricao' ? 'CRN' : 'CREFITO'}</span>
+                           {type === 'nutricao' ? 'CRN-3 10407' : (assessmentOwner?.crefito || user?.crefito || '--')}
                         </p>
                         <p style={{ margin: 0, fontWeight: '700' }}>
                            <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Data</span>
@@ -98,7 +99,18 @@ export default function PrintSummaryView({
         </div>
 
         {/* CONTENT RENDERER */}
-        {isClinical ? (
+        {type === 'nutricao' ? (
+            <NutritionReport 
+                answers={answers}
+                patientGender={patientGender}
+                patientAge={patientAge}
+                patientName={patientName}
+                assessmentDate={assessmentDate}
+                patientAssessments={patientAssessments}
+                assessmentId={assessmentId}
+                isPrint={!forScreen}
+            />
+        ) : isClinical ? (
             items.filter(item => {
                 const section = item as Section;
                 
@@ -346,7 +358,15 @@ export default function PrintSummaryView({
         )}
 
         {/* Signature Section */}
-        {(assessmentOwner?.signature || user?.signature) && (
+        {type === 'nutricao' ? (
+            <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', breakInside: 'avoid' }}>
+                <div style={{ height: '55px' }} /> {/* Espaço para assinatura */}
+                <div style={{ width: '300px', borderTop: '1.5px solid #333', textAlign: 'center', paddingTop: '0.35rem' }}>
+                    <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.95rem' }}>Cristiana Alves Ferreira Amato</p>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#444', fontWeight: 'bold' }}>NUTRICIONISTA - CRN-3 10407</p>
+                </div>
+            </div>
+        ) : (assessmentOwner?.signature || user?.signature) ? (
             <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', breakInside: 'avoid' }}>
                 <img 
                     src={assessmentOwner?.signature || user?.signature} 
@@ -358,7 +378,7 @@ export default function PrintSummaryView({
                     <p style={{ margin: 0, fontSize: '0.8rem', color: '#444', fontWeight: 'bold' }}>FISIOTERAPEUTA - CREFITO: {assessmentOwner?.crefito || user?.crefito}</p>
                 </div>
             </div>
-        )}
+        ) : null}
 
         {/* Functional Charts moved inline to sections */}
         <div style={{ display: 'none' }}>

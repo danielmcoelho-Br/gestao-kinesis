@@ -180,6 +180,8 @@ export async function POST(request: Request) {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
     const useNominatim = !apiKey;
 
+    const batchSize = useNominatim ? 10 : 50;
+
     const patientsToGeocode = await prisma.patient.findMany({
       where: {
         OR: [
@@ -191,7 +193,7 @@ export async function POST(request: Request) {
           { address: { not: "" } }
         ]
       },
-      take: 100
+      take: batchSize
     });
 
     if (patientsToGeocode.length === 0) {

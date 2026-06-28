@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { createPatientSchema, updatePatientSchema, addPatientDocumentSchema } from "@/lab/lib/schemas";
 import { normalizeName } from "@/lib/utils";
+import { isFuzzyMatch } from "@/lib/stringDistance";
 
 const isValidUUID = (id: string) => {
   if (typeof id !== "string") return false;
@@ -25,110 +26,71 @@ export async function getPatients(
 
     const andConditions: any[] = [];
 
-    // 1. Otimização de busca por nome (global, unaccent)
+    // 1. Otimização de busca por nome (global, unaccent, flexível para termos do meio)
     if (query) {
-      const searchPattern = `%${query}%`;
-      const matchedPatients = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "Patient" 
-        WHERE unaccent(name) ILIKE unaccent(${searchPattern})
-      `;
-      const matchedPatientIds = matchedPatients.map(p => p.id);
+      const searchTerms = query.trim().split(/\s+/).filter(Boolean);
+      if (searchTerms.length > 0) {
+        let sqlQuery = 'SELECT id FROM "Patient" WHERE ';
+        const queryParams: any[] = [];
+        
+        const conditions = searchTerms.map((term, index) => {
+          queryParams.push(`%${term}%`);
+          return `unaccent(name) ILIKE unaccent($${index + 1})`;
+        });
+        
+        sqlQuery += conditions.join(' AND ');
+        
+        const matchedPatients = await prisma.$queryRawUnsafe<{ id: string }[]>(sqlQuery, ...queryParams);
+        const matchedPatientIds = matchedPatients.map(p => p.id);
 
-      andConditions.push({
-        id: { in: matchedPatientIds }
-      });
+        andConditions.push({
+          id: { in: matchedPatientIds }
+        });
+      }
     } else {
-      // 2. Filtro por Fisioterapeuta e Restrição Temporal de 30 dias (apenas se não houver busca ativa)
+      // 2. Filtro estrito: apenas pacientes com atendimentos finalizados no último mês com o fisioterapeuta selecionado
       const sessionsLastMonth = await prisma.session.findMany({
         where: {
           status: { startsWith: "Finalizado" },
           date: { gte: oneMonthAgo },
           NOT: {
-            serviceType: { contains: "Pilates" }
-          }
+            serviceType: { contains: "Pilates", mode: 'insensitive' }
+          },
+          ...(professionalId && professionalId !== "all" ? { professionalId } : {})
         },
         select: {
-          patientName: true,
-          professionalId: true
+          patientName: true
         }
       });
 
-      const uniquePatientNamesOfLastMonth = Array.from(new Set(
+      const uniquePatientNames = Array.from(new Set(
         sessionsLastMonth.map(s => s.patientName.trim().toLowerCase())
-      ));
-      const uniquePatientNamesOfLastMonthVariants = Array.from(new Set(
-        uniquePatientNamesOfLastMonth.flatMap(name => [
+      )).filter(Boolean);
+
+      if (uniquePatientNames.length === 0) {
+        // Se não houver atendimentos no período, a lista inicial fica vazia
+        return { success: true, data: [] };
+      }
+
+      // Criar variantes com e sem acentos para garantir a correspondência de nomes
+      const uniqueNamesWithVariants = Array.from(new Set(
+        uniquePatientNames.flatMap(name => [
           name,
           name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         ])
       ));
 
-      if (professionalId && professionalId !== "all") {
-        const patientNamesForProf = Array.from(new Set(
-          sessionsLastMonth
-            .filter(s => s.professionalId === professionalId)
-            .map(s => s.patientName.trim().toLowerCase())
-        ));
-        const patientNamesForProfVariants = Array.from(new Set(
-          patientNamesForProf.flatMap(name => [
-            name,
-            name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-          ])
-        ));
-        
-        const startsWithConditions = patientNamesForProfVariants.map(name => ({
-          name: {
-            startsWith: name,
-            mode: 'insensitive' as const
-          }
-        }));
-
-        const newPatientCondition: any = {
-          OR: [
-            { createdAt: { gte: oneMonthAgo } },
-            { diagnoses: { some: { status: "ATIVO" } } }
-          ]
-        };
-
-        if (uniquePatientNamesOfLastMonthVariants.length > 0) {
-          newPatientCondition.NOT = uniquePatientNamesOfLastMonthVariants.map(name => ({
-            name: {
-              startsWith: name,
-              mode: 'insensitive' as const
-            }
-          }));
+      // Mapear os nomes usando a lógica de correspondência de 18 caracteres
+      const startsWithConditions = uniqueNamesWithVariants.map(name => ({
+        name: {
+          startsWith: name.substring(0, 18),
+          mode: 'insensitive' as const
         }
+      }));
 
-        andConditions.push({
-          OR: [
-            ...startsWithConditions,
-            newPatientCondition
-          ]
-        });
-      } else {
-        const startsWithConditions = uniquePatientNamesOfLastMonthVariants.map(name => ({
-          name: {
-            startsWith: name,
-            mode: 'insensitive' as const
-          }
-        }));
-
-        andConditions.push({
-          OR: [
-            ...startsWithConditions,
-            {
-              createdAt: { gte: oneMonthAgo }
-            },
-            {
-              diagnoses: {
-                some: {
-                  status: "ATIVO"
-                }
-              }
-            }
-          ]
-        });
-      }
+      andConditions.push({
+        OR: startsWithConditions
+      });
     }
 
     // 3. Filtro por Alta (Em Atendimento)
@@ -1111,6 +1073,12 @@ export async function deletePatientDiagnosis(id: string) {
   }
 }
 
+function parseDateAsLocal(dateInput: Date | string | null | undefined): Date {
+  if (!dateInput) return new Date();
+  const d = new Date(dateInput);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 export async function getDischargedDiagnoses(
   professionalId: string = "all",
   startMonth?: number,
@@ -1148,33 +1116,29 @@ export async function getDischargedDiagnoses(
       }
     });
 
-    const uniqueTruncatedNames = Array.from(new Set(
-      diagnoses.flatMap(d => {
-        const fullName = d.patient.name.trim();
-        const truncatedName = fullName.substring(0, 18).trim();
+    const distinctNames = Array.from(new Set(
+      diagnoses.map(d => d.patient.name.trim())
+    ));
+
+    const nameKeys = Array.from(new Set(
+      distinctNames.flatMap(name => {
+        const truncated = name.substring(0, 18);
         return [
-          fullName,
-          fullName.toLowerCase(),
-          fullName.toUpperCase(),
-          truncatedName,
-          truncatedName.toLowerCase(),
-          truncatedName.toUpperCase()
+          truncated,
+          truncated.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         ];
       })
     ));
-    const nameVariants = Array.from(new Set(
-      uniqueTruncatedNames.flatMap(name => [
-        name,
-        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      ])
-    ));
 
-    const sessions = nameVariants.length > 0
+    const sessions = nameKeys.length > 0
       ? await prisma.session.findMany({
           where: {
-            patientName: {
-              in: nameVariants
-            },
+            OR: nameKeys.map(name => ({
+              patientName: {
+                startsWith: name,
+                mode: 'insensitive' as const
+              }
+            })),
             status: { startsWith: "Finalizado" },
             NOT: {
               serviceType: { contains: "Pilates" }
@@ -1208,11 +1172,16 @@ export async function getDischargedDiagnoses(
     for (const diag of diagnoses) {
       const patientName = diag.patient.name;
       const truncatedName = normalizeName(patientName.substring(0, 18));
-      const patientSessions = sessionsMap.get(truncatedName) || [];
+      let patientSessions = sessionsMap.get(truncatedName) || [];
+
+      // Fallback: similaridade aproximada se não achou pelo truncamento exato
+      if (patientSessions.length === 0) {
+        patientSessions = sessions.filter(s => isFuzzyMatch(diag.patient.name, s.patientName));
+      }
 
       // Filter sessions within the diagnosis period
-      const diagStart = new Date(diag.start_date);
-      const diagEnd = diag.discharge_date ? new Date(diag.discharge_date) : new Date();
+      const diagStart = parseDateAsLocal(diag.start_date);
+      const diagEnd = diag.discharge_date ? parseDateAsLocal(diag.discharge_date) : new Date();
 
       // Set time boundaries to cover the full days
       diagStart.setHours(0, 0, 0, 0);
@@ -1522,33 +1491,29 @@ export async function getAverageSessionsPerDiagnosis(
       }
     });
 
-    const uniqueTruncatedNames = Array.from(new Set(
-      diagnoses.flatMap(d => {
-        const fullName = d.patient.name.trim();
-        const truncatedName = fullName.substring(0, 18).trim();
+    const distinctNames = Array.from(new Set(
+      diagnoses.map(d => d.patient.name.trim())
+    ));
+
+    const nameKeys = Array.from(new Set(
+      distinctNames.flatMap(name => {
+        const truncated = name.substring(0, 18);
         return [
-          fullName,
-          fullName.toLowerCase(),
-          fullName.toUpperCase(),
-          truncatedName,
-          truncatedName.toLowerCase(),
-          truncatedName.toUpperCase()
+          truncated,
+          truncated.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         ];
       })
     ));
-    const nameVariants = Array.from(new Set(
-      uniqueTruncatedNames.flatMap(name => [
-        name,
-        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      ])
-    ));
 
-    const sessions = nameVariants.length > 0
+    const sessions = nameKeys.length > 0
       ? await prisma.session.findMany({
           where: {
-            patientName: {
-              in: nameVariants
-            },
+            OR: nameKeys.map(name => ({
+              patientName: {
+                startsWith: name,
+                mode: 'insensitive' as const
+              }
+            })),
             status: { startsWith: "Finalizado" },
             NOT: {
               serviceType: { contains: "Pilates" }
@@ -1576,11 +1541,16 @@ export async function getAverageSessionsPerDiagnosis(
     for (const diag of diagnoses) {
       const patientName = diag.patient.name;
       const truncatedName = normalizeName(patientName.substring(0, 18));
-      const patientSessions = sessionsMap.get(truncatedName) || [];
+      let patientSessions = sessionsMap.get(truncatedName) || [];
+
+      // Fallback: similaridade aproximada se não achou pelo truncamento exato
+      if (patientSessions.length === 0) {
+        patientSessions = sessions.filter(s => isFuzzyMatch(diag.patient.name, s.patientName));
+      }
 
       // Filtrar sessões no período do diagnóstico (início até a alta)
-      const diagStart = new Date(diag.start_date);
-      const diagEnd = diag.discharge_date ? new Date(diag.discharge_date) : new Date();
+      const diagStart = parseDateAsLocal(diag.start_date);
+      const diagEnd = diag.discharge_date ? parseDateAsLocal(diag.discharge_date) : new Date();
 
       diagStart.setHours(0, 0, 0, 0);
       diagEnd.setHours(23, 59, 59, 999);
@@ -1622,5 +1592,129 @@ export async function getAverageSessionsPerDiagnosis(
     return { success: false, error: error.message || "Erro ao calcular média de sessões" };
   }
 }
+
+export async function getPendingEvaluationsList(professionalNameFilter?: string) {
+  try {
+    const startOfMay2026 = new Date("2026-05-01T00:00:00.000Z");
+    
+    // 1. Buscar sessões de avaliação finalizadas a partir de maio de 2026
+    const sessions = await prisma.session.findMany({
+      where: {
+        date: {
+          gte: startOfMay2026
+        },
+        status: "Finalizado",
+        isAdminDismissed: false,
+        // Se profissionalNameFilter estiver definido (é fisio), buscar apenas não descartados pelo fisio
+        ...(professionalNameFilter ? { isAlertDismissed: false } : {})
+      },
+      include: {
+        professional: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      },
+      orderBy: {
+        date: "desc"
+      }
+    });
+
+    // Filtrar apenas sessões que representam avaliações no faturamento
+    const evaluationSessions = sessions.filter(s => 
+      s.serviceType.toLowerCase().includes("avalia")
+    );
+
+    if (evaluationSessions.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // 2. Buscar todos os pacientes e seus diagnósticos e avaliações do módulo clínico
+    const patients = await prisma.patient.findMany({
+      include: {
+        diagnoses: {
+          where: {
+            status: "ATIVO"
+          }
+        },
+        assessments: true
+      }
+    });
+
+    // Mapear pacientes por nome normalizado de 18 caracteres (limite padrão do faturamento)
+    const patientsMap = new Map<string, any>();
+    patients.forEach(p => {
+      const key = normalizeName(p.name.substring(0, 18));
+      patientsMap.set(key, p);
+    });
+
+    // 3. Montar a lista de pendências
+    const pending = [];
+    for (const session of evaluationSessions) {
+      const sessionKey = normalizeName(session.patientName.substring(0, 18));
+      let matchedPatient = patientsMap.get(sessionKey);
+
+      // Fallback: busca por similaridade aproximada
+      if (!matchedPatient) {
+        matchedPatient = patients.find(p => isFuzzyMatch(p.name, session.patientName));
+      }
+
+      let diagnosisMissing = true;
+      let assessmentMissing = true;
+      let patientId: string | null = null;
+
+      if (matchedPatient) {
+        patientId = matchedPatient.id;
+        diagnosisMissing = matchedPatient.diagnoses.length === 0;
+        assessmentMissing = matchedPatient.assessments.length === 0;
+      }
+
+      // Se o diagnóstico ou a ficha estiver faltando, registra a pendência
+      if (diagnosisMissing || assessmentMissing) {
+        pending.push({
+          sessionId: session.id,
+          patientName: session.patientName,
+          date: session.date,
+          professionalId: session.professionalId,
+          professionalName: session.professional.name,
+          patientId,
+          diagnosisMissing,
+          assessmentMissing,
+          isAlertDismissed: session.isAlertDismissed
+        });
+      }
+    }
+
+    // 4. Filtrar opcionalmente por nome do profissional logado
+    let filteredPending = pending;
+    if (professionalNameFilter) {
+      const filterNorm = normalizeName(professionalNameFilter);
+      filteredPending = pending.filter(item => 
+        normalizeName(item.professionalName) === filterNorm
+      );
+    }
+
+    return { success: true, data: filteredPending };
+  } catch (error: any) {
+    console.error("Error in getPendingEvaluationsList:", error);
+    return { success: false, error: error.message || "Erro ao buscar avaliações pendentes" };
+  }
+}
+
+export async function dismissEvaluationAlert(sessionId: string, asAdmin: boolean = false) {
+  try {
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: asAdmin ? { isAdminDismissed: true } : { isAlertDismissed: true }
+    });
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error in dismissEvaluationAlert:", error);
+    return { success: false, error: error.message || "Erro ao descartar alerta de avaliação" };
+  }
+}
+
 
 

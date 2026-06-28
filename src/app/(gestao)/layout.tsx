@@ -4,6 +4,7 @@ import "./globals.css";
 import Link from "next/link";
 import { PeriodProvider } from "@/gestao/context/PeriodContext";
 import { Sidebar } from "@/gestao/components/Sidebar";
+import { NotificationBanner } from "@/gestao/components/NotificationBanner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,6 +27,7 @@ export default function RootLayout({
           <div className="layout-container">
             <Sidebar />
             <main className="main-content">
+              <NotificationBanner />
               {children}
             </main>
           </div>

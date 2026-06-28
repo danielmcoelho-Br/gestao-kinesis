@@ -822,6 +822,39 @@ export function useAssessmentState({
                 }
             }
 
+            if (type === 'nutricao') {
+                const peso = safeParse(newAnswers['peso']);
+                const alturaRaw = safeParse(newAnswers['altura']);
+                const massaMagraPct = safeParse(newAnswers['massa_magra_pct']);
+                const gorduraPct = safeParse(newAnswers['gordura_pct']);
+
+                let altura = alturaRaw;
+                if (altura > 3) {
+                    altura = altura / 100;
+                }
+
+                if (peso > 0 && altura > 0) {
+                    const imc = peso / (altura * altura);
+                    newAnswers['imc'] = Math.round(imc * 100) / 100;
+                } else {
+                    newAnswers['imc'] = '';
+                }
+
+                if (peso > 0 && massaMagraPct > 0) {
+                    const massaMagraKg = peso * (massaMagraPct / 100);
+                    newAnswers['massa_magra_kg'] = Math.round(massaMagraKg * 100) / 100;
+                } else {
+                    newAnswers['massa_magra_kg'] = '';
+                }
+
+                if (peso > 0 && gorduraPct > 0) {
+                    const gorduraKg = peso * (gorduraPct / 100);
+                    newAnswers['gordura_kg'] = Math.round(gorduraKg * 100) / 100;
+                } else {
+                    newAnswers['gordura_kg'] = '';
+                }
+            }
+
             return newAnswers;
         });
     }, [isEditing, type, patientGender, patientAge, patientActivityLevel, fieldMap]);

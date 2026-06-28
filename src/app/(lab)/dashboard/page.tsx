@@ -53,7 +53,9 @@ import {
   deleteClinicalSegment,
   createDiagnosisSuggestion,
   updateDiagnosisSuggestion,
-  deleteDiagnosisSuggestion
+  deleteDiagnosisSuggestion,
+  getPendingEvaluationsList,
+  dismissEvaluationAlert
 } from "./actions";
 import { toast } from "sonner";
 import Header from "@/lab/components/Header";
@@ -71,6 +73,40 @@ export default function DashboardPage() {
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Estados para cruzamento de avaliações pendentes
+  const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
+  const [showPendingPopup, setShowPendingPopup] = useState(false);
+  const [loadingPendingEvals, setLoadingPendingEvals] = useState(false);
+  const [evalsRefreshTrigger, setEvalsRefreshTrigger] = useState(0);
+
+  const [pendingSortBy, setPendingSortBy] = useState<'name' | 'date'>('name');
+  const [pendingSortOrder, setPendingSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [pendingProfessionalFilter, setPendingProfessionalFilter] = useState<string>('all');
+
+  const pendingProfessionals = Array.from(new Set(
+    pendingEvaluations.map((item: any) => item.professionalName).filter(Boolean)
+  )).sort((a: any, b: any) => a.localeCompare(b, 'pt-BR'));
+
+  const processedPendingEvaluations = [...pendingEvaluations]
+    .filter((item: any) => {
+      if (pendingProfessionalFilter === 'all') return true;
+      return item.professionalName === pendingProfessionalFilter;
+    })
+    .sort((a: any, b: any) => {
+      let valA = '';
+      let valB = '';
+      if (pendingSortBy === 'name') {
+        valA = a.patientName || '';
+        valB = b.patientName || '';
+        const comp = valA.localeCompare(valB, 'pt-BR', { sensitivity: 'base' });
+        return pendingSortOrder === 'asc' ? comp : -comp;
+      } else {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        return pendingSortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+      }
+    });
 
   // WhatsApp Share Modal State
   const [showShareModal, setShowShareModal] = useState(false);
@@ -183,6 +219,7 @@ export default function DashboardPage() {
   };
 
   const [user, setUser] = useState<any>(null);
+  const isAdmin = user && ['ADMINISTRADOR', 'ADMIN', 'GERENTE'].includes(String(user.role || '').toUpperCase());
 
   // Carregar dados do localStorage no mount (evita incompatibilidade de hidratação)
   useEffect(() => {
@@ -194,6 +231,61 @@ export default function DashboardPage() {
       if (savedRecent) setRecentPatients(JSON.parse(savedRecent));
     }
   }, []);
+
+  const fetchPendingEvaluations = async () => {
+    if (!user) {
+      console.log("[Client] fetchPendingEvaluations skipped: user is null");
+      return;
+    }
+    setLoadingPendingEvals(true);
+    const isAdmin = ['ADMINISTRADOR', 'ADMIN', 'GERENTE'].includes(String(user.role || '').toUpperCase());
+    const professionalFilter = isAdmin ? undefined : user.name;
+    console.log("[Client] fetchPendingEvaluations: user =", user.name, "role =", user.role, "isAdmin =", isAdmin, "filter =", professionalFilter);
+    const result = await getPendingEvaluationsList(professionalFilter);
+    console.log("[Client] getPendingEvaluationsList result =", result);
+    if (result.success && result.data) {
+      setPendingEvaluations(result.data);
+      const isPhysio = String(user.role || '').toUpperCase() !== 'SECRETARIA';
+      if (isPhysio && result.data.length > 0) {
+        const isDismissed = sessionStorage.getItem("evaluations-popup-dismissed") === "true";
+        if (!isDismissed) {
+          setShowPendingPopup(true);
+        }
+      }
+    }
+    setLoadingPendingEvals(false);
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchPendingEvaluations();
+    }
+  }, [user, evalsRefreshTrigger]);
+
+  const handlePendingPatientClick = (item: any) => {
+    if (item.patientId) {
+      router.push(`/dashboard/patient/${item.patientId}`);
+    } else {
+      setNewName(item.patientName);
+      setBirthDate("");
+      setNewGender("Masculino");
+      setNewDominance("Destro");
+      setNewActivityLevel("Ativo");
+      setNewPhone("");
+      setShowNewPatientModal(true);
+      toast.info(`Crie a pasta de ${item.patientName} para preencher os dados faltantes.`);
+    }
+  };
+
+  const handleDismissEvaluationAlert = async (sessionId: string) => {
+    const res = await dismissEvaluationAlert(sessionId, isAdmin);
+    if (res.success) {
+      toast.success("Alerta dispensado com sucesso.");
+      setEvalsRefreshTrigger(prev => prev + 1);
+    } else {
+      toast.error("Erro ao dispensar alerta.");
+    }
+  };
 
   const fetchGroups = async () => {
     setLoadingGroups(true);
@@ -497,6 +589,7 @@ export default function DashboardPage() {
       setNewName("");
       setBirthDate("");
       fetchPatients(search);
+      setEvalsRefreshTrigger(prev => prev + 1);
       toast.success("Paciente cadastrado com sucesso!");
     } else {
       toast.error(result.error);
@@ -519,6 +612,7 @@ export default function DashboardPage() {
     if (result.success) {
       setEditingPatient(null);
       fetchPatients(search);
+      setEvalsRefreshTrigger(prev => prev + 1);
       toast.success("Cadastro atualizado com sucesso!");
     } else {
       toast.error(result.error);
@@ -539,6 +633,7 @@ export default function DashboardPage() {
     if (result.success) {
       // Optimistic update
       setPatients(prev => prev.filter(p => p.id !== id));
+      setEvalsRefreshTrigger(prev => prev + 1);
       toast.success("Paciente excluído com sucesso!");
       setShowNewPatientModal(false);
       setEditingPatient(null);
@@ -838,6 +933,100 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* Therapist Pending Evaluations (ao lado da lista de pacientes) */}
+            {!isAdmin && (
+              <div className="list-container" style={{ marginTop: '2rem' }}>
+                <div className="column-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <h3 className="list-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <AlertTriangle size={20} style={{ color: '#ef4444' }} />
+                    Pendências de Documentação
+                  </h3>
+                </div>
+
+                {processedPendingEvaluations.length === 0 ? (
+                  <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                    Nenhuma pendência de documentação encontrada.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {processedPendingEvaluations.map((item) => (
+                      <div 
+                        key={`therapist-pending-${item.sessionId}`}
+                        style={{
+                          background: '#fff8f8',
+                          border: '1px solid #fee2e2',
+                          borderRadius: '12px',
+                          padding: '14px 16px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                          <div style={{ flex: 1 }}>
+                            <button
+                              onClick={() => handlePendingPatientClick(item)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--primary)',
+                                fontWeight: '700',
+                                fontSize: '0.95rem',
+                                cursor: 'pointer',
+                                padding: 0,
+                                textAlign: 'left',
+                                textDecoration: 'underline'
+                              }}
+                            >
+                              {item.patientName}
+                            </button>
+                            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#64748b' }}>
+                              Avaliado em: {new Date(item.date).toLocaleDateString('pt-BR')}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                            {item.diagnosisMissing && (
+                              <span style={{ fontSize: '0.65rem', background: '#fee2e2', color: '#b91c1c', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                Falta Diagnóstico
+                              </span>
+                            )}
+                            {item.assessmentMissing && (
+                              <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                Falta Formulário
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(239, 68, 68, 0.08)', paddingTop: '6px' }}>
+                          <button
+                            onClick={() => handleDismissEvaluationAlert(item.sessionId)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#64748b',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.color = '#ef4444'}
+                            onMouseOut={(e) => e.currentTarget.style.color = '#64748b'}
+                          >
+                            Não alertar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
               {/* Gestão de Diagnósticos (Admin) */}
               {user && ['ADMINISTRADOR', 'ADMIN', 'GERENTE'].includes(String(user.role || '').toUpperCase()) && (
                 <div className="list-container" style={{ marginTop: '2rem' }}>
@@ -1098,6 +1287,201 @@ export default function DashboardPage() {
               )}
             </div>
         </div>
+
+        {/* Lista de Pendências de Preenchimento (Administrador) */}
+        {isAdmin && (
+          <div 
+            className="list-container" 
+            style={{ 
+              marginTop: '2rem', 
+              padding: '2rem', 
+              backgroundColor: '#fff', 
+              border: '1px solid rgba(239, 68, 68, 0.25)', 
+              borderRadius: '24px',
+              boxShadow: '0 10px 30px rgba(239, 68, 68, 0.05)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+              <h3 className="list-title" style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c' }}>
+                <AlertTriangle size={24} />
+                Pendências de Documentação
+              </h3>
+              
+              {/* Filtro por Fisioterapeuta (Avaliador) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Triagem por Fisioterapeuta:</span>
+                <select
+                  value={pendingProfessionalFilter}
+                  onChange={(e) => setPendingProfessionalFilter(e.target.value)}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.85rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: '#fff',
+                    outline: 'none',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all">Todos os Fisioterapeutas</option>
+                  {pendingProfessionals.map((prof: any) => (
+                    <option key={`filter-prof-${prof}`} value={prof}>{prof}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            {processedPendingEvaluations.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                Nenhuma pendência de documentação encontrada.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                      <th 
+                        style={{ padding: '1rem', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => {
+                          if (pendingSortBy === 'name') {
+                            setPendingSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setPendingSortBy('name');
+                            setPendingSortOrder('asc');
+                          }
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          Paciente
+                          {pendingSortBy === 'name' ? (
+                            pendingSortOrder === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+                          ) : null}
+                        </div>
+                      </th>
+                      <th 
+                        style={{ padding: '1rem', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => {
+                          if (pendingSortBy === 'date') {
+                            setPendingSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setPendingSortBy('date');
+                            setPendingSortOrder('desc');
+                          }
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          Data da Avaliação
+                          {pendingSortBy === 'date' ? (
+                            pendingSortOrder === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+                          ) : null}
+                        </div>
+                      </th>
+                      <th style={{ padding: '1rem' }}>Fisioterapeuta Responsável</th>
+                      <th style={{ padding: '1rem' }}>Dado não preenchido</th>
+                      <th style={{ padding: '1rem', textAlign: 'center' }}>Ações</th>
+                    </tr>
+                  </thead>
+                <tbody>
+                  {processedPendingEvaluations.map((item, index) => (
+                    <tr 
+                      key={`admin-pending-${item.sessionId}`}
+                      style={{ 
+                        borderBottom: '1px solid var(--border-color)',
+                        backgroundColor: item.isAlertDismissed 
+                          ? '#fffbeb' // Soft yellow highlight for dismissed alerts
+                          : (index % 2 === 0 ? '#fcfcfc' : '#ffffff'),
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      <td style={{ padding: '1rem', display: 'flex', alignItems: 'center' }}>
+                        {item.isAlertDismissed && (
+                          <span 
+                            title="Fisioterapeuta solicitou não alertar" 
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: '#f59e0b',
+                              color: '#fff',
+                              borderRadius: '50%',
+                              width: '18px',
+                              height: '18px',
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold',
+                              marginRight: '8px',
+                              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+                              flexShrink: 0
+                            }}
+                          >
+                            ?
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handlePendingPatientClick(item)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--primary)',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            padding: 0,
+                            textDecoration: 'underline',
+                            textAlign: 'left'
+                          }}
+                        >
+                          {item.patientName}
+                        </button>
+                      </td>
+                      <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                        {new Date(item.date).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td style={{ padding: '1rem', fontWeight: '600' }}>
+                        {item.professionalName}
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {item.diagnosisMissing && (
+                            <span style={{ fontSize: '0.75rem', background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
+                              Diagnóstico Faltando
+                            </span>
+                          )}
+                          {item.assessmentMissing && (
+                            <span style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
+                              Ficha Faltando
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem', textAlign: 'center' }}>
+                        <button
+                          onClick={() => handleDismissEvaluationAlert(item.sessionId)}
+                          className="btn-primary secondary-btn compact-btn"
+                          style={{ 
+                            padding: '6px 12px', 
+                            fontSize: '0.8rem',
+                            borderColor: '#ef4444',
+                            color: '#ef4444',
+                            backgroundColor: '#fff'
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.backgroundColor = '#fee2e2';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.backgroundColor = '#fff';
+                          }}
+                        >
+                          Não alertar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            )}
+          </div>
+        )}
 
       </main>
 
@@ -2018,6 +2402,116 @@ export default function DashboardPage() {
         confirmLabel="Sim, excluir"
         cancelLabel="Cancelar"
       />
+
+      {/* Unified Pending Evaluations Popup for Physiotherapists */}
+      <AnimatePresence>
+        {showPendingPopup && pendingEvaluations.length > 0 && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              style={{ position: 'relative', backgroundColor: '#ffffff', zIndex: 10, padding: '2rem', borderRadius: '1.5rem', width: '100%', maxWidth: '600px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderRadius: '50%', padding: '8px', display: 'flex' }}>
+                  <AlertTriangle size={24} />
+                </div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+                  Avaliações Clínicas Pendentes
+                </h3>
+              </div>
+
+              <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: '1.5', marginBottom: '1.5rem' }}>
+                Identificamos que os seguintes atendimentos de avaliação ainda não possuem todas as informações clínicas cadastradas no KinesisLab. Por favor, preencha para manter os prontuários atualizados:
+              </p>
+
+              <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '2rem', paddingRight: '4px' }}>
+                {pendingEvaluations.map((item) => (
+                  <div 
+                    key={`popup-pending-${item.sessionId}`}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <button
+                        onClick={() => {
+                          setShowPendingPopup(false);
+                          handlePendingPatientClick(item);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary)',
+                          fontWeight: '700',
+                          fontSize: '0.95rem',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          padding: 0,
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        {item.patientName}
+                      </button>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                        Realizado em: {new Date(item.date).toLocaleDateString('pt-BR')} por {item.professionalName}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                      {item.diagnosisMissing && (
+                        <span style={{ fontSize: '0.7rem', background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
+                          Falta Diagnóstico
+                        </span>
+                      )}
+                      {item.assessmentMissing && (
+                        <span style={{ fontSize: '0.7rem', background: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>
+                          Falta Formulário
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button
+                  onClick={() => {
+                    sessionStorage.setItem("evaluations-popup-dismissed", "true");
+                    setShowPendingPopup(false);
+                  }}
+                  className="btn-primary secondary-btn"
+                  style={{ padding: '0.75rem 1.5rem', borderRadius: '10px' }}
+                >
+                  Seguir sem Preencher
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPendingPopup(false);
+                    handlePendingPatientClick(pendingEvaluations[0]);
+                  }}
+                  className="btn-primary"
+                  style={{ padding: '0.75rem 1.5rem', borderRadius: '10px' }}
+                >
+                  Preencher Agora
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

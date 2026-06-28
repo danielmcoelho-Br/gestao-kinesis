@@ -21,7 +21,8 @@ export type CalculationType =
     | 'afSensibilidade'
     | 'afAnaliseAngular'
     | 'afOrientacao'
-    | 'mmii';
+    | 'mmii'
+    | 'nutricao';
 
 export interface CalculationResult {
     score: number | string;
@@ -329,6 +330,17 @@ export function calculateAssessmentScore(type: CalculationType, answers: Record<
                 interpretation: `Avaliação ${label} Finalizada`,
                 unit: '',
                 details: results
+            };
+        }
+
+        case 'nutricao': {
+            return {
+                score: 'Concluído',
+                max: '-',
+                percentage: 100,
+                interpretation: 'Relatório de Composição Corporal Finalizado',
+                unit: '',
+                details: answers
             };
         }
 
