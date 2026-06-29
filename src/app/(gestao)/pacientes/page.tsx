@@ -74,7 +74,8 @@ export default function PacientesPage() {
   });
 
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-  const hasGoogleMapsApiKey = googleMapsApiKey !== "";
+  // Force Leaflet for client-side rendering to avoid React 19 compatibility crashes with react-google-maps components
+  const hasGoogleMapsApiKey = false;
 
   const heatmapPoints = useMemo(() => {
     const isMapApiReady = hasGoogleMapsApiKey && isLoaded && typeof window !== 'undefined' && !!(window as any).google?.maps;
