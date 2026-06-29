@@ -123,7 +123,7 @@ function AssessmentContent() {
     user,
     assessmentOwner,
     assessmentOwnerId,
-    assessmentDate,
+    assessmentDate, setAssessmentDate,
     patientName,
     patientGender,
     patientAge,
@@ -299,7 +299,39 @@ function AssessmentContent() {
                             </div>
                             <div className="info-row">
                                 <span className="label">Data:</span>
-                                <span className="value">{assessmentDate}</span>
+                                {isEditing ? (
+                                    <input 
+                                        type="date" 
+                                        value={(() => {
+                                            if (!assessmentDate) return "";
+                                            const parts = assessmentDate.split("/");
+                                            if (parts.length === 3) {
+                                                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                            }
+                                            return "";
+                                        })()}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val) {
+                                                const parts = val.split("-");
+                                                if (parts.length === 3) {
+                                                    setAssessmentDate(`${parts[2]}/${parts[1]}/${parts[0]}`);
+                                                }
+                                            }
+                                        }}
+                                        style={{
+                                            border: '1px solid #cbd5e1',
+                                            borderRadius: '0.375rem',
+                                            padding: '2px 6px',
+                                            fontSize: '0.85rem',
+                                            color: '#1e293b',
+                                            outline: 'none',
+                                            backgroundColor: '#f8fafc'
+                                        }}
+                                    />
+                                ) : (
+                                    <span className="value">{assessmentDate}</span>
+                                )}
                             </div>
                         </div>
                     )}

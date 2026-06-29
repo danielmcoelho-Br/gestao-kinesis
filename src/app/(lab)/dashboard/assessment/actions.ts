@@ -9,6 +9,22 @@ const isValidUUID = (id: string) => {
          /^[a-z0-9]{20,32}$/i.test(id);
 };
 
+const parsePtBrDate = (dateStr?: string) => {
+  if (!dateStr) return undefined;
+  const parts = dateStr.split("/");
+  if (parts.length === 3) {
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // 0-based
+    const year = parseInt(parts[2], 10);
+    const date = new Date(year, month, day);
+    if (!isNaN(date.getTime())) {
+      date.setHours(12, 0, 0, 0);
+      return date;
+    }
+  }
+  return undefined;
+};
+
 export async function saveAssessment(data: {
   patientId: string;
   type: string;
@@ -16,11 +32,13 @@ export async function saveAssessment(data: {
   answers: any;
   scoreData: any;
   userId?: string;
+  date?: string;
 }) {
   console.log(`[DEBUG] saveAssessment called for patient: ${data.patientId}`);
   if (!data.patientId) return { success: false, error: "ID de paciente inválido" };
 
   try {
+    const createdDate = parsePtBrDate(data.date);
     const assessment = await prisma.assessment.create({
       data: {
         patient_id: data.patientId,
@@ -28,7 +46,8 @@ export async function saveAssessment(data: {
         segment: data.segment,
         questionnaire_answers: data.answers,
         clinical_data: data.scoreData,
-        created_by_id: data.userId
+        created_by_id: data.userId,
+        created_at: createdDate
       }
     });
 
@@ -85,6 +104,7 @@ export async function updateAssessment(id: string, data: {
   answers: any;
   scoreData: any;
   logEntries: string[];
+  date?: string;
 }) {
   console.log(`[DEBUG] updateAssessment called for: ${id}`);
   if (!id) return { success: false, error: "ID de avaliação inválido" };
@@ -104,13 +124,19 @@ export async function updateAssessment(id: string, data: {
         });
     });
 
+    const createdDate = parsePtBrDate(data.date);
+    const updateData: any = {
+      questionnaire_answers: data.answers,
+      clinical_data: data.scoreData,
+      change_logs: logs
+    };
+    if (createdDate) {
+      updateData.created_at = createdDate;
+    }
+
     await prisma.assessment.update({
       where: { id },
-      data: {
-        questionnaire_answers: data.answers,
-        clinical_data: data.scoreData,
-        change_logs: logs
-      }
+      data: updateData
     });
     
     return { success: true };

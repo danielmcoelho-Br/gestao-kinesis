@@ -161,3 +161,44 @@ Implementamos a compilação estatística de diagnósticos, a correção de perf
 * As alterações foram salvas e enviadas ao repositório no GitHub (`main`).
 * O projeto foi publicado com sucesso no ambiente de produção do **Vercel** (`https://kinesisapp.vercel.app`).
 
+---
+
+## Atualização: Filtro de Pendências de Documentação no Popup Clínico (29/06/2026)
+
+### 1. Restrição de Pendências no Popup ao Fisioterapeuta Logado
+* **Arquivo modificado:** [page.tsx](file:///c:/Users/daniel/.gemini/antigravity/scratch/kinesis-app/src/app/(lab)/dashboard/page.tsx)
+* **Mudança:**
+  - Importamos a função de normalização de strings `normalizeName` de `@/lib/utils` para garantir comparações robustas e consistentes de nomes de profissionais.
+  - Criamos a constante `ownPendingEvaluations` para filtrar a lista de avaliações pendentes (`pendingEvaluations`), mantendo apenas as que pertencem ao profissional logado (`user.name`), independentemente do seu nível de permissão (inclusive administrador).
+  - Atualizamos a função de busca `fetchPendingEvaluations` para que o popup clínico só seja disparado se o profissional logado possuir pelo menos uma pendência própria (`ownPendingCount > 0`).
+  - Atualizamos a renderização do popup no JSX para mapear e interagir exclusivamente com `ownPendingEvaluations`.
+  - **Preservação de Funcionalidades:** A tabela no final da página (visível para Administradores) mantém seu comportamento original intacto, permitindo visualizar e triar as pendências de todos os profissionais.
+
+### 2. Correção de Ordem de Inicialização (Temporal Dead Zone - TDZ)
+* **O problema:** A constante `ownPendingEvaluations` tentava acessar o estado `user` antes de ele ser declarado e inicializado na função do componente, disparando o erro de execução `ReferenceError: Cannot access 'user' before initialization`.
+* **A solução:** Movemos a declaração e inicialização de `ownPendingEvaluations` para logo após a declaração do hook do estado `user` e da constante `isAdmin`.
+* **Resultado:** O erro em tempo de execução foi completamente sanado, e o build/typechecking do TypeScript executou com sucesso (zero erros).
+
+---
+
+## Atualização: Correção de Pacientes Duplicados e Prevenção na Importação de Planilhas (29/06/2026)
+
+### 1. Unificação e Higienização de Cadastros Duplicados (Merge)
+* **Script criado e executado:** [merge_duplicates.js](file:///c:/Users/daniel/.gemini/antigravity/scratch/kinesis-app/scratch/merge_duplicates.js)
+* **O problema:** Pequenas variações de grafia nas planilhas (maiúsculas vs minúsculas, acentos ou espaços extras) causavam a criação de perfis duplicados (ex: `NORTHON IDE` e `Northon Ide`). Isso dividia o histórico clínico dos pacientes, ocultando diagnósticos e dados de alta no prontuário.
+* **A solução:**
+  - O script localizou **11 grupos de duplicidades** no banco de dados.
+  - Para cada grupo, realizou a fusão segura: re-vinculou todos os Diagnósticos (`PatientDiagnosis`), Avaliações (`Assessment`), Evoluções (`Evolution`), Diários de Evolução (`DiaryLog`) e participações em Grupos (`Group`) ao ID do perfil principal.
+  - Copiou os dados cadastrais complementares e removeu com segurança o registro do paciente duplicado do banco.
+
+### 2. Prevenção de Duplicados na Importação Semanal de Perfis de Pacientes
+* **Arquivo modificado:** [route.ts](file:///c:/Users/daniel/.gemini/antigravity/scratch/kinesis-app/src/app/api/upload/route.ts)
+* **O problema:** O endpoint de upload de perfis de pacientes utilizava a operação `prisma.patient.upsert` de forma estrita (`where: { name: name }`). Como o PostgreSQL trata chaves únicas de forma case-sensitive, qualquer variação criava um paciente duplicado.
+* **A solução:**
+  - Substituímos o `upsert` estrito por uma busca em duas etapas:
+    1. Busca pelo nome exato de forma case-insensitive (`mode: "insensitive"`).
+    2. Busca pelo nome normalizado (`normalizeName` que remove acentuações e espaços extras) caso a primeira busca não retorne correspondência.
+  - Se um paciente for localizado, o sistema apenas atualiza (`update`) seus dados usando o ID único, preservando todo o seu histórico clínico.
+  - Se nenhum paciente for encontrado, um novo perfil é criado (`create`).
+* **Resultado:** Segurança contra a geração de novos duplicados, mesmo que as planilhas semanais tragam variações na escrita dos nomes.
+

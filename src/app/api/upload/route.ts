@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeName } from "@/lib/utils";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -1021,36 +1022,69 @@ export async function POST(request: Request) {
             }
           }
 
-          await prisma.patient.upsert({
-            where: { name: String(name) },
-            update: {
-              registration: String(findKey(["Matrícula", "ID", "Código"]) || ""),
-              gender: String(findKey(["Gênero", "Sexo", "Sexo/Gênero"]) || ""),
-              age: parseInt(String(findKey(["Idade", "Idade Atual"]) || "0")) || null,
-              phone: String(findKey(["Telefone", "Celular", "Contato"]) || ""),
-              profession: String(findKey(["Profissão", "Trabalho", "Ocupação"]) || ""),
-              origin: String(findKey(["Origem", "Indicação"]) || ""),
-              provenance: String(findKey(["Procedência", "Cidade", "Bairro"]) || ""),
-              address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
-              latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
-              longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
-              birth_date: birthDate
-            },
-            create: {
-              registration: String(findKey(["Matrícula", "ID", "Código"]) || ""),
-              name: String(name),
-              gender: String(findKey(["Gênero", "Sexo", "Sexo/Gênero"]) || ""),
-              age: parseInt(String(findKey(["Idade", "Idade Atual"]) || "0")) || null,
-              phone: String(findKey(["Telefone", "Celular", "Contato"]) || ""),
-              profession: String(findKey(["Profissão", "Trabalho", "Ocupação"]) || ""),
-              origin: String(findKey(["Origem", "Indicação"]) || ""),
-              provenance: String(findKey(["Procedência", "Cidade", "Bairro"]) || ""),
-              address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
-              latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
-              longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
-              birth_date: birthDate
+          const nameStr = String(name).trim();
+          if (!nameStr) continue;
+
+          // Find existing patient case-insensitively
+          const existing = await prisma.patient.findFirst({
+            where: {
+              name: {
+                equals: nameStr,
+                mode: "insensitive"
+              }
             }
           });
+
+          // Check if there is an existing patient with normalized name matching
+          let matchedPatient = existing;
+          if (!matchedPatient) {
+            const allPatients = await prisma.patient.findMany({
+              select: { id: true, name: true }
+            });
+            const normName = normalizeName(nameStr);
+            const found = allPatients.find(p => normalizeName(p.name) === normName);
+            if (found) {
+              matchedPatient = await prisma.patient.findUnique({
+                where: { id: found.id }
+              });
+            }
+          }
+
+          if (matchedPatient) {
+            await prisma.patient.update({
+              where: { id: matchedPatient.id },
+              data: {
+                registration: String(findKey(["Matrícula", "ID", "Código"]) || ""),
+                gender: String(findKey(["Gênero", "Sexo", "Sexo/Gênero"]) || ""),
+                age: parseInt(String(findKey(["Idade", "Idade Atual"]) || "0")) || null,
+                phone: String(findKey(["Telefone", "Celular", "Contato"]) || ""),
+                profession: String(findKey(["Profissão", "Trabalho", "Ocupação"]) || ""),
+                origin: String(findKey(["Origem", "Indicação"]) || ""),
+                provenance: String(findKey(["Procedência", "Cidade", "Bairro"]) || ""),
+                address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
+                latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
+                longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
+                birth_date: birthDate
+              }
+            });
+          } else {
+            await prisma.patient.create({
+              data: {
+                registration: String(findKey(["Matrícula", "ID", "Código"]) || ""),
+                name: nameStr,
+                gender: String(findKey(["Gênero", "Sexo", "Sexo/Gênero"]) || ""),
+                age: parseInt(String(findKey(["Idade", "Idade Atual"]) || "0")) || null,
+                phone: String(findKey(["Telefone", "Celular", "Contato"]) || ""),
+                profession: String(findKey(["Profissão", "Trabalho", "Ocupação"]) || ""),
+                origin: String(findKey(["Origem", "Indicação"]) || ""),
+                provenance: String(findKey(["Procedência", "Cidade", "Bairro"]) || ""),
+                address: String(findKey(["Endereço", "Logradouro", "Rua"]) || ""),
+                latitude: parseFloat(String(findKey(["Latitude", "Lat"]) || "0")) || null,
+                longitude: parseFloat(String(findKey(["Longitude", "Lng", "Long"]) || "0")) || null,
+                birth_date: birthDate
+              }
+            });
+          }
           importedCount++;
         }
       }

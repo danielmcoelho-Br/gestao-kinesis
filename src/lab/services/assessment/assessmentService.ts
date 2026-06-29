@@ -45,12 +45,14 @@ export const assessmentService = {
         result?: AssessmentResult;
         userId?: string;
         logEntries?: string[];
+        date?: string;
     }) {
         if (data.id) {
             return await updateAssessment(data.id, {
                 answers: data.answers,
                 scoreData: data.result,
-                logEntries: data.logEntries || []
+                logEntries: data.logEntries || [],
+                date: data.date
             });
         } else {
             return await saveAssessment({
@@ -59,7 +61,8 @@ export const assessmentService = {
                 segment: data.segment || '',
                 answers: data.answers,
                 scoreData: data.result,
-                userId: data.userId
+                userId: data.userId,
+                date: data.date
             });
         }
     },

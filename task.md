@@ -1,0 +1,8 @@
+- [x] Implementar a normalização e correspondência de nomes flexível no `reengagementService.ts`
+- [x] Atualizar o método `getInactivePatients` no `reengagementService.ts` para aplicar filtros de período, diagnósticos de alta e data de referência
+- [x] Modificar a rota de API em `route.ts` de inativos para processar os parâmetros do período pesquisado e passar a data de referência
+- [x] Alterar o frontend em `page.tsx` de pacientes para passar o período nas consultas de inativos e observar as mudanças
+- [x] Validar as alterações através de testes e atualizar o walkthrough
+- [x] Implementar a função `exportStoryAsImage` no frontend do stories studio (`src/app/(marketing)/marketing/page.tsx`) usando canvas nativo
+- [x] Inserir o botão "Exportar Imagem" com ícone de download no painel de controle do stories studio
+- [x] Verificar se as alterações não quebram o build e atualizar o walkthrough

@@ -58,6 +58,7 @@ import {
   dismissEvaluationAlert
 } from "./actions";
 import { toast } from "sonner";
+import { normalizeName } from "@/lib/utils";
 import Header from "@/lab/components/Header";
 import ConfirmModal from "@/lab/components/ConfirmModal";
 import { questionnairesData } from "@/lab/data/questionnaires";
@@ -221,6 +222,10 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const isAdmin = user && ['ADMINISTRADOR', 'ADMIN', 'GERENTE'].includes(String(user.role || '').toUpperCase());
 
+  const ownPendingEvaluations = pendingEvaluations.filter(
+    (item: any) => user && normalizeName(item.professionalName) === normalizeName(user.name)
+  );
+
   // Carregar dados do localStorage no mount (evita incompatibilidade de hidratação)
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -246,7 +251,8 @@ export default function DashboardPage() {
     if (result.success && result.data) {
       setPendingEvaluations(result.data);
       const isPhysio = String(user.role || '').toUpperCase() !== 'SECRETARIA';
-      if (isPhysio && result.data.length > 0) {
+      const ownPendingCount = result.data.filter((item: any) => normalizeName(item.professionalName) === normalizeName(user.name)).length;
+      if (isPhysio && ownPendingCount > 0) {
         const isDismissed = sessionStorage.getItem("evaluations-popup-dismissed") === "true";
         if (!isDismissed) {
           setShowPendingPopup(true);
@@ -307,22 +313,34 @@ export default function DashboardPage() {
   };
 
   const trackPatientSearch = (patient: any) => {
-    if (!patient) return;
-    const saved = localStorage.getItem("kinesis_recent_patients");
-    let recent: any[] = saved ? JSON.parse(saved) : [];
-    recent = recent.filter(p => p.id !== patient.id);
-    recent.unshift({
-      id: patient.id,
-      name: patient.name,
-      age: patient.age,
-      gender: patient.gender,
-      createdAt: patient.createdAt,
-      phone: patient.phone,
-      hasOswestry: patient.hasOswestry
-    });
-    recent = recent.slice(0, 10);
-    localStorage.setItem("kinesis_recent_patients", JSON.stringify(recent));
-    setRecentPatients(recent);
+    try {
+      if (!patient) return;
+      const saved = localStorage.getItem("kinesis_recent_patients");
+      let recent: any[] = [];
+      if (saved) {
+        try {
+          recent = JSON.parse(saved);
+        } catch (e) {
+          recent = [];
+        }
+      }
+      if (!Array.isArray(recent)) recent = [];
+      recent = recent.filter(p => p && p.id !== patient.id);
+      recent.unshift({
+        id: patient.id,
+        name: patient.name,
+        age: patient.age,
+        gender: patient.gender,
+        createdAt: patient.createdAt,
+        phone: patient.phone,
+        hasOswestry: patient.hasOswestry
+      });
+      recent = recent.slice(0, 10);
+      localStorage.setItem("kinesis_recent_patients", JSON.stringify(recent));
+      setRecentPatients(recent);
+    } catch (error) {
+      console.error("Error tracking patient search:", error);
+    }
   };
 
   const handlePatientClick = (patient: any) => {
@@ -2405,7 +2423,7 @@ export default function DashboardPage() {
 
       {/* Unified Pending Evaluations Popup for Physiotherapists */}
       <AnimatePresence>
-        {showPendingPopup && pendingEvaluations.length > 0 && (
+        {showPendingPopup && ownPendingEvaluations.length > 0 && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
             <motion.div 
               initial={{ opacity: 0 }}
@@ -2433,7 +2451,7 @@ export default function DashboardPage() {
               </p>
 
               <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '2rem', paddingRight: '4px' }}>
-                {pendingEvaluations.map((item) => (
+                {ownPendingEvaluations.map((item) => (
                   <div 
                     key={`popup-pending-${item.sessionId}`}
                     style={{
@@ -2500,7 +2518,7 @@ export default function DashboardPage() {
                 <button
                   onClick={() => {
                     setShowPendingPopup(false);
-                    handlePendingPatientClick(pendingEvaluations[0]);
+                    handlePendingPatientClick(ownPendingEvaluations[0]);
                   }}
                   className="btn-primary"
                   style={{ padding: '0.75rem 1.5rem', borderRadius: '10px' }}

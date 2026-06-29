@@ -1633,11 +1633,7 @@ export async function getPendingEvaluationsList(professionalNameFilter?: string)
     // 2. Buscar todos os pacientes e seus diagnósticos e avaliações do módulo clínico
     const patients = await prisma.patient.findMany({
       include: {
-        diagnoses: {
-          where: {
-            status: "ATIVO"
-          }
-        },
+        diagnoses: true,
         assessments: true
       }
     });

@@ -891,7 +891,8 @@ export function useAssessmentState({
             isFinished: true,
             result,
             userId: user?.id,
-            logEntries
+            logEntries,
+            date: assessmentDate
         });
 
         if (response.success) {
@@ -999,7 +1000,7 @@ export function useAssessmentState({
         user,
         assessmentOwner,
         assessmentOwnerId,
-        assessmentDate,
+        assessmentDate, setAssessmentDate,
         patientName,
         patientGender,
         patientAge,

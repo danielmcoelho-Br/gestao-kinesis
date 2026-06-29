@@ -516,7 +516,11 @@ const NutritionReport = memo(({
                             <thead>
                                 <tr style={{ borderBottom: "1px solid #e2e8f0", color: "#64748b", fontWeight: "800" }}>
                                     <th style={{ padding: "0.75rem 0.5rem" }}>Indicador</th>
-                                    <th style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>Anterior ({previousAssessment.date})</th>
+                                    {nutritionHistory.map(h => (
+                                        <th key={h.id} style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>
+                                            {h.date}
+                                        </th>
+                                    ))}
                                     <th style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>Atual ({currentPoint.date})</th>
                                     <th style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>Diferença Absoluta</th>
                                     <th style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>Variação (%)</th>
@@ -524,15 +528,15 @@ const NutritionReport = memo(({
                             </thead>
                             <tbody>
                                 {[
-                                    { label: "Peso Corporal (Kg)", key: "peso", positiveIsGood: false },
-                                    { label: "IMC", key: "imc", positiveIsGood: false },
-                                    { label: "Massa Muscular (%)", key: "massa_magra_pct", positiveIsGood: true },
-                                    { label: "Massa Muscular (Kg)", key: "massa_magra_kg", positiveIsGood: true },
-                                    { label: "Gordura Corporal (%)", key: "gordura_pct", positiveIsGood: false },
-                                    { label: "Gordura Corporal (Kg)", key: "gordura_kg", positiveIsGood: false },
-                                    { label: "Idade Metabólica (anos)", key: "idade_metabolica", positiveIsGood: false },
-                                    { label: "Índice de Gordura Visceral", key: "gordura_visceral", positiveIsGood: false },
-                                    { label: "Taxa Metabólica Basal (Kcal)", key: "taxa_metabolica_basal", positiveIsGood: true }
+                                    { label: "Peso Corporal (Kg)", key: "peso", positiveIsGood: false, unit: " Kg" },
+                                    { label: "IMC", key: "imc", positiveIsGood: false, unit: "" },
+                                    { label: "Massa Muscular (%)", key: "massa_magra_pct", positiveIsGood: true, unit: "%" },
+                                    { label: "Massa Muscular (Kg)", key: "massa_magra_kg", positiveIsGood: true, unit: " Kg" },
+                                    { label: "Gordura Corporal (%)", key: "gordura_pct", positiveIsGood: false, unit: "%" },
+                                    { label: "Gordura Corporal (Kg)", key: "gordura_kg", positiveIsGood: false, unit: " Kg" },
+                                    { label: "Idade Metabólica (anos)", key: "idade_metabolica", positiveIsGood: false, unit: " anos" },
+                                    { label: "Índice de Gordura Visceral", key: "gordura_visceral", positiveIsGood: false, unit: "" },
+                                    { label: "Taxa Metabólica Basal (Kcal)", key: "taxa_metabolica_basal", positiveIsGood: true, unit: " Kcal" }
                                 ].map((row, idx) => {
                                     const varData = getVariation(row.key, previousAssessment.answers);
                                     if (!varData) return null;
@@ -558,11 +562,28 @@ const NutritionReport = memo(({
                                     return (
                                         <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9", color: "#334155" }}>
                                             <td style={{ padding: "0.75rem 0.5rem", fontWeight: "700" }}>{row.label}</td>
-                                            <td style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>{parseVal(previousAssessment.answers[row.key])}</td>
-                                            <td style={{ padding: "0.75rem 0.5rem", textAlign: "center", fontWeight: "800" }}>{parseVal(answers[row.key])}</td>
-                                            <td style={{ padding: "0.75rem 0.5rem", textAlign: "center", fontWeight: "700" }}>
-                                                {isZero ? "---" : `${isPositive ? "+" : ""}${varData.diff}`}
+                                            
+                                            {/* Historical assessments values */}
+                                            {nutritionHistory.map(h => {
+                                                const val = parseVal(h.answers[row.key]);
+                                                return (
+                                                    <td key={h.id} style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>
+                                                        {val > 0 ? `${val}${row.unit}` : "---"}
+                                                    </td>
+                                                );
+                                            })}
+
+                                            {/* Current value */}
+                                            <td style={{ padding: "0.75rem 0.5rem", textAlign: "center", fontWeight: "800" }}>
+                                                {parseVal(answers[row.key]) > 0 ? `${parseVal(answers[row.key])}${row.unit}` : "---"}
                                             </td>
+
+                                            {/* Absolute Difference */}
+                                            <td style={{ padding: "0.75rem 0.5rem", textAlign: "center", fontWeight: "700" }}>
+                                                {isZero ? "---" : `${isPositive ? "+" : ""}${varData.diff}${row.unit}`}
+                                            </td>
+
+                                            {/* Variation % */}
                                             <td style={{ padding: "0.5rem", textAlign: "center" }}>
                                                 {isZero ? (
                                                     <span style={{ padding: "4px 8px", borderRadius: "6px", backgroundColor: "#f1f5f9", color: "#475569", fontWeight: "800", fontSize: "0.75rem" }}>
