@@ -172,7 +172,7 @@ async function geocodePatient(
     }
   }
 
-  return { lat: 0, lng: 0 };
+  return null;
 }
 
 export async function POST(request: Request) {
