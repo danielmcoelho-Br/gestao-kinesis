@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
-import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3, Download, X, XCircle, Send, Sparkles, Loader2, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
+import { TrendingUp, Users, DollarSign, Calendar, Activity, Home, Target, BarChart3, Download, X, XCircle, Send, Sparkles, Loader2, CheckCircle2, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { 
   MetricCard, 
   StatusBox, 
-  TemporalComparisonGrid 
+  TemporalComparisonGrid,
+  useFinancePrivacy
 } from "@/gestao/components/DashboardComponents";
 import { MetricChart } from "@/gestao/components/MetricChart";
 import { ReportHeader } from "@/gestao/components/ReportHeader";
@@ -18,6 +19,12 @@ const monthsNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Se
 
 export default function Dashboard() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
+  const hideFinance = useFinancePrivacy();
+  const togglePrivacy = () => {
+    const newVal = !hideFinance;
+    localStorage.setItem("kinesis-finance-privacy", String(newVal));
+    window.dispatchEvent(new Event("kinesis-finance-privacy-change"));
+  };
   const [stats, setStats] = useState<DashboardResponse | null>(null);
   const [activeTab, setActiveTab] = useState<string>('geral');
   const [loading, setLoading] = useState(true);
@@ -283,13 +290,33 @@ export default function Dashboard() {
           </h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>KinesisLab - Clinical & Financial Intelligence</p>
         </div>
-        <button 
-          onClick={() => window.print()} 
-          className="btn no-print" 
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--primary)', color: 'white', borderRadius: '12px', padding: '12px 20px' }}
-        >
-          <Download size={20} /> Exportar Relatório
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }} className="no-print">
+          <button 
+            onClick={togglePrivacy} 
+            className="btn" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              background: 'white', 
+              color: 'var(--text-secondary)', 
+              border: '1px solid var(--border-color)', 
+              borderRadius: '12px', 
+              padding: '12px',
+              cursor: 'pointer'
+            }}
+            title={hideFinance ? "Mostrar dados financeiros" : "Ocultar dados financeiros"}
+          >
+            {hideFinance ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+          <button 
+            onClick={() => window.print()} 
+            className="btn" 
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--primary)', color: 'white', borderRadius: '12px', padding: '12px 20px' }}
+          >
+            <Download size={20} /> Exportar Relatório
+          </button>
+        </div>
       </header>
 
       <AICopilotSection activeTab={activeTab} startMonth={startMonth} startYear={startYear} endMonth={endMonth} endYear={endYear} />
@@ -337,7 +364,9 @@ export default function Dashboard() {
                         <tr key={idx}>
                           <td style={{ fontWeight: '600' }}>{item.name}</td>
                           <td style={{ textAlign: 'center' }}>{item.count}</td>
-                          <td style={{ textAlign: 'right' }}>R$ {item.grossValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            {hideFinance ? "R$ ••••" : `R$ ${item.grossValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

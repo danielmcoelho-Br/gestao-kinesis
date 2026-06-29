@@ -1,7 +1,27 @@
-"use client";
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowUpRight, ArrowDownRight, DollarSign, Calendar } from 'lucide-react';
+
+export function useFinancePrivacy() {
+  const [hideFinance, setHideFinance] = useState(false);
+
+  useEffect(() => {
+    const checkPrivacy = () => {
+      setHideFinance(localStorage.getItem("kinesis-finance-privacy") === "true");
+    };
+
+    checkPrivacy();
+
+    window.addEventListener("storage", checkPrivacy);
+    window.addEventListener("kinesis-finance-privacy-change", checkPrivacy);
+
+    return () => {
+      window.removeEventListener("storage", checkPrivacy);
+      window.removeEventListener("kinesis-finance-privacy-change", checkPrivacy);
+    };
+  }, []);
+
+  return hideFinance;
+}
 
 interface MetricCardProps {
   title: string;
@@ -14,13 +34,19 @@ interface MetricCardProps {
 
 export function MetricCard({ title, value, icon, color, isCurrency, children }: MetricCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const hideFinance = useFinancePrivacy();
+  const isHidden = isCurrency && hideFinance;
 
   return (
     <div 
-      className={`card metric-card ${isExpanded ? 'expanded' : ''}`} 
-      onClick={() => setIsExpanded(!isExpanded)}
+      className={`card metric-card ${isExpanded && !isHidden ? 'expanded' : ''}`} 
+      onClick={() => {
+        if (!isHidden) {
+          setIsExpanded(!isExpanded);
+        }
+      }}
       style={{ 
-        cursor: 'pointer', 
+        cursor: isHidden ? 'default' : 'pointer', 
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
@@ -28,7 +54,7 @@ export function MetricCard({ title, value, icon, color, isCurrency, children }: 
         <div>
           <div style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '8px', letterSpacing: '0.5px' }}>{title}</div>
           <div style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-            {isCurrency ? `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : value}
+            {isHidden ? "R$ ••••" : (isCurrency ? `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : value)}
           </div>
         </div>
         <div style={{ padding: '10px', borderRadius: '12px', background: `${color}15`, color: color }}>
@@ -36,7 +62,7 @@ export function MetricCard({ title, value, icon, color, isCurrency, children }: 
         </div>
       </div>
 
-      {children && (
+      {children && !isHidden && (
         <div 
           className={`chart-container-inner ${isExpanded ? 'is-expanded' : 'is-collapsed'}`} 
           style={!isExpanded ? {
@@ -65,6 +91,9 @@ interface ComparisonItemProps {
 }
 
 export function ComparisonItem({ label, current, prev, isQty }: ComparisonItemProps) {
+  const hideFinance = useFinancePrivacy();
+  const isHidden = !isQty && hideFinance;
+
   const diff = current - prev;
   const pct = prev !== 0 ? (diff / prev) * 100 : 0;
   const isPositive = diff >= 0;
@@ -74,11 +103,11 @@ export function ComparisonItem({ label, current, prev, isQty }: ComparisonItemPr
       {label && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>{label}</div>}
       <div style={{ display: 'flex', justifyContent: label ? 'space-between' : 'center', alignItems: 'center', gap: '8px', flexDirection: label ? 'row' : 'column' }}>
         <div style={{ fontWeight: 'bold', fontSize: label ? '1rem' : '0.95rem' }}>
-          {isPositive ? '+' : ''}{isQty ? diff : `R$ ${diff.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          {isHidden ? "R$ ••••" : (isPositive ? '+' : '') + (isQty ? diff : `R$ ${diff.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: isPositive ? 'var(--success)' : 'var(--danger)', fontWeight: 'bold', fontSize: '0.75rem' }}>
-          {isPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-          {Math.abs(pct).toFixed(1)}%
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: isHidden ? 'var(--text-secondary)' : (isPositive ? 'var(--success)' : 'var(--danger)'), fontWeight: 'bold', fontSize: '0.75rem' }}>
+          {!isHidden && (isPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
+          {isHidden ? "••%" : `${Math.abs(pct).toFixed(1)}%`}
         </div>
       </div>
     </div>

@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { usePeriod } from "@/gestao/context/PeriodContext";
-import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet, Split, Plus, X, Trash2, RefreshCw, Undo2, Redo2, Unlink, FileText, Sparkles, CheckCircle2, EyeOff, RotateCcw, Wallet, PieChart, ChevronDown, ChevronUp, MessageSquare, Send, Lock, Unlock } from "lucide-react";
+import { CreditCard, TrendingUp, TrendingDown, DollarSign, Loader2, FileSpreadsheet, Split, Plus, X, Trash2, RefreshCw, Undo2, Redo2, Unlink, FileText, Sparkles, CheckCircle2, Eye, EyeOff, RotateCcw, Wallet, PieChart, ChevronDown, ChevronUp, MessageSquare, Send, Lock, Unlock } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useFinancePrivacy } from "@/gestao/components/DashboardComponents";
 import * as XLSX from "xlsx";
 import { EXCEL_ITEMS, runFinancialCalculations, ExcelItem } from "@/lib/finance/calculations";
 import {
@@ -81,6 +82,12 @@ const getFriendlyDescription = (description: string) => {
 
 export default function FinanceiroPageContent() {
   const { startMonth, startYear, endMonth, endYear, initialized } = usePeriod();
+  const hideFinance = useFinancePrivacy();
+  const togglePrivacy = () => {
+    const newVal = !hideFinance;
+    localStorage.setItem("kinesis-finance-privacy", String(newVal));
+    window.dispatchEvent(new Event("kinesis-finance-privacy-change"));
+  };
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'date' | 'description' | 'favorecido' | 'amount'>('date');
@@ -1585,6 +1592,24 @@ export default function FinanceiroPageContent() {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button 
+            onClick={togglePrivacy} 
+            className="btn" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              background: 'white', 
+              color: 'var(--text-secondary)', 
+              border: '1px solid var(--border-color)', 
+              borderRadius: '8px', 
+              padding: '8px',
+              cursor: 'pointer'
+            }}
+            title={hideFinance ? "Mostrar dados financeiros" : "Ocultar dados financeiros"}
+          >
+            {hideFinance ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
           <button
             onClick={handleToggleLock}
             disabled={lockLoading}
@@ -1794,21 +1819,27 @@ export default function FinanceiroPageContent() {
           <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Entradas</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
             <TrendingUp color="var(--success)" size={24} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--success)' }}>R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--success)' }}>
+              {hideFinance ? "R$ ••••" : `R$ ${totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </h2>
           </div>
         </div>
         <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--danger)' }}>
           <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Saídas</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
             <TrendingDown color="var(--danger)" size={24} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--danger)' }}>R$ {totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--danger)' }}>
+              {hideFinance ? "R$ ••••" : `R$ ${totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </h2>
           </div>
         </div>
         <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--primary)' }}>
           <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Saldo Período</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
             <DollarSign color="var(--primary)" size={24} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--text-primary)' }}>R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--text-primary)' }}>
+              {hideFinance ? "R$ ••••" : `R$ ${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </h2>
           </div>
         </div>
       </div>
@@ -1847,32 +1878,32 @@ export default function FinanceiroPageContent() {
                   color: valorReal === 0 ? '#475569' : isNegativeReal ? '#dc2626' : '#16a34a',
                   margin: 0
                 }}>
-                  {isNegativeReal ? '-' : ''}R$ {Math.abs(valorReal).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {hideFinance ? "R$ ••••" : `${isNegativeReal ? '-' : ''}R$ ${Math.abs(valorReal).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </h4>
 
                 <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
                     <span>Saldo em Conta:</span>
                     <span style={{ fontWeight: '600', color: '#475569' }}>
-                      {saldoConta < 0 ? '-' : ''}R$ {Math.abs(saldoConta).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {hideFinance ? "R$ ••••" : `${saldoConta < 0 ? '-' : ''}R$ ${Math.abs(saldoConta).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
                     <span>Participação:</span>
-                    <span style={{ fontWeight: '600', color: participacao === 0 ? '#64748b' : participacao < 0 ? '#dc2626' : '#16a34a' }}>
-                      {participacao < 0 ? '-' : participacao > 0 ? '+' : ''}R$ {Math.abs(participacao).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <span style={{ fontWeight: '600', color: hideFinance ? '#64748b' : (participacao === 0 ? '#64748b' : participacao < 0 ? '#dc2626' : '#16a34a') }}>
+                      {hideFinance ? "R$ ••••" : `${participacao < 0 ? '-' : participacao > 0 ? '+' : ''}R$ ${Math.abs(participacao).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
                     <span>Saldo do Mês:</span>
-                    <span style={{ fontWeight: '600', color: value === 0 ? '#64748b' : value < 0 ? '#dc2626' : '#16a34a' }}>
-                      {value < 0 ? '-' : value > 0 ? '+' : ''}R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <span style={{ fontWeight: '600', color: hideFinance ? '#64748b' : (value === 0 ? '#64748b' : value < 0 ? '#dc2626' : '#16a34a') }}>
+                      {hideFinance ? "R$ ••••" : `${value < 0 ? '-' : value > 0 ? '+' : ''}R$ ${Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
                     <span>Mês Ant.:</span>
-                    <span style={{ fontWeight: '600', color: mesAnt === 0 ? '#64748b' : mesAnt < 0 ? '#dc2626' : '#16a34a' }}>
-                      {mesAnt < 0 ? '-' : mesAnt > 0 ? '+' : ''}R$ {Math.abs(mesAnt).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <span style={{ fontWeight: '600', color: hideFinance ? '#64748b' : (mesAnt === 0 ? '#64748b' : mesAnt < 0 ? '#dc2626' : '#16a34a') }}>
+                      {hideFinance ? "R$ ••••" : `${mesAnt < 0 ? '-' : mesAnt > 0 ? '+' : ''}R$ ${Math.abs(mesAnt).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </span>
                   </div>
                 </div>
@@ -1988,20 +2019,20 @@ export default function FinanceiroPageContent() {
                     color: valorReal === 0 ? '#475569' : isNegativeReal ? '#dc2626' : '#16a34a',
                     margin: 0
                   }}>
-                    {isNegativeReal ? '-' : ''}R$ {Math.abs(valorReal).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {hideFinance ? "R$ ••••" : `${isNegativeReal ? '-' : ''}R$ ${Math.abs(valorReal).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </h4>
                   
                   <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
                       <span>Saldo BB:</span>
                       <span style={{ fontWeight: '600' }}>
-                        {saldoTotalBB < 0 ? '-' : ''}R$ {Math.abs(saldoTotalBB).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {hideFinance ? "R$ ••••" : `${saldoTotalBB < 0 ? '-' : ''}R$ ${Math.abs(saldoTotalBB).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
                       <span>Saldo Inter:</span>
                       <span style={{ fontWeight: '600' }}>
-                        {saldoTotalInter < 0 ? '-' : ''}R$ {Math.abs(saldoTotalInter).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {hideFinance ? "R$ ••••" : `${saldoTotalInter < 0 ? '-' : ''}R$ ${Math.abs(saldoTotalInter).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </span>
                     </div>
                   </div>
