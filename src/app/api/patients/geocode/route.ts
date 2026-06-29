@@ -254,7 +254,8 @@ export async function POST(request: Request) {
       placeholderCount,
       errorCount,
       lastStatus,
-      remaining
+      remaining,
+      hasGoogleMapsKey: !useNominatim
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

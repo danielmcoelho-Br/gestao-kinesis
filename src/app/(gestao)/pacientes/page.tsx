@@ -55,6 +55,7 @@ export default function PacientesPage() {
   const [data, setData] = useState<PatientProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [geocoding, setGeocoding] = useState(false);
+  const [geocodingText, setGeocodingText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeView, setActiveView] = useState<'stats' | 'list' | 'map' | 'inactive'>('stats');
   const [inactiveData, setInactiveData] = useState<{ inactivePatients: any[], feedbacks: any[] } | null>(null);
@@ -489,26 +490,53 @@ export default function PacientesPage() {
 
   const runGeocoding = async () => {
     setGeocoding(true);
+    setGeocodingText("Iniciando...");
     try {
-      const res = await fetch('/api/patients/geocode', { method: 'POST' });
-      const result = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(result.error || "Erro na resposta do servidor");
-      }
+      let remaining = 1;
+      let totalGeocoded = 0;
+      let iterations = 0;
+      const maxIterations = 100; // Safety guard limit
 
-      if (result.error) {
-        throw new Error(result.error);
-      }
+      while (remaining > 0 && iterations < maxIterations) {
+        iterations++;
+        const res = await fetch('/api/patients/geocode', { method: 'POST' });
+        const result = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(result.error || "Erro na resposta do servidor");
+        }
 
-      const geocodedInThisBatch = (result.successCount || 0) + (result.placeholderCount || 0);
-      alert(`${geocodedInThisBatch} endereços processados nesta rodada. Pacientes pendentes restantes: ${result.remaining || 0}.`);
-      
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        const geocodedInThisBatch = (result.successCount || 0) + (result.placeholderCount || 0);
+        totalGeocoded += geocodedInThisBatch;
+        remaining = result.remaining || 0;
+
+        // Update button text progress
+        setGeocodingText(`Processados: ${totalGeocoded} (${remaining} restam)`);
+
+        // If Nominatim is active, stop after the first batch to prevent IP bans
+        if (!result.hasGoogleMapsKey) {
+          alert(`${geocodedInThisBatch} endereços processados. Para evitar bloqueio de limites na rede local (Nominatim), o processo automático foi pausado. Clique novamente para processar o próximo lote.`);
+          break;
+        }
+
+        if (remaining === 0 || geocodedInThisBatch === 0) {
+          alert(`Mapeamento concluído! ${totalGeocoded} endereços processados.`);
+          break;
+        }
+
+        // 300ms sleep between Google batches
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
       fetchStats();
     } catch (e: any) {
       alert(e.message || "Erro ao processar geocodificação");
     } finally {
       setGeocoding(false);
+      setGeocodingText("");
     }
   };
 
@@ -1504,7 +1532,7 @@ export default function PacientesPage() {
                   disabled={geocoding}
                   style={{ background: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  {geocoding ? "Processando..." : "Geocodificar Endereços"}
+                  {geocoding ? (geocodingText || "Processando...") : "Geocodificar Endereços"}
                 </button>
               </div>
             </div>
