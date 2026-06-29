@@ -490,35 +490,23 @@ export default function PacientesPage() {
   const runGeocoding = async () => {
     setGeocoding(true);
     try {
-      let hasMore = true;
-      let totalGeocoded = 0;
-      let iterations = 0;
-      const maxIterations = 50; // Safety guard limit
+      const res = await fetch('/api/patients/geocode', { method: 'POST' });
+      const result = await res.json();
       
-      while (hasMore && iterations < maxIterations) {
-        iterations++;
-        const res = await fetch('/api/patients/geocode', { method: 'POST' });
-        if (!res.ok) {
-          throw new Error("Erro na resposta do servidor");
-        }
-        const result = await res.json();
-        
-        if (result.error) {
-          alert(`Erro: ${result.error}`);
-          break;
-        }
-
-        const geocodedInThisBatch = (result.successCount || 0) + (result.placeholderCount || 0);
-        totalGeocoded += geocodedInThisBatch;
-
-        if (result.remaining === 0 || geocodedInThisBatch === 0) {
-          hasMore = false;
-          alert(`${totalGeocoded} endereços geocodificados com sucesso nesta execução.`);
-        }
+      if (!res.ok) {
+        throw new Error(result.error || "Erro na resposta do servidor");
       }
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const geocodedInThisBatch = (result.successCount || 0) + (result.placeholderCount || 0);
+      alert(`${geocodedInThisBatch} endereços processados nesta rodada. Pacientes pendentes restantes: ${result.remaining || 0}.`);
+      
       fetchStats();
-    } catch (e) {
-      alert("Erro ao processar geocodificação");
+    } catch (e: any) {
+      alert(e.message || "Erro ao processar geocodificação");
     } finally {
       setGeocoding(false);
     }
