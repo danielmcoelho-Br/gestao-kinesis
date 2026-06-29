@@ -240,54 +240,79 @@ export default function PacientesPage() {
     const L = (window as any).L;
     if (!L) return;
 
+    const container = leafletContainerRef.current;
+
     if (leafletMapInstanceRef.current) {
-      leafletMapInstanceRef.current.remove();
+      try {
+        leafletMapInstanceRef.current.remove();
+      } catch (e) {
+        console.error("Error removing map:", e);
+      }
       leafletMapInstanceRef.current = null;
     }
 
-    const map = L.map(leafletContainerRef.current).setView(
-      [kinesisLocation.lat, kinesisLocation.lng],
-      14
-    );
-    leafletMapInstanceRef.current = map;
+    // Force clear internal leaflet ID to allow clean re-initialization
+    if ((container as any)._leaflet_id) {
+      (container as any)._leaflet_id = null;
+    }
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    let map: any;
+    try {
+      map = L.map(container).setView(
+        [kinesisLocation.lat, kinesisLocation.lng],
+        14
+      );
+      leafletMapInstanceRef.current = map;
+    } catch (err) {
+      console.error("Failed to initialize Leaflet map:", err);
+      return;
+    }
 
-    const defaultIcon = L.icon({
-      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowSize: [41, 41]
-    });
+    try {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
 
-    L.marker([kinesisLocation.lat, kinesisLocation.lng], { icon: defaultIcon })
-      .addTo(map)
-      .bindPopup('<strong>Clínica Kinesis</strong><br/>Centro de Atendimento')
-      .openPopup();
-
-    if (data?.stats?.heatmapData && Array.isArray(data.stats.heatmapData)) {
-      data.stats.heatmapData.forEach((point: { lat: number, lng: number }) => {
-        if (point.lat && point.lng) {
-          L.circleMarker([point.lat, point.lng], {
-            color: '#ffffff', // White border for contrast
-            fillColor: '#ef4444', // Sleek modern red
-            fillOpacity: 0.6,
-            radius: 6, // Fixed 6px radius regardless of zoom
-            weight: 1,
-            stroke: true
-          }).addTo(map);
-        }
+      const defaultIcon = L.icon({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
       });
+
+      L.marker([kinesisLocation.lat, kinesisLocation.lng], { icon: defaultIcon })
+        .addTo(map)
+        .bindPopup('<strong>Clínica Kinesis</strong><br/>Centro de Atendimento')
+        .openPopup();
+
+      if (data?.stats?.heatmapData && Array.isArray(data.stats.heatmapData)) {
+        data.stats.heatmapData.forEach((point: { lat: number, lng: number }) => {
+          if (point.lat && point.lng) {
+            L.circleMarker([point.lat, point.lng], {
+              color: '#ffffff', // White border for contrast
+              fillColor: '#ef4444', // Sleek modern red
+              fillOpacity: 0.6,
+              radius: 6, // Fixed 6px radius regardless of zoom
+              weight: 1,
+              stroke: true
+            }).addTo(map);
+          }
+        });
+      }
+    } catch (renderErr) {
+      console.error("Error rendering map layers:", renderErr);
     }
 
     return () => {
       if (leafletMapInstanceRef.current) {
-        leafletMapInstanceRef.current.remove();
+        try {
+          leafletMapInstanceRef.current.remove();
+        } catch (e) {
+          console.error("Error cleaning up map instance:", e);
+        }
         leafletMapInstanceRef.current = null;
       }
     };
