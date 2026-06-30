@@ -24,10 +24,10 @@ export async function getPatients(
     const oneMonthAgo = new Date();
     oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
 
-    const andConditions: any[] = [];
+    let patients: any[] = [];
 
-    // 1. Otimização de busca por nome (global, unaccent, flexível para termos do meio)
     if (query) {
+      const andConditions: any[] = [];
       const searchTerms = query.trim().split(/\s+/).filter(Boolean);
       if (searchTerms.length > 0) {
         let sqlQuery = 'SELECT id FROM "Patient" WHERE ';
@@ -47,6 +47,39 @@ export async function getPatients(
           id: { in: matchedPatientIds }
         });
       }
+
+      if (!showDischarged) {
+        andConditions.push({
+          OR: [
+            { diagnoses: { none: {} } },
+            { diagnoses: { some: { status: "ATIVO" } } }
+          ]
+        });
+      }
+
+      const whereClause = andConditions.length > 0 ? { AND: andConditions } : {};
+
+      patients = await prisma.patient.findMany({
+        where: whereClause,
+        include: {
+          created_by: {
+            select: { name: true }
+          },
+          assessments: {
+            where: {
+              assessment_type: 'oswestry'
+            },
+            select: {
+              id: true
+            }
+          },
+          diagnoses: true
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: limit ?? 50
+      });
     } else {
       // 2. Filtro estrito: apenas pacientes com atendimentos finalizados no último mês com o fisioterapeuta selecionado
       const sessionsLastMonth = await prisma.session.findMany({
@@ -64,78 +97,76 @@ export async function getPatients(
       });
 
       const uniquePatientNames = Array.from(new Set(
-        sessionsLastMonth.map(s => s.patientName.trim().toLowerCase())
+        sessionsLastMonth.map(s => s.patientName.trim())
       )).filter(Boolean);
 
       if (uniquePatientNames.length === 0) {
-        // Se não houver atendimentos no período, a lista inicial fica vazia
         return { success: true, data: [] };
       }
 
-      // Criar variantes com e sem acentos para garantir a correspondência de nomes
-      const uniqueNamesWithVariants = Array.from(new Set(
-        uniquePatientNames.flatMap(name => [
-          name,
-          name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        ])
-      ));
-
-      // Mapear os nomes usando a lógica de correspondência de 18 caracteres
-      const startsWithConditions = uniqueNamesWithVariants.map(name => ({
-        name: {
-          startsWith: name.substring(0, 18),
-          mode: 'insensitive' as const
+      // Fetch basic patient info (ID + Name) for matching in memory
+      const patientsSummary = await prisma.patient.findMany({
+        select: {
+          id: true,
+          name: true
         }
-      }));
-
-      andConditions.push({
-        OR: startsWithConditions
       });
-    }
 
-    // 3. Filtro por Alta (Em Atendimento)
-    if (!showDischarged && !query) {
-      andConditions.push({
-        OR: [
-          {
-            diagnoses: {
-              none: {}
+      const patientsMap = new Map();
+      patientsSummary.forEach(p => {
+        const key = normalizeName(p.name.substring(0, 18));
+        patientsMap.set(key, p);
+      });
+
+      const matchedIds = new Set<string>();
+      for (const sessionName of uniquePatientNames) {
+        const sessionKey = normalizeName(sessionName.substring(0, 18));
+        let matched = patientsMap.get(sessionKey);
+        if (!matched) {
+          matched = patientsSummary.find(p => isFuzzyMatch(p.name, sessionName));
+        }
+
+        if (matched) {
+          matchedIds.add(matched.id);
+        }
+      }
+
+      const allMatchedPatients = await prisma.patient.findMany({
+        where: {
+          id: { in: Array.from(matchedIds) }
+        },
+        include: {
+          created_by: {
+            select: { name: true }
+          },
+          assessments: {
+            where: {
+              assessment_type: 'oswestry'
+            },
+            select: {
+              id: true
             }
           },
-          {
-            diagnoses: {
-              some: {
-                status: "ATIVO"
-              }
-            }
-          }
-        ]
+          diagnoses: true
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
       });
+
+      // Filter active in memory if showDischarged is false
+      let filteredPatients = allMatchedPatients;
+      if (!showDischarged) {
+        filteredPatients = allMatchedPatients.filter(p => {
+          const hasDiagnoses = p.diagnoses.length > 0;
+          if (!hasDiagnoses) return true;
+          return p.diagnoses.some(d => d.status === "ATIVO");
+        });
+      }
+
+      // Apply limit
+      patients = limit ? filteredPatients.slice(0, limit) : filteredPatients.slice(0, 50);
     }
-
-    const whereClause = andConditions.length > 0 ? { AND: andConditions } : {};
-
-    const patients = await prisma.patient.findMany({
-      where: whereClause,
-      include: {
-        created_by: {
-          select: { name: true }
-        },
-        assessments: {
-          where: {
-            assessment_type: 'oswestry'
-          },
-          select: {
-            id: true
-          }
-        },
-        diagnoses: true
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: limit ?? 50
-    });
     
     // 4. Mapear profissionais que atenderam os pacientes retornados nos últimos 30 dias
     const patientNamesList = patients.flatMap(p => {
@@ -1630,40 +1661,68 @@ export async function getPendingEvaluationsList(professionalNameFilter?: string)
       return { success: true, data: [] };
     }
 
-    // 2. Buscar todos os pacientes e seus diagnósticos e avaliações do módulo clínico
-    const patients = await prisma.patient.findMany({
+    // 2. Buscar informações básicas dos pacientes para cruzamento em memória
+    const patientsSummary = await prisma.patient.findMany({
+      select: {
+        id: true,
+        name: true
+      }
+    });
+
+    // Mapear pacientes por nome normalizado de 18 caracteres (limite padrão do faturamento)
+    const patientsMap = new Map<string, any>();
+    patientsSummary.forEach(p => {
+      const key = normalizeName(p.name.substring(0, 18));
+      patientsMap.set(key, p);
+    });
+
+    // Identificar IDs de pacientes correspondentes às sessões de avaliação
+    const matchedIds = new Set<string>();
+    const sessionToPatientIdMap = new Map<string, string>();
+
+    for (const session of evaluationSessions) {
+      const sessionKey = normalizeName(session.patientName.substring(0, 18));
+      let matched = patientsMap.get(sessionKey);
+
+      if (!matched) {
+        matched = patientsSummary.find(p => isFuzzyMatch(p.name, session.patientName));
+      }
+
+      if (matched) {
+        matchedIds.add(matched.id);
+        sessionToPatientIdMap.set(session.id, matched.id);
+      }
+    }
+
+    // Buscar diagnósticos e avaliações apenas para os pacientes correspondentes
+    const matchedPatientsDetails = await prisma.patient.findMany({
+      where: {
+        id: { in: Array.from(matchedIds) }
+      },
       include: {
         diagnoses: true,
         assessments: true
       }
     });
 
-    // Mapear pacientes por nome normalizado de 18 caracteres (limite padrão do faturamento)
-    const patientsMap = new Map<string, any>();
-    patients.forEach(p => {
-      const key = normalizeName(p.name.substring(0, 18));
-      patientsMap.set(key, p);
+    const detailsMap = new Map<string, any>();
+    matchedPatientsDetails.forEach(p => {
+      detailsMap.set(p.id, p);
     });
 
     // 3. Montar a lista de pendências
     const pending = [];
     for (const session of evaluationSessions) {
-      const sessionKey = normalizeName(session.patientName.substring(0, 18));
-      let matchedPatient = patientsMap.get(sessionKey);
-
-      // Fallback: busca por similaridade aproximada
-      if (!matchedPatient) {
-        matchedPatient = patients.find(p => isFuzzyMatch(p.name, session.patientName));
-      }
-
+      const patientId = sessionToPatientIdMap.get(session.id) || null;
       let diagnosisMissing = true;
       let assessmentMissing = true;
-      let patientId: string | null = null;
 
-      if (matchedPatient) {
-        patientId = matchedPatient.id;
-        diagnosisMissing = matchedPatient.diagnoses.length === 0;
-        assessmentMissing = matchedPatient.assessments.length === 0;
+      if (patientId) {
+        const detail = detailsMap.get(patientId);
+        if (detail) {
+          diagnosisMissing = detail.diagnoses.length === 0;
+          assessmentMissing = detail.assessments.length === 0;
+        }
       }
 
       // Se o diagnóstico ou a ficha estiver faltando, registra a pendência
