@@ -145,7 +145,7 @@ function scrapeActivePage() {
 
 function isElementInHeaderOrSidebar(el) {
   if (!el) return false;
-  return !!el.closest("header, #header, .header, .q-header, q-header, sidebar, #sidebar, .sidebar, .q-drawer, q-drawer, aside, nav, .q-menu, .q-dialog, [class*='menu-bar'], [class*='nav-bar'], [class*='menu-container'], [class*='sidebar-']");
+  return !!el.closest("header, #header, .header, .q-header, q-header, sidebar, #sidebar, .sidebar, .q-drawer, q-drawer, aside, nav, .q-menu, .q-dialog, [class*='menu-bar'], [class*='nav-bar'], [class*='menu-container'], [class*='sidebar-'], .q-tabs, .q-tab, [class*='q-tabs']");
 }
 
 function isElementInsideTableHeader(el) {
@@ -154,6 +154,9 @@ function isElementInsideTableHeader(el) {
 }
 
 function findNextPageButton(pageCount) {
+  const tableInfo = getTargetTable();
+  const searchRoot = tableInfo ? (tableInfo.table.closest(".q-table__container, .q-table, [class*='table-wrapper'], [class*='table-container']") || tableInfo.table.parentElement || document) : document;
+
   const selectors = [
     "a[rel='next']",
     "a[aria-label*='Next']",
@@ -182,7 +185,7 @@ function findNextPageButton(pageCount) {
 
   for (const sel of selectors) {
     try {
-      const elements = Array.from(document.querySelectorAll(sel));
+      const elements = Array.from(searchRoot.querySelectorAll(sel));
       for (const el of elements) {
         if (isElementInHeaderOrSidebar(el) || isElementInsideTableHeader(el)) {
           continue;
@@ -198,7 +201,7 @@ function findNextPageButton(pageCount) {
   }
 
   // Query all potential page elements, but exclude generic divs/spans that aren't styled as buttons/items
-  const elements = Array.from(document.querySelectorAll("button, a, .q-btn, [role='button'], .page-link, .page-item, span, li, div"));
+  const elements = Array.from(searchRoot.querySelectorAll("button, a, .q-btn, [role='button'], .page-link, .page-item, span, li, div"));
   for (const el of elements) {
     if (isElementInHeaderOrSidebar(el) || isElementInsideTableHeader(el)) {
       continue;
@@ -250,7 +253,7 @@ function findNextPageButton(pageCount) {
   }
 
   // Look for any icon element that is not in header/sidebar
-  const potentialIcons = Array.from(document.querySelectorAll("i, svg, span, img"));
+  const potentialIcons = Array.from(searchRoot.querySelectorAll("i, svg, span, img"));
   for (const icon of potentialIcons) {
     if (isElementInHeaderOrSidebar(icon) || isElementInsideTableHeader(icon)) {
       continue;
@@ -270,7 +273,10 @@ function findNextPageButton(pageCount) {
 }
 
 function findFirstPageButton() {
-  const elements = Array.from(document.querySelectorAll("button, a, .q-btn, [role='button'], .page-link, .page-item, span, li, div"));
+  const tableInfo = getTargetTable();
+  const searchRoot = tableInfo ? (tableInfo.table.closest(".q-table__container, .q-table, [class*='table-wrapper'], [class*='table-container']") || tableInfo.table.parentElement || document) : document;
+
+  const elements = Array.from(searchRoot.querySelectorAll("button, a, .q-btn, [role='button'], .page-link, .page-item, span, li, div"));
   for (const el of elements) {
     if (isElementInHeaderOrSidebar(el) || isElementInsideTableHeader(el)) {
       continue;
