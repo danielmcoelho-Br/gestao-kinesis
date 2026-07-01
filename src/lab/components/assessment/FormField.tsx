@@ -499,6 +499,32 @@ const FormField = memo(function FormField({ field, isPrint: overrideIsPrint, val
           </div>
         );
       }
+      case 'date':
+        return (
+          <div key={field.id} className="form-group">
+            <label className="form-label">{field.label}</label>
+            {(!isEditing || isPrint) ? (
+                <div style={{ padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: '#f8fafc', color: '#1e293b' }}>
+                    {(() => {
+                        if (!value) return "---";
+                        const parts = value.split("-");
+                        if (parts.length === 3) {
+                            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                        }
+                        return value;
+                    })()}
+                </div>
+            ) : (
+                <input 
+                  type="date" 
+                  {...commonProps}
+                  value={value || ""} 
+                  onChange={(e) => handleInputChange(field.id, e.target.value)}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}
+                />
+            )}
+          </div>
+        );
       case 'select':
         return (
           <div key={field.id} className="form-group">

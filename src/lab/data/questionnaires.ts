@@ -2236,6 +2236,7 @@ export const questionnairesData: Record<string, Questionnaire> = {
         id: 'antropometria',
         title: 'Medidas Antropométricas',
         fields: [
+          { id: 'data_avaliacao', label: 'Data da Avaliação', type: 'date' },
           { id: 'peso', label: 'Peso (Kg)', type: 'number', min: 0, max: 300, step: 0.1 },
           { id: 'altura', label: 'Altura (m)', type: 'number', min: 0, max: 2.5, step: 0.01 },
           { id: 'imc', label: 'IMC (Kg/m²)', type: 'number', isCalculated: true }

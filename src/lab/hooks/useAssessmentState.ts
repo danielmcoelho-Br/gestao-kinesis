@@ -211,6 +211,12 @@ export function useAssessmentState({
                         const d = new Date(data.created_at);
                         if (!isNaN(d.getTime())) {
                             setAssessmentDate(d.toLocaleDateString('pt-BR'));
+                            if (type === 'nutricao') {
+                                const year = d.getFullYear();
+                                const month = String(d.getMonth() + 1).padStart(2, '0');
+                                const day = String(d.getDate()).padStart(2, '0');
+                                loadedAnswers.data_avaliacao = `${year}-${month}-${day}`;
+                            }
                         }
                     }
                     
@@ -275,6 +281,13 @@ export function useAssessmentState({
                             }
                         }
                     }
+                }
+                if (type === 'nutricao' && !currentAnswers.data_avaliacao) {
+                    const today = new Date();
+                    const year = today.getFullYear();
+                    const month = String(today.getMonth() + 1).padStart(2, '0');
+                    const day = String(today.getDate()).padStart(2, '0');
+                    currentAnswers.data_avaliacao = `${year}-${month}-${day}`;
                 }
                 const hasRealDraftData = Object.keys(currentAnswers).some(k => !k.endsWith('_score_previo') && !k.endsWith('_data_previo'));
                 setAnswers(currentAnswers);
@@ -412,6 +425,13 @@ export function useAssessmentState({
 
     const handleInputChange = useCallback((fieldId: string, value: any) => {
         if (!isEditing) return;
+
+        if (fieldId === 'data_avaliacao' && value) {
+            const parts = value.split("-");
+            if (parts.length === 3) {
+                setAssessmentDate(`${parts[2]}/${parts[1]}/${parts[0]}`);
+            }
+        }
 
         // Range Validation Logic
         if (typeof value === 'string' || typeof value === 'number') {
