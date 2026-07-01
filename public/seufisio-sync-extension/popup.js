@@ -55,14 +55,25 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load saved configurations from localStorage / chrome.storage
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
     chrome.storage.local.get(["serverUrl", "syncToken"], (res) => {
-      if (res.serverUrl) serverUrlInput.value = res.serverUrl;
+      // Auto-migrate old localhost default to the new production URL
+      if (!res.serverUrl || res.serverUrl === "http://localhost:3000") {
+        serverUrlInput.value = "https://kinesisapp.vercel.app";
+        chrome.storage.local.set({ serverUrl: "https://kinesisapp.vercel.app" });
+      } else {
+        serverUrlInput.value = res.serverUrl;
+      }
       if (res.syncToken) syncTokenInput.value = res.syncToken;
     });
   } else {
     // Development/Browser mock fallback
     const savedUrl = localStorage.getItem("serverUrl");
     const savedToken = localStorage.getItem("syncToken");
-    if (savedUrl) serverUrlInput.value = savedUrl;
+    if (!savedUrl || savedUrl === "http://localhost:3000") {
+      serverUrlInput.value = "https://kinesisapp.vercel.app";
+      localStorage.setItem("serverUrl", "https://kinesisapp.vercel.app");
+    } else {
+      serverUrlInput.value = savedUrl;
+    }
     if (savedToken) syncTokenInput.value = savedToken;
   }
 
