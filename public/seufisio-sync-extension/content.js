@@ -1,5 +1,6 @@
 // content.js - Scraper de dados de atendimento do SeuFisio
 
+(function() {
 window.syncLogs = window.syncLogs || [];
 function log(msg) {
   console.log("[Kinesis Sync Content Script]", msg);
@@ -585,4 +586,5 @@ async function resumeSync(syncState, serverUrl, syncToken) {
     window.isKinesisSyncRunning = false;
   }
 }
+})();
 
