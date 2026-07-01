@@ -12,6 +12,26 @@ const isValidUUID = (id: string) => {
          /^[a-z0-9]{20,32}$/i.test(id);
 };
 
+function getRobustNamePrefixes(fullName: string): string[] {
+  const clean = fullName.trim();
+  const prefixes = [
+    clean,
+    clean.substring(0, 18).trim(),
+    clean.substring(0, 15).trim(),
+    clean.substring(0, 12).trim(),
+    clean.substring(0, 8).trim()
+  ].filter(p => p.length >= 4);
+
+  return Array.from(new Set(
+    prefixes.flatMap(p => [
+      p,
+      p.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+      p.toLowerCase(),
+      p.toUpperCase()
+    ])
+  ));
+}
+
 
 
 export async function getPatients(
@@ -169,29 +189,21 @@ export async function getPatients(
     }
     
     // 4. Mapear profissionais que atenderam os pacientes retornados nos últimos 30 dias
-    const patientNamesList = patients.flatMap(p => {
-      const name = p.name.substring(0, 18).trim();
-      return [
-        name,
-        name.toLowerCase(),
-        name.toUpperCase()
-      ];
-    });
-    const patientNamesVariants = Array.from(new Set(
-      patientNamesList.flatMap(name => [
-        name,
-        name.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      ])
+    const nameKeys = Array.from(new Set(
+      patients.flatMap(p => getRobustNamePrefixes(p.name))
     ));
 
-    const patientSessions = patientNamesVariants.length > 0
+    const patientSessions = nameKeys.length > 0
       ? await prisma.session.findMany({
           where: {
             status: { startsWith: "Finalizado" },
             date: { gte: oneMonthAgo },
-            patientName: {
-              in: patientNamesVariants
-            },
+            OR: nameKeys.map(name => ({
+              patientName: {
+                startsWith: name,
+                mode: 'insensitive' as const
+              }
+            })),
             NOT: {
               serviceType: { contains: "Pilates" }
             }
@@ -211,10 +223,9 @@ export async function getPatients(
     const patientProfsMap = new Map<string, Array<{ id: string, name: string }>>();
     patientSessions.forEach(s => {
       if (!s.professional) return;
-      const sessionNameNorm = normalizeName(s.patientName.substring(0, 18));
       
       const matchedPatient = patients.find(p => 
-        normalizeName(p.name.substring(0, 18)) === sessionNameNorm
+        isFuzzyMatch(p.name, s.patientName)
       );
       
       if (matchedPatient) {
@@ -1152,13 +1163,7 @@ export async function getDischargedDiagnoses(
     ));
 
     const nameKeys = Array.from(new Set(
-      distinctNames.flatMap(name => {
-        const truncated = name.substring(0, 18).trim();
-        return [
-          truncated,
-          truncated.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        ];
-      })
+      distinctNames.flatMap(name => getRobustNamePrefixes(name))
     ));
 
     const sessions = nameKeys.length > 0
@@ -1527,13 +1532,7 @@ export async function getAverageSessionsPerDiagnosis(
     ));
 
     const nameKeys = Array.from(new Set(
-      distinctNames.flatMap(name => {
-        const truncated = name.substring(0, 18).trim();
-        return [
-          truncated,
-          truncated.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        ];
-      })
+      distinctNames.flatMap(name => getRobustNamePrefixes(name))
     ));
 
     const sessions = nameKeys.length > 0
