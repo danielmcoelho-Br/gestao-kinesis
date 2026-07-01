@@ -1153,7 +1153,7 @@ export async function getDischargedDiagnoses(
 
     const nameKeys = Array.from(new Set(
       distinctNames.flatMap(name => {
-        const truncated = name.substring(0, 18);
+        const truncated = name.substring(0, 18).trim();
         return [
           truncated,
           truncated.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -1528,7 +1528,7 @@ export async function getAverageSessionsPerDiagnosis(
 
     const nameKeys = Array.from(new Set(
       distinctNames.flatMap(name => {
-        const truncated = name.substring(0, 18);
+        const truncated = name.substring(0, 18).trim();
         return [
           truncated,
           truncated.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
