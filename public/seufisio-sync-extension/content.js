@@ -443,7 +443,7 @@ async function finalizarSync(totalAtendimentos, syncState, serverUrl, syncToken)
   
   chrome.runtime.sendMessage({
     action: "syncStatus",
-    message: `Enviando ${totalAtendimentos.length} atendimentos consolidando todas as páginas...`,
+    message: `Enviando ${totalAtendimentos.length} atendimentos para ${serverUrl}...`,
     badge: "Enviando..."
   }).catch(() => {});
 
